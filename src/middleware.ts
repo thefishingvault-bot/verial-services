@@ -7,6 +7,7 @@ const isPublicRoute = createRouteMatcher([
   "/s/(.*)",
   "/p/(.*)",
   "/api/webhooks(.*)", // All webhooks are public
+  "/api/stripe/webhook", // Stripe platform webhook
   "/api/health",
   "/legal(.*)",
   "/sign-in(.*)",
