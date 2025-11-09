@@ -1,5 +1,7 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
+import { bookings } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -39,13 +41,22 @@ export async function POST(req: Request) {
         return new NextResponse("Metadata missing", { status: 200 }); 
       }
 
-      console.log(`[API_STRIPE_WEBHOOK] Payment succeeded for Booking: ${bookingId} by User: ${userId}`);
+      console.log(`[API_STRIPE_WEBHOOK] Payment succeeded for Booking: ${bookingId}. Updating database...`);
 
-      // --- TODO: Update Booking Status ---
-      // In a real scenario, we would update our database here.
-      // e.g., await db.update(bookings).set({ status: 'paid' }).where(eq(bookings.id, bookingId));
-      // For now, we just log.
-      // ------------------------------------
+      try {
+        await db.update(bookings)
+          .set({
+            status: "paid",
+            paymentIntentId: paymentIntent.id,
+          })
+          .where(eq(bookings.id, bookingId));
+
+        console.log(`[API_STRIPE_WEBHOOK] Booking ${bookingId} successfully marked as 'paid'.`);
+      } catch (dbError) {
+        console.error(`[API_STRIPE_WEBHOOK] DB Error updating booking ${bookingId}:`, dbError);
+        // Return 500 to Stripe so it retries this webhook
+        return new NextResponse("Database update failed", { status: 500 });
+      }
 
       break;
 
