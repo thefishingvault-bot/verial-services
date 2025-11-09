@@ -9,8 +9,8 @@ export default withSentryConfig(nextConfig, {
   // For all available options, see:
   // https://github.com/getsentry/sentry-webpack-plugin#options
 
-  org: "verial-services",
-  project: "verial-services",
+  org: "verial",
+  project: "javascript-nextjs",
 
   // Only print logs for uploading source maps in CI
   silent: !process.env.CI,
@@ -31,11 +31,6 @@ export default withSentryConfig(nextConfig, {
   // Note: Check that the configured route will not match with your Next.js middleware, otherwise reporting of client-
   // side errors will fail.
   tunnelRoute: "/monitoring",
-
-  // Hides source maps from generated client bundles
-  sourcemaps: {
-    hide: true,
-  },
 
   // Automatically tree-shake Sentry logger statements to reduce bundle size
   disableLogger: true,
