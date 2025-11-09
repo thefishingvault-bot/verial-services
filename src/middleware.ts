@@ -1,3 +1,5 @@
+export const runtime = "nodejs";
+
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
 // Define routes that are public (accessible without auth)
@@ -8,7 +10,8 @@ const isPublicRoute = createRouteMatcher([
   "/p/(.*)",
   "/api/webhooks(.*)", // All webhooks are public
   "/api/stripe/webhook", // Stripe platform webhook
-  "/api/health",
+  "/api/health(.*)", // Health check and monitoring routes
+  "/api/sentry-test", // Sentry test route
   "/legal(.*)",
   "/sign-in(.*)",
   "/sign-up(.*)",
