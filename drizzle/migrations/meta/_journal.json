@@ -8,6 +8,13 @@
       "when": 1762665326086,
       "tag": "0000_awesome_glorian",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1762668202600,
+      "tag": "0001_perfect_loners",
+      "breakpoints": true
     }
   ]
 }
