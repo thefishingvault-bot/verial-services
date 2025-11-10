@@ -8,6 +8,8 @@ const isPublicRoute = createRouteMatcher([
   "/services(.*)",
   "/s/(.*)",
   "/p/(.*)",
+  "/api/services/list", // Public service list API
+  "/api/services/by-slug(.*)", // Public service detail API
   "/api/webhooks(.*)", // All webhooks are public
   "/api/stripe/webhook", // Stripe platform webhook
   "/api/health(.*)", // Health check and monitoring routes
