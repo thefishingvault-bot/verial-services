@@ -7,10 +7,10 @@ export const runtime = "nodejs";
 
 export async function GET(
   req: Request,
-  context: { params: { slug: string } }
+  { params }: { params: Promise<{ slug: string }> }
 ) {
   try {
-    const slug = context.params.slug;
+    const { slug } = await params;
     if (!slug) {
       return new NextResponse("Missing slug", { status: 400 });
     }
