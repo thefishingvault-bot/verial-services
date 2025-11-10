@@ -2,16 +2,51 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+
+import { Button } from '@/components/ui/button';
+import {
+  Form,
+  FormControl,
+  FormDescription,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
+// Define the form validation schema with Zod
+const formSchema = z.object({
+  businessName: z.string().min(3, {
+    message: 'Business name must be at least 3 characters long.',
+  }),
+  handle: z.string()
+    .min(3, { message: 'Handle must be at least 3 characters long.' })
+    .regex(/^[a-z0-9-]+$/, {
+      message: 'Handle must only contain lowercase letters, numbers, and hyphens.',
+    }),
+});
+
+type FormValues = z.infer<typeof formSchema>;
 
 export default function RegisterProviderPage() {
-  const [businessName, setBusinessName] = useState('');
-  const [handle, setHandle] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const form = useForm<FormValues>({
+    resolver: zodResolver(formSchema),
+    defaultValues: {
+      businessName: '',
+      handle: '',
+    },
+  });
+
+  const onSubmit = async (values: FormValues) => {
     setIsLoading(true);
     setError(null);
 
@@ -19,7 +54,7 @@ export default function RegisterProviderPage() {
       const res = await fetch('/api/provider/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ businessName, handle }),
+        body: JSON.stringify(values),
       });
 
       if (!res.ok) {
@@ -29,7 +64,6 @@ export default function RegisterProviderPage() {
 
       // Registration successful! Redirect to the payouts dashboard.
       router.push('/dashboard/payouts');
-
     } catch (err: any) {
       setError(err.message);
       setIsLoading(false);
@@ -37,39 +71,72 @@ export default function RegisterProviderPage() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '500px', margin: 'auto' }}>
-      <h1>Become a Provider</h1>
-      <p>Set up your provider profile to start listing services.</p>
-      <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem' }}>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="businessName">Business Name</label>
-          <input
-            id="businessName"
-            type="text"
-            value={businessName}
-            onChange={(e) => setBusinessName(e.target.value)}
-            required
-            style={{ width: '100%', padding: '8px', border: '1px solid #ccc' }}
-          />
-        </div>
-        <div style={{ marginBottom: '1rem' }}>
-          <label htmlFor="handle">Username (Handle)</label>
-          <input
-            id="handle"
-            type="text"
-            value={handle}
-            onChange={(e) => setHandle(e.target.value.toLowerCase())}
-            required
-            placeholder="e.g., 'janes-plumbing'"
-            style={{ width: '100%', padding: '8px', border: '1px solid #ccc' }}
-          />
-          <small>This will be your unique URL: verial.nz/p/{handle}</small>
-        </div>
-        {error && <p style={{ color: 'red' }}>Error: {error}</p>}
-        <button type="submit" disabled={isLoading} style={{ padding: '10px 15px' }}>
-          {isLoading ? 'Registering...' : 'Create Provider Account'}
-        </button>
-      </form>
+    <div className="max-w-lg mx-auto p-4 md:p-8">
+      <Card>
+        <CardHeader>
+          <CardTitle>Become a Provider</CardTitle>
+          <CardDescription>
+            Set up your provider profile to start listing services.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+              <FormField
+                control={form.control}
+                name="businessName"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Business Name</FormLabel>
+                    <FormControl>
+                      <Input placeholder="e.g., Jane's Plumbing" {...field} />
+                    </FormControl>
+                    <FormDescription>
+                      This is your public-facing business name.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="handle"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Username (Handle)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., janes-plumbing"
+                        {...field}
+                        onChange={(e) => {
+                          // Auto-format to lowercase and valid chars
+                          const formatted = e.target.value
+                            .toLowerCase()
+                            .replace(/[^a-z0-9-]/g, '');
+                          field.onChange(formatted);
+                        }}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Your unique URL: verial.nz/p/{field.value || '...'}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {error && (
+                <p className="text-sm font-medium text-destructive">{error}</p>
+              )}
+
+              <Button type="submit" disabled={isLoading} className="w-full">
+                {isLoading ? 'Registering...' : 'Create Provider Account'}
+              </Button>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
