@@ -3,9 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 
-// --- We will install Stripe Elements for payment soon ---
-// For now, this button will just call our create-intent API
-
 // Define a type for our joined booking data
 interface CustomerBooking {
   id: string;
@@ -40,17 +37,8 @@ export default function CustomerBookingsPage() {
     fetchBookings();
   }, [fetchBookings]);
 
-  const handlePayNow = async (booking: CustomerBooking) => {
-    // --- THIS IS A PLACEHOLDER ---
-    // In a real flow, this would open a Stripe payment modal.
-    // For now, we will just log to the console and link to a
-    // non-existent checkout page.
-
-    alert(`Payment flow for Booking ${booking.id} is not implemented.
-    \nAmount: $${(booking.priceAtBooking / 100).toFixed(2)}
-    \nProvider Account: ${booking.provider.stripeConnectId}`);
-
-    // router.push(`/checkout/${booking.id}`); // Future step
+  const handlePayNow = (booking: CustomerBooking) => {
+    router.push(`/checkout/${booking.id}`);
   };
 
   if (isLoading) return <div style={{ padding: '2rem' }}>Loading your bookings...</div>;
