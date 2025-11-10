@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { providers } from "@/lib/db/schema";
+import { providers } from "@/db/schema";
 import { stripe } from "@/lib/stripe";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
