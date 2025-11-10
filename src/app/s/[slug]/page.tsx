@@ -1,8 +1,13 @@
-'use client'; // This page will fetch data on the client for MVP
+'use client';
 
 import { useState, useEffect } from 'react';
-import { useParams, useRouter } from "next/navigation";
-import { useUser } from "@clerk/nextjs";
+import { useParams, useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Separator } from '@/components/ui/separator';
+import { CheckCircle, Shield, Award, Gem } from 'lucide-react';
 
 // Define a type for our joined service/provider data
 interface ServiceDetails {
@@ -15,16 +20,38 @@ interface ServiceDetails {
     handle: string;
     businessName: string;
     isVerified: boolean;
-    trustLevel: string;
+    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
     bio: string;
   };
 }
 
+// Helper to format currency
+const formatPrice = (priceInCents: number) => {
+  return new Intl.NumberFormat('en-NZ', {
+    style: 'currency',
+    currency: 'NZD',
+  }).format(priceInCents / 100);
+};
+
+// Helper to get Trust Badge icon and color
+const getTrustBadge = (level: ServiceDetails['provider']['trustLevel']) => {
+  switch (level) {
+    case 'platinum':
+      return { icon: <Gem className="h-4 w-4 mr-1" />, color: 'text-blue-500' };
+    case 'gold':
+      return { icon: <Award className="h-4 w-4 mr-1" />, color: 'text-yellow-500' };
+    case 'silver':
+      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-gray-500' };
+    default:
+      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-yellow-800' };
+  }
+};
+
 export default function ServiceDetailPage() {
   const params = useParams();
+  const slug = params.slug as string;
   const router = useRouter();
   const { user, isSignedIn } = useUser();
-  const slug = params.slug as string;
 
   const [service, setService] = useState<ServiceDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,12 +62,8 @@ export default function ServiceDetailPage() {
     if (slug) {
       fetch(`/api/services/by-slug/${slug}`)
         .then((res) => {
-          if (res.status === 404) {
-            throw new Error('Service not found');
-          }
-          if (!res.ok) {
-            throw new Error('Failed to fetch service details.');
-          }
+          if (res.status === 404) throw new Error('Service not found');
+          if (!res.ok) throw new Error('Failed to fetch service details.');
           return res.json();
         })
         .then((data) => {
@@ -53,10 +76,6 @@ export default function ServiceDetailPage() {
         });
     }
   }, [slug]);
-
-  if (isLoading) return <div style={{ padding: '2rem' }}>Loading service...</div>;
-  if (error) return <div style={{ padding: '2rem', color: 'red' }}>Error: {error}</div>;
-  if (!service) return <div style={{ padding: '2rem' }}>Service not found.</div>;
 
   const handleBookNow = async () => {
     setIsBooking(true);
@@ -71,7 +90,7 @@ export default function ServiceDetailPage() {
       const res = await fetch('/api/bookings/create', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId: service.id }),
+        body: JSON.stringify({ serviceId: service!.id }),
       });
 
       if (!res.ok) {
@@ -80,40 +99,86 @@ export default function ServiceDetailPage() {
       }
 
       const newBooking = await res.json();
-      alert(`Booking request sent! Your booking ID is ${newBooking.id}. You will be notified when the provider accepts.`);
-      router.push('/dashboard/bookings'); // Redirect to user's booking list
-
+      alert(`Booking request sent! Your booking ID is ${newBooking.id}.`);
+      router.push('/dashboard/bookings');
     } catch (err: any) {
       setError(err.message);
       setIsBooking(false);
     }
   };
 
+  if (isLoading) return <div className="p-8">Loading service...</div>;
+  if (error) return <div className="p-8 text-red-500">Error: {error}</div>;
+  if (!service) return <div className="p-8">Service not found.</div>;
+
+  const { icon, color } = getTrustBadge(service.provider.trustLevel);
+
   return (
-    <div style={{ padding: '2rem', maxWidth: '800px', margin: 'auto' }}>
-      <h1>{service.title}</h1>
-      <p style={{ fontSize: '1.2rem', color: '#333' }}>
-        <strong>NZD ${(service.priceInCents / 100).toFixed(2)}</strong>
-      </p>
-      <hr style={{ margin: '1rem 0' }} />
+    <div className="max-w-4xl mx-auto p-4 md:p-8">
+      <div className="grid md:grid-cols-3 gap-8">
+        {/* Main Content Column */}
+        <div className="md:col-span-2">
+          {/* --- Service Image (Placeholder) --- */}
+          <div className="w-full h-64 bg-gray-200 rounded-lg mb-4 flex items-center justify-center">
+            <span className="text-gray-500">Service Image Placeholder</span>
+          </div>
 
-      <div style={{ marginBottom: '1rem' }}>
-        <h3>About this service</h3>
-        <p>{service.description || 'No description provided.'}</p>
+          <h1 className="text-3xl font-bold mb-2">{service.title}</h1>
+          <Badge variant="outline" className="mb-4 capitalize">{service.category}</Badge>
+
+          <Separator className="my-4" />
+
+          <h2 className="text-xl font-semibold mb-2">About this service</h2>
+          <p className="text-gray-700 whitespace-pre-wrap">
+            {service.description || 'No description provided.'}
+          </p>
+        </div>
+
+        {/* Sidebar Column */}
+        <div className="md:col-span-1">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-2xl">{formatPrice(service.priceInCents)}</CardTitle>
+              <CardDescription>Price includes GST (15%)</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Button onClick={handleBookNow} disabled={isBooking} className="w-full">
+                {isBooking ? 'Booking...' : 'Book Now'}
+              </Button>
+              {error && <p className="text-red-500 text-sm mt-2">{error}</p>}
+            </CardContent>
+            <CardFooter>
+              <p className="text-xs text-gray-500">
+                You won't be charged until the provider accepts your request.
+              </p>
+            </CardFooter>
+          </Card>
+
+          <Card className="mt-6">
+            <CardHeader>
+              <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
+              <CardDescription>@{service.provider.handle}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-col space-y-2">
+                {service.provider.isVerified && (
+                  <Badge variant="secondary" className="w-fit">
+                    <CheckCircle className="h-4 w-4 mr-1 text-green-500" />
+                    Verified Provider
+                  </Badge>
+                )}
+                <Badge variant="secondary" className={`w-fit ${color}`}>
+                  {icon}
+                  {service.provider.trustLevel.charAt(0).toUpperCase() + service.provider.trustLevel.slice(1)} Trust
+                </Badge>
+              </div>
+              <p className="text-sm text-gray-600 mt-4">
+                {service.provider.bio || 'No bio provided.'}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
-
-      <div style={{ background: '#f9f9f9', padding: '1rem', borderRadius: '8px' }}>
-        <h3>About the provider</h3>
-        <strong>{service.provider.businessName}</strong>
-        <p>@{service.provider.handle}</p>
-        <p>Trust Level: <strong>{service.provider.trustLevel.toUpperCase()}</strong> {service.provider.isVerified ? '✅ Verified' : ''}</p>
-        <p>{service.provider.bio || 'No bio provided.'}</p>
-      </div>
-
-      <button onClick={handleBookNow} disabled={isBooking} style={{ padding: '10px 15px', marginTop: '2rem' }}>
-        {isBooking ? 'Booking...' : 'Book Now'}
-      </button>
-      {error && <p style={{ color: 'red', marginTop: '1rem' }}>Error: {error}</p>}
     </div>
   );
 }
