@@ -1,7 +1,8 @@
 'use client'; // This page will fetch data on the client for MVP
 
 import { useState, useEffect } from 'react';
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
 
 // Define a type for our joined service/provider data
 interface ServiceDetails {
@@ -21,11 +22,14 @@ interface ServiceDetails {
 
 export default function ServiceDetailPage() {
   const params = useParams();
+  const router = useRouter();
+  const { user, isSignedIn } = useUser();
   const slug = params.slug as string;
 
   const [service, setService] = useState<ServiceDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isBooking, setIsBooking] = useState(false);
 
   useEffect(() => {
     if (slug) {
@@ -54,6 +58,37 @@ export default function ServiceDetailPage() {
   if (error) return <div style={{ padding: '2rem', color: 'red' }}>Error: {error}</div>;
   if (!service) return <div style={{ padding: '2rem' }}>Service not found.</div>;
 
+  const handleBookNow = async () => {
+    setIsBooking(true);
+    setError(null);
+
+    if (!isSignedIn) {
+      router.push(`/sign-in?redirect_url=${window.location.href}`);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/bookings/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ serviceId: service.id }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || 'Failed to create booking.');
+      }
+
+      const newBooking = await res.json();
+      alert(`Booking request sent! Your booking ID is ${newBooking.id}. You will be notified when the provider accepts.`);
+      router.push('/dashboard/bookings'); // Redirect to user's booking list
+
+    } catch (err: any) {
+      setError(err.message);
+      setIsBooking(false);
+    }
+  };
+
   return (
     <div style={{ padding: '2rem', maxWidth: '800px', margin: 'auto' }}>
       <h1>{service.title}</h1>
@@ -75,9 +110,10 @@ export default function ServiceDetailPage() {
         <p>{service.provider.bio || 'No bio provided.'}</p>
       </div>
 
-      <button style={{ padding: '10px 15px', marginTop: '2rem' }}>
-        Book Now (Not Implemented)
+      <button onClick={handleBookNow} disabled={isBooking} style={{ padding: '10px 15px', marginTop: '2rem' }}>
+        {isBooking ? 'Booking...' : 'Book Now'}
       </button>
+      {error && <p style={{ color: 'red', marginTop: '1rem' }}>Error: {error}</p>}
     </div>
   );
 }
