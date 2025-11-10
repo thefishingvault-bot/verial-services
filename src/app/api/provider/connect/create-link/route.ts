@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       const user = await client.users.getUser(userId);
       
       const account = await stripe.accounts.create({
-        type: "standard", // Standard accounts are easiest for NZ
+        type: "express",
         email: user.emailAddresses[0].emailAddress,
       });
 
