@@ -78,7 +78,7 @@ export default function CheckoutPage() {
     <div style={{ padding: '2rem', maxWidth: '500px', margin: 'auto' }}>
       <h1>Complete Your Payment</h1>
       <p style={{ margin: '1rem 0' }}>
-        You are paying <strong>NZD ${(bookingDetails?.amount ?? 0) / 100).toFixed(2)}</strong>
+        You are paying <strong>NZD ${((bookingDetails?.amount ?? 0) / 100).toFixed(2)}</strong>
         <br />
         Booking ID: {bookingId}
       </p>
