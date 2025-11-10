@@ -37,6 +37,7 @@ export default function RegisterProviderPage() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -119,7 +120,7 @@ export default function RegisterProviderPage() {
                       />
                     </FormControl>
                     <FormDescription>
-                      Your unique URL: verial.nz/p/{field.value || '...'}
+                      Your unique URL: {siteUrl.replace(/https?:\/\//, '')}/p/{field.value || '...'}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>
