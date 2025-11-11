@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { r2 } from '@/lib/r2';
+import { getR2Client } from '@/lib/r2';
 import { providers } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
@@ -8,11 +8,6 @@ import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 export const runtime = 'nodejs';
-
-const R2_BUCKET = process.env.R2_BUCKET;
-if (!R2_BUCKET) {
-  throw new Error('R2_BUCKET environment variable is not set.');
-}
 
 export async function POST(req: Request) {
   try {
@@ -50,7 +45,14 @@ export async function POST(req: Request) {
     const fileExtension = fileType.split('/')[1];
     const key = `services/${serviceId}/cover-${Date.now()}.${fileExtension}`;
 
-    // 5. Create the pre-signed URL
+    // 5. Get R2 bucket name
+    const R2_BUCKET = process.env.R2_BUCKET;
+    if (!R2_BUCKET) {
+      return new NextResponse('R2 is not configured', { status: 500 });
+    }
+
+    // 6. Create the pre-signed URL
+    const r2Client = getR2Client();
     const command = new PutObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,
@@ -58,7 +60,7 @@ export async function POST(req: Request) {
       ContentLength: fileSize,
     });
 
-    const uploadUrl = await getSignedUrl(r2, command, { expiresIn: 300 }); // 5 minutes
+    const uploadUrl = await getSignedUrl(r2Client, command, { expiresIn: 300 }); // 5 minutes
 
     // The URL of the file *after* upload
     const publicUrl = `${process.env.R2_PUBLIC_URL}/${key}`;
