@@ -44,7 +44,7 @@ const formSchema = z.object({
     message: 'Title must be at least 5 characters long.',
   }),
   category: z.enum(categories),
-  price: z.coerce.number().positive({
+  price: z.number().positive({
     message: 'Price must be a positive number.',
   }),
   description: z.string().optional(),
@@ -164,6 +164,7 @@ export default function NewServicePage() {
                           step="0.01"
                           placeholder="e.g., 150.00"
                           {...field}
+                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                         />
                       </FormControl>
                       <FormDescription>
