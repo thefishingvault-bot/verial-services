@@ -16,6 +16,7 @@ interface ServiceDetails {
   description: string;
   priceInCents: number;
   category: string;
+  chargesGst: boolean;
   provider: {
     handle: string;
     businessName: string;
@@ -139,7 +140,9 @@ export default function ServiceDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-2xl">{formatPrice(service.priceInCents)}</CardTitle>
-              <CardDescription>Price includes GST (15%)</CardDescription>
+              <CardDescription>
+                {service.chargesGst ? "Price includes GST (15%)" : "Price excludes GST"}
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <Button onClick={handleBookNow} disabled={isBooking} className="w-full">

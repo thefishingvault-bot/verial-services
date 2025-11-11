@@ -57,6 +57,7 @@ export async function POST(req: Request) {
       priceInCents: priceInCents,
       category: category,
       slug: `${slug}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure uniqueness for MVP
+      chargesGst: provider.chargesGst,
     }).returning();
 
     console.log(`[API_SERVICE_CREATE] Provider ${provider.id} created Service ${newService.id}`);

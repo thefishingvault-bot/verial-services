@@ -49,6 +49,7 @@ export const providers = pgTable("providers", {
   stripeConnectId: varchar("stripe_connect_id", { length: 255 }).unique(),
   chargesEnabled: boolean("charges_enabled").default(false).notNull(),
   payoutsEnabled: boolean("payouts_enabled").default(false).notNull(),
+  chargesGst: boolean("charges_gst").default(true).notNull(), // Default to inclusive
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -89,6 +90,7 @@ export const services = pgTable("services", {
   priceInCents: integer("price_in_cents").notNull(), // Store all currency as integers
   category: serviceCategoryEnum("category").default("other").notNull(),
   coverImageUrl: text("cover_image_url"),
+  chargesGst: boolean("charges_gst").default(true).notNull(),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
