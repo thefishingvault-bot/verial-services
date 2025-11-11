@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -26,6 +27,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
+import { ImageUploader } from '@/components/forms/image-uploader';
 
 // As per schema: serviceCategoryEnum
 const categories = [
@@ -53,8 +56,13 @@ const formSchema = z.object({
 type FormValues = z.infer<typeof formSchema>;
 
 export default function NewServicePage() {
-  const [error, setError] = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // --- New state for 2-step flow ---
+  const [serviceId, setServiceId] = useState<string | null>(null);
+  const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+
   const router = useRouter();
 
   const form = useForm<FormValues>({
@@ -67,12 +75,12 @@ export default function NewServicePage() {
     },
   });
 
+  // --- Step 1: Create the service (text details) ---
   const onSubmit = async (values: FormValues) => {
     setIsLoading(true);
-    setError(null);
+    setApiError(null);
 
     try {
-      // Convert price in dollars (e.g., 150.50) to cents
       const priceInCents = Math.round(values.price * 100);
 
       const res = await fetch('/api/services/create', {
@@ -91,13 +99,24 @@ export default function NewServicePage() {
         throw new Error(errorText || 'Failed to create service.');
       }
 
-      // Service created!
-      alert('Service created successfully!');
-      router.push('/dashboard'); // We'll build a service list page later
+      const newService = await res.json();
+      setServiceId(newService.id); // <-- This triggers the UI to show the uploader
+      setIsLoading(false);
+
     } catch (err: any) {
-      setError(err.message);
+      setApiError(err.message);
       setIsLoading(false);
     }
+  };
+
+  // --- Step 2: Handle image upload completion ---
+  const handleUploadComplete = (publicUrl: string) => {
+    setCoverImageUrl(publicUrl);
+    alert('Image uploaded successfully!');
+    // Optionally, redirect after a short delay
+    setTimeout(() => {
+      router.push('/dashboard/bookings/provider'); // Go to provider bookings
+    }, 1000);
   };
 
   return (
@@ -106,12 +125,16 @@ export default function NewServicePage() {
         <CardHeader>
           <CardTitle>Create a New Service</CardTitle>
           <CardDescription>
-            Fill out the details for your new service listing.
+            Step {serviceId ? '2' : '1'} of 2: {serviceId ? 'Upload a cover image' : 'Enter service details'}
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {/* --- STEP 1: Details Form --- */}
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form
+              onSubmit={form.handleSubmit(onSubmit)}
+              className={`space-y-6 ${serviceId ? 'hidden' : 'block'}`}
+            >
               <FormField
                 control={form.control}
                 name="title"
@@ -195,15 +218,43 @@ export default function NewServicePage() {
                 )}
               />
 
-              {error && (
-                <p className="text-sm font-medium text-destructive">{error}</p>
+              {apiError && (
+                <p className="text-sm font-medium text-destructive">{apiError}</p>
               )}
 
               <Button type="submit" disabled={isLoading} className="w-full">
-                {isLoading ? 'Creating...' : 'Create Service'}
+                {isLoading ? 'Creating...' : 'Continue to Step 2'}
               </Button>
             </form>
           </Form>
+
+          {/* --- STEP 2: Image Uploader --- */}
+          {serviceId && (
+            <div className="space-y-4">
+              <Separator />
+              <p className="font-semibold text-lg">Step 2: Upload Cover Image</p>
+              {coverImageUrl ? (
+                <div className="mt-4">
+                  <p className="text-green-600 font-medium mb-2">Upload Successful!</p>
+                  <Image
+                    src={coverImageUrl}
+                    alt="Service Cover Image"
+                    width={400}
+                    height={200}
+                    className="rounded-md object-cover aspect-video"
+                  />
+                </div>
+              ) : (
+                <ImageUploader
+                  serviceId={serviceId}
+                  onUploadComplete={handleUploadComplete}
+                />
+              )}
+              <Button variant="outline" onClick={() => router.push('/dashboard/bookings/provider')} className="w-full">
+                Skip and finish later
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
