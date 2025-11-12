@@ -91,7 +91,7 @@ export default function ServiceDetailPage() {
   if (error) return <div className="p-8 text-red-500">Error: {error}</div>;
   if (!service) return <div className="p-8">Service not found.</div>;
 
-  const { icon, color } = getTrustBadge(service.provider.trustLevel);
+  const { Icon, color } = getTrustBadge(service.provider.trustLevel);
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-8">
@@ -150,7 +150,7 @@ export default function ServiceDetailPage() {
                   </Badge>
                 )}
                 <Badge variant="secondary" className={`w-fit ${color}`}>
-                  {icon}
+                  <Icon className="h-4 w-4 mr-1" />
                   {service.provider.trustLevel.charAt(0).toUpperCase() + service.provider.trustLevel.slice(1)} Trust
                 </Badge>
               </div>

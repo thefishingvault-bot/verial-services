@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { Gem, Award, Shield } from 'lucide-react';
+import { Gem, Award, Shield, type LucideIcon } from 'lucide-react';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -18,12 +18,12 @@ export const formatPrice = (priceInCents: number) => {
 export const getTrustBadge = (level: 'bronze' | 'silver' | 'gold' | 'platinum') => {
   switch (level) {
     case 'platinum':
-      return { icon: <Gem className="h-4 w-4 mr-1" />, color: 'text-blue-500' };
+      return { Icon: Gem, color: 'text-blue-500' };
     case 'gold':
-      return { icon: <Award className="h-4 w-4 mr-1" />, color: 'text-yellow-500' };
+      return { Icon: Award, color: 'text-yellow-500' };
     case 'silver':
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-gray-500' };
+      return { Icon: Shield, color: 'text-gray-500' };
     default:
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-yellow-800' };
+      return { Icon: Shield, color: 'text-yellow-800' };
   }
 };
