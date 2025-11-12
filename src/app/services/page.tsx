@@ -1,89 +1,41 @@
-'use client';
-
-import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, AlertTriangle, Package, CheckCircle, Shield, Award, Gem } from 'lucide-react';
+import { Package, CheckCircle } from 'lucide-react';
+import { db } from '@/lib/db';
+import { eq } from 'drizzle-orm';
+import { formatPrice, getTrustBadge } from '@/lib/utils'; // Import shared helpers
+import { providers } from '@/db/schema'; // Import schema for types
 
-// Define a type for our joined service/provider data
-interface Service {
-  id: string;
-  title: string;
-  slug: string;
-  priceInCents: number;
-  category: string;
-  coverImageUrl: string | null;
-  provider: {
-    handle: string;
-    businessName: string;
-    isVerified: boolean;
-    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
-  };
+// This is now a Server Component. It fetches data on the server.
+
+// Data fetching function
+async function getServices() {
+  // Re-fetch all services and join with their provider's details
+  const allServices = await db.query.services.findMany({
+    with: {
+      provider: {
+        columns: {
+          handle: true,
+          businessName: true,
+          isVerified: true,
+          trustLevel: true,
+          status: true,
+        },
+      },
+    },
+  });
+
+  // Filter to only show services from 'approved' providers
+  return allServices.filter(service => service.provider.status === 'approved');
 }
 
-// Helper to format currency
-const formatPrice = (priceInCents: number) => {
-  return new Intl.NumberFormat('en-NZ', {
-    style: 'currency',
-    currency: 'NZD',
-  }).format(priceInCents / 100);
-};
-
-// Helper to get Trust Badge icon and color
-const getTrustBadge = (level: Service['provider']['trustLevel']) => {
-  switch (level) {
-    case 'platinum':
-      return { icon: <Gem className="h-4 w-4 mr-1" />, color: 'text-blue-500' };
-    case 'gold':
-      return { icon: <Award className="h-4 w-4 mr-1" />, color: 'text-yellow-500' };
-    case 'silver':
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-gray-500' };
-    default:
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-yellow-800' };
-  }
-};
-
-export default function BrowseServicesPage() {
-  const [services, setServices] = useState<Service[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch('/api/services/list')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch services.');
-        return res.json();
-      })
-      .then((data) => {
-        setServices(data);
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setIsLoading(false);
-      });
-  }, []);
+export default async function BrowseServicesPage() {
+  // Fetch data directly on the server
+  const services = await getServices();
 
   const renderContent = () => {
-    if (isLoading) {
-      return (
-        <div className="flex items-center justify-center p-12">
-          <Loader2 className="h-12 w-12 animate-spin text-muted-foreground" />
-        </div>
-      );
-    }
-
-    if (error) {
-      return (
-        <div className="flex items-center p-12 text-destructive">
-          <AlertTriangle className="h-8 w-8 mr-2" />
-          <p>{error}</p>
-        </div>
-      );
-    }
-
     if (services.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center p-12 text-center">

@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Shield, Award, Gem } from 'lucide-react';
+import { CheckCircle } from 'lucide-react';
+import { formatPrice, getTrustBadge } from '@/lib/utils';
 
 // Define a type for our joined service/provider data
 interface ServiceDetails {
@@ -25,28 +26,6 @@ interface ServiceDetails {
     bio: string;
   };
 }
-
-// Helper to format currency
-const formatPrice = (priceInCents: number) => {
-  return new Intl.NumberFormat('en-NZ', {
-    style: 'currency',
-    currency: 'NZD',
-  }).format(priceInCents / 100);
-};
-
-// Helper to get Trust Badge icon and color
-const getTrustBadge = (level: ServiceDetails['provider']['trustLevel']) => {
-  switch (level) {
-    case 'platinum':
-      return { icon: <Gem className="h-4 w-4 mr-1" />, color: 'text-blue-500' };
-    case 'gold':
-      return { icon: <Award className="h-4 w-4 mr-1" />, color: 'text-yellow-500' };
-    case 'silver':
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-gray-500' };
-    default:
-      return { icon: <Shield className="h-4 w-4 mr-1" />, color: 'text-yellow-800' };
-  }
-};
 
 export default function ServiceDetailPage() {
   const params = useParams();
