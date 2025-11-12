@@ -43,9 +43,10 @@ async function getServices({ query }: { query?: string }) {
 export default async function BrowseServicesPage({
   searchParams,
 }: {
-  searchParams?: { q?: string };
+  searchParams?: Promise<{ q?: string }>;
 }) {
-  const query = searchParams?.q;
+  const params = await searchParams;
+  const query = params?.q;
   const allServices = await getServices({ query });
 
   const renderContent = () => {
