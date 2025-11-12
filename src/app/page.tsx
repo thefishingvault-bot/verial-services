@@ -2,6 +2,17 @@ import Link from 'next/link';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Search } from 'lucide-react';
+import { redirect } from 'next/navigation';
+
+// Server Action to handle search
+async function searchAction(formData: FormData) {
+  'use server';
+  const query = formData.get('query') as string;
+  if (query) {
+    redirect(`/services?q=${encodeURIComponent(query)}`);
+  }
+  redirect('/services');
+}
 
 // This is the main marketing landing page (/)
 export default function HomePage() {
@@ -48,13 +59,14 @@ export default function HomePage() {
           </p>
         </div>
 
-        {/* Search Bar (Placeholder) */}
+        {/* Search Bar */}
         <div className="w-full max-w-lg">
-          <form>
+          <form action={searchAction}>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
               <Input
                 type="search"
+                name="query"
                 placeholder="What service do you need? (e.g., 'window cleaning')"
                 className="w-full rounded-full pl-10 pr-20 h-12"
               />
@@ -70,11 +82,11 @@ export default function HomePage() {
       <section className="container py-16">
         <h2 className="text-3xl font-bold text-center mb-12">How it Works</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          <div className="flex flex-col items-center text-center">
+          <Link href="/services" className="flex flex-col items-center text-center hover:opacity-80 transition-opacity">
             <div className="rounded-full bg-primary text-primary-foreground h-16 w-16 flex items-center justify-center text-2xl font-bold mb-4">1</div>
             <h3 className="text-xl font-semibold mb-2">Browse & Book</h3>
             <p className="text-muted-foreground">Find the service you need, see the price, and book in seconds.</p>
-          </div>
+          </Link>
           <div className="flex flex-col items-center text-center">
             <div className="rounded-full bg-primary text-primary-foreground h-16 w-16 flex items-center justify-center text-2xl font-bold mb-4">2</div>
             <h3 className="text-xl font-semibold mb-2">We Verify</h3>

@@ -1,48 +1,61 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Package, CheckCircle } from 'lucide-react';
 import { db } from '@/lib/db';
-import { eq } from 'drizzle-orm';
-import { formatPrice, getTrustBadge } from '@/lib/utils'; // Import shared helpers
-import { providers } from '@/db/schema'; // Import schema for types
+import { formatPrice, getTrustBadge } from '@/lib/utils';
+import { services, providers } from '@/db/schema';
+import { eq, and, ilike, desc } from 'drizzle-orm';
 
-// This is now a Server Component. It fetches data on the server.
+// This is a Server Component.
 
 // Data fetching function
-async function getServices() {
-  // Re-fetch all services and join with their provider's details
-  const allServices = await db.query.services.findMany({
-    with: {
-      provider: {
-        columns: {
-          handle: true,
-          businessName: true,
-          isVerified: true,
-          trustLevel: true,
-          status: true,
-        },
-      },
-    },
-  });
+async function getServices({ query }: { query?: string }) {
+  // Build the 'where' clause dynamically
+  const conditions = [
+    eq(providers.status, 'approved'),
+    query ? ilike(services.title, `%${query}%`) : undefined,
+  ];
 
-  // Filter to only show services from 'approved' providers
-  return allServices.filter(service => service.provider.status === 'approved');
+  const allServices = await db.select({
+    id: services.id,
+    title: services.title,
+    slug: services.slug,
+    priceInCents: services.priceInCents,
+    category: services.category,
+    coverImageUrl: services.coverImageUrl,
+    provider: {
+      handle: providers.handle,
+      businessName: providers.businessName,
+      isVerified: providers.isVerified,
+      trustLevel: providers.trustLevel,
+    }
+  })
+  .from(services)
+  .leftJoin(providers, eq(services.providerId, providers.id))
+  .where(and(...conditions.filter(Boolean))) // Filter out undefined
+  .orderBy(desc(services.createdAt));
+
+  return allServices;
 }
 
-export default async function BrowseServicesPage() {
-  // Fetch data directly on the server
-  const services = await getServices();
+export default async function BrowseServicesPage({
+  searchParams,
+}: {
+  searchParams?: { q?: string };
+}) {
+  const query = searchParams?.q;
+  const allServices = await getServices({ query });
 
   const renderContent = () => {
-    if (services.length === 0) {
+    if (allServices.length === 0) {
       return (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <Package className="h-16 w-16 text-muted-foreground mb-4" />
           <h3 className="text-xl font-semibold">No Services Found</h3>
           <p className="text-muted-foreground">
-            No providers have listed any services yet. Check back soon!
+            {query ? `We couldn't find any services matching "${query}".` : `No providers have listed any services yet.`}
           </p>
         </div>
       );
@@ -50,7 +63,7 @@ export default async function BrowseServicesPage() {
 
     return (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-        {services.map((service) => (
+        {allServices.map((service) => (
           <Link href={`/s/${service.slug}`} key={service.id}>
             <Card className="h-full flex flex-col overflow-hidden transition-shadow hover:shadow-lg">
               <CardHeader className="p-0">
@@ -96,7 +109,9 @@ export default async function BrowseServicesPage() {
 
   return (
     <div className="container py-12">
-      <h1 className="text-3xl font-bold mb-8">Browse All Services</h1>
+      <h1 className="text-3xl font-bold mb-8">
+        {query ? `Results for "${query}"` : 'Browse All Services'}
+      </h1>
       {/* TODO: Add search and filter controls here */}
       {renderContent()}
     </div>
