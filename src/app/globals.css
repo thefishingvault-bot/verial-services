@@ -42,6 +42,33 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+
+  /* Verial Custom Brand Colors */
+  --color-verial-blue-50: #e0f0ff;
+  --color-verial-blue-100: #b3d9ff;
+  --color-verial-blue-200: #80bfff;
+  --color-verial-blue-300: #4d9eff;
+  --color-verial-blue-400: #1a7dff;
+  --color-verial-blue-500: #007bff;
+  --color-verial-blue-600: #006edc;
+  --color-verial-blue-700: #005cb8;
+  --color-verial-blue-800: #004a94;
+  --color-verial-blue-900: #003770;
+  --color-verial-blue-950: #00254c;
+  --color-verial-green-50: #e9f7ea;
+  --color-verial-green-100: #c9eccf;
+  --color-verial-green-200: #a3e0ac;
+  --color-verial-green-300: #7cd38a;
+  --color-verial-green-400: #56c667;
+  --color-verial-green-500: #28a745;
+  --color-verial-green-600: #218d39;
+  --color-verial-green-700: #1a732e;
+  --color-verial-green-800: #135a22;
+  --color-verial-green-900: #0c4017;
+  --color-verial-green-950: #082c0f;
+  --color-verial-dark: #343a40;
+  --color-verial-light: #f8f9fa;
+  --color-verial-muted: #6c757d;
 }
 
 :root {
@@ -52,10 +79,12 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
+  /* Primary: Verial Blue #007bff */
+  --primary: oklch(0.566 0.196 254.604);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
+  /* Secondary: Verial Green #28a745 */
+  --secondary: oklch(0.627 0.176 145.464);
+  --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.97 0 0);
   --muted-foreground: oklch(0.556 0 0);
   --accent: oklch(0.97 0 0);
