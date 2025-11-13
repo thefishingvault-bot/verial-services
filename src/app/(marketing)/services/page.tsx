@@ -20,7 +20,7 @@ async function getServices({ query, category }: { query?: string, category?: str
   const conditions = [
     eq(providers.status, 'approved'),
     query ? ilike(services.title, `%${query}%`) : undefined,
-    (category && isValidCategory) ? eq(services.category, category) : undefined,
+    (category && isValidCategory) ? eq(services.category, category as typeof serviceCategoryEnum.enumValues[number]) : undefined,
   ];
 
   const allServices = await db.select({
