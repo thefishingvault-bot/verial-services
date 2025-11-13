@@ -5,14 +5,24 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
+import { useAuth, UserButton } from '@clerk/nextjs'; // Import auth hooks
 
-const navLinks = [
+// --- Guest Links (Signed Out) ---
+const guestLinks = [
   { href: '/dashboard/register-provider', label: 'Become a Provider' },
   { href: '/sign-in', label: 'Sign In' },
 ];
 
+// --- Auth Links (Signed In) ---
+const authLinks = [
+  { href: '/dashboard', label: 'Dashboard' },
+];
+
 export function SiteHeader() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const { isSignedIn } = useAuth(); // Check if user is signed in
+
+  const links = isSignedIn ? authLinks : guestLinks;
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white border-b">
@@ -23,9 +33,9 @@ export function SiteHeader() {
           Verial
         </Link>
 
-        {/* Desktop Navigation */}
+        {/* --- Desktop Navigation (Now conditional) --- */}
         <nav className="hidden md:flex items-center space-x-2">
-          {navLinks.map((link) => (
+          {links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -34,15 +44,20 @@ export function SiteHeader() {
               {link.label}
             </Link>
           ))}
-          <Link
-            href="/sign-up"
-            className={buttonVariants({ variant: 'default' })}
-          >
-            Sign Up
-          </Link>
+
+          {isSignedIn ? (
+            <UserButton afterSignOutUrl="/" />
+          ) : (
+            <Link
+              href="/sign-up"
+              className={buttonVariants({ variant: 'default' })}
+            >
+              Sign Up
+            </Link>
+          )}
         </nav>
 
-        {/* Mobile Navigation (Hamburger Menu) */}
+        {/* --- Mobile Navigation (Now conditional) --- */}
         <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
           <SheetTrigger asChild className="md:hidden">
             <Button variant="outline" size="icon">
@@ -52,7 +67,7 @@ export function SiteHeader() {
           </SheetTrigger>
           <SheetContent side="right">
             <div className="flex flex-col space-y-4 mt-6">
-              {navLinks.map((link) => (
+              {links.map((link) => (
                 <Link
                   key={link.href}
                   href={link.href}
@@ -62,13 +77,20 @@ export function SiteHeader() {
                   {link.label}
                 </Link>
               ))}
-              <Link
-                href="/sign-up"
-                className={buttonVariants({ variant: 'default' })}
-                onClick={() => setIsSheetOpen(false)}
-              >
-                Sign Up
-              </Link>
+
+              {isSignedIn ? (
+                 <div className="pt-4 border-t">
+                   <UserButton afterSignOutUrl="/" showName />
+                 </div>
+              ) : (
+                <Link
+                  href="/sign-up"
+                  className={buttonVariants({ variant: 'default' })}
+                  onClick={() => setIsSheetOpen(false)}
+                >
+                  Sign Up
+                </Link>
+              )}
             </div>
           </SheetContent>
         </Sheet>
