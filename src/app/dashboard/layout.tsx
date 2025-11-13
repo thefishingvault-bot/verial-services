@@ -1,6 +1,5 @@
-import { UserButton } from "@clerk/nextjs";
-import Link from "next/link";
 import { BottomNavigation } from "@/components/nav/bottom-navigation";
+import { SiteHeader } from "@/components/nav/site-header";
 
 export default function DashboardLayout({
   children,
@@ -9,15 +8,7 @@ export default function DashboardLayout({
 }) {
   return (
     <>
-      {/* Main Header */}
-      <header className="sticky top-0 z-50 w-full bg-white border-b">
-        <div className="container flex h-16 items-center justify-between">
-          <Link href="/dashboard" className="text-2xl font-bold text-primary">
-            Verial
-          </Link>
-          <UserButton afterSignOutUrl="/" />
-        </div>
-      </header>
+      <SiteHeader />
 
       {/* Page Content */}
       <main className="pb-20">
