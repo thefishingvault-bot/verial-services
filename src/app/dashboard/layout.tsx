@@ -1,4 +1,5 @@
 import { UserButton } from "@clerk/nextjs";
+import Link from "next/link";
 import { BottomNavigation } from "@/components/nav/bottom-navigation";
 
 export default function DashboardLayout({
@@ -9,11 +10,11 @@ export default function DashboardLayout({
   return (
     <>
       {/* Main Header */}
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="sticky top-0 z-50 w-full bg-white border-b">
         <div className="container flex h-16 items-center justify-between">
-          <a href="/dashboard" className="font-bold">
-            Verial Dashboard
-          </a>
+          <Link href="/dashboard" className="text-2xl font-bold text-primary">
+            Verial
+          </Link>
           <UserButton afterSignOutUrl="/" />
         </div>
       </header>
