@@ -13,7 +13,7 @@ export default function MarketingLayout({
 
       {/* Dark Footer (from mockup) */}
       <footer className="bg-verial-dark text-gray-400">
-        <div className="container flex flex-col md:flex-row items-center justify-between py-8 px-4">
+        <div className="container mx-auto flex flex-col md:flex-row items-center justify-between py-8">
           <p className="text-sm mb-4 md:mb-0">
             &copy; {new Date().getFullYear()} Verial Services Ltd. All rights reserved.
           </p>

@@ -20,7 +20,7 @@ export default function HomePage() {
     <>
       {/* Hero Section */}
       <section className="w-full py-20 md:py-32 lg:py-40 bg-gradient-to-br from-verial-blue-50 to-verial-blue-100">
-        <div className="container flex flex-col items-center justify-center text-center px-4">
+        <div className="container mx-auto flex flex-col items-center justify-center text-center">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-verial-dark mb-4">
             Find Trusted Local Services in New Zealand
           </h1>
@@ -45,7 +45,7 @@ export default function HomePage() {
 
       {/* How It Works Section */}
       <section className="w-full py-16 md:py-24 bg-white">
-        <div className="container px-4">
+        <div className="container mx-auto">
           <h2 className="text-3xl font-bold tracking-tight text-verial-dark text-center mb-12">
             How It Works
           </h2>
