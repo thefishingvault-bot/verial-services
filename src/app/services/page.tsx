@@ -6,7 +6,7 @@ import { Package, CheckCircle } from 'lucide-react';
 import { db } from '@/lib/db';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 import { services, providers } from '@/db/schema';
-import { eq, and, ilike, desc } from 'drizzle-orm';
+import { eq, and, ilike, desc, isNotNull } from 'drizzle-orm';
 
 // This is a Server Component.
 
@@ -33,7 +33,7 @@ async function getServices({ query }: { query?: string }) {
     }
   })
   .from(services)
-  .leftJoin(providers, eq(services.providerId, providers.id))
+  .innerJoin(providers, eq(services.providerId, providers.id)) // Use innerJoin to ensure provider is not null
   .where(and(...conditions.filter(Boolean))) // Filter out undefined
   .orderBy(desc(services.createdAt));
 
