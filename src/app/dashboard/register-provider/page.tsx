@@ -72,8 +72,8 @@ export default function RegisterProviderPage() {
   };
 
   return (
-    <div className="max-w-lg mx-auto p-4 md:p-8">
-      <Card>
+    <div className="flex min-h-[calc(100vh-9rem)] items-center justify-center p-4">
+      <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Become a Provider</CardTitle>
           <CardDescription>
