@@ -1,7 +1,8 @@
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
-import { Search, CheckCircle } from 'lucide-react';
+import { Search, CheckCircle, Sparkles, Wrench, Sprout, Laptop, Calculator, Car } from 'lucide-react';
 import { redirect } from 'next/navigation';
 
 // Server Action to handle search
@@ -14,13 +15,23 @@ async function searchAction(formData: FormData) {
   redirect('/services');
 }
 
+// --- Category Data ---
+const categories = [
+  { name: 'Cleaning', icon: Sparkles, href: '/services?category=cleaning' },
+  { name: 'Plumbing', icon: Wrench, href: '/services?category=plumbing' },
+  { name: 'Gardening', icon: Sprout, href: '/services?category=gardening' },
+  { name: 'IT Support', icon: Laptop, href: '/services?category=it_support' },
+  { name: 'Accounting', icon: Calculator, href: '/services?category=accounting' },
+  { name: 'Detailing', icon: Car, href: '/services?category=detailing' },
+];
+
 // This is now the Home Page at /
 export default function HomePage() {
   return (
     <>
       {/* Hero Section */}
       <section className="w-full py-20 md:py-32 lg:py-40 bg-gradient-to-br from-verial-blue-50 to-verial-blue-100">
-        <div className="container mx-auto flex flex-col items-center justify-center text-center">
+        <div className="container flex flex-col items-center justify-center text-center px-4">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-verial-dark mb-4">
             Find Trusted Local Services in New Zealand
           </h1>
@@ -29,11 +40,12 @@ export default function HomePage() {
           </p>
           <form action={searchAction} className="w-full max-w-lg">
             <div className="relative flex items-center">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
                 name="query"
                 type="search"
                 placeholder="What service do you need? (e.g., 'window cleaning')"
-                className="w-full rounded-md pl-10 pr-16 h-12 shadow-sm"
+                className="w-full rounded-md pl-12 pr-16 h-12 shadow-sm"
               />
               <Button type="submit" variant="default" size="icon" className="absolute right-2.5">
                 <Search className="h-5 w-5" />
@@ -45,7 +57,7 @@ export default function HomePage() {
 
       {/* How It Works Section */}
       <section className="w-full py-16 md:py-24 bg-white">
-        <div className="container mx-auto">
+        <div className="container px-4">
           <h2 className="text-3xl font-bold tracking-tight text-verial-dark text-center mb-12">
             How It Works
           </h2>
@@ -76,6 +88,51 @@ export default function HomePage() {
             </Card>
 
           </div>
+        </div>
+      </section>
+
+      {/* --- NEW: Browse by Category Section --- */}
+      <section className="w-full py-16 md:py-24 bg-verial-light">
+        <div className="container px-4">
+          <h2 className="text-3xl font-bold tracking-tight text-verial-dark text-center mb-12">
+            Explore by Category
+          </h2>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            {categories.map((category) => {
+              const Icon = category.icon;
+              return (
+                <Link
+                  key={category.name}
+                  href={category.href}
+                  className={buttonVariants({
+                    variant: 'outline',
+                    className: 'flex flex-col h-28 items-center justify-center gap-2 bg-white shadow-sm',
+                  })}
+                >
+                  <Icon className="h-8 w-8 text-primary" />
+                  <span className="font-semibold text-verial-dark">{category.name}</span>
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* --- NEW: Become a Provider CTA Section --- */}
+      <section className="w-full py-20 md:py-32 bg-gradient-to-r from-primary to-verial-blue-600">
+        <div className="container flex flex-col items-center justify-center text-center px-4">
+          <h2 className="text-3xl font-extrabold tracking-tight text-white mb-4">
+            Ready to grow your business?
+          </h2>
+          <p className="text-lg text-verial-blue-100 mb-8 max-w-xl">
+            Join New Zealand's trusted marketplace. List your services, manage bookings, and get paid, all in one place.
+          </p>
+          <Link
+            href="/dashboard/register-provider"
+            className={buttonVariants({ variant: 'default', size: 'lg', className: 'bg-white text-primary hover:bg-gray-100' })}
+          >
+            Become a Provider Today
+          </Link>
         </div>
       </section>
     </>
