@@ -1,7 +1,8 @@
 import Link from 'next/link';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Search, CheckCircle2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Search, CheckCircle } from 'lucide-react';
 import { redirect } from 'next/navigation';
 
 // Server Action to handle search
@@ -17,85 +18,106 @@ async function searchAction(formData: FormData) {
 // This is the main marketing landing page (/)
 export default function HomePage() {
   return (
-    <div className="flex flex-col min-h-screen bg-verial-light text-verial-dark">
+    <div className="flex flex-col min-h-screen bg-white">
       {/* Header */}
-      <header className="bg-white shadow-sm py-4">
-        <div className="container flex items-center justify-between">
-          <Link href="/" className="text-2xl font-bold text-verial-blue-500">
+      <header className="sticky top-0 z-50 w-full bg-white border-b">
+        <div className="container flex h-16 items-center justify-between">
+          <Link href="/" className="text-2xl font-bold text-primary">
             Verial
           </Link>
-          <nav className="flex items-center space-x-4">
-            <Button variant="ghost" asChild>
-              <Link href="/dashboard/register-provider">Become a Provider</Link>
-            </Button>
-            <Button variant="ghost" asChild>
-              <Link href="/sign-in">Sign In</Link>
-            </Button>
-            <Button asChild>
-              <Link href="/sign-up">Sign Up</Link>
-            </Button>
+          <nav className="flex items-center space-x-2">
+            <Link
+              href="/dashboard/register-provider"
+              className={buttonVariants({ variant: 'ghost' })}
+            >
+              Become a Provider
+            </Link>
+            <Link
+              href="/sign-in"
+              className={buttonVariants({ variant: 'ghost' })}
+            >
+              Sign In
+            </Link>
+            <Link
+              href="/sign-up"
+              className={buttonVariants({ variant: 'default' })}
+            >
+              Sign Up
+            </Link>
           </nav>
         </div>
       </header>
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="w-full py-20 md:py-32 lg:py-40 bg-gradient-to-br from-verial-blue-50 to-verial-blue-100 flex items-center justify-center text-center">
-          <div className="container max-w-3xl px-4 md:px-6">
-            <h1 className="text-4xl md:text-5xl lg:text-6xl font-extrabold tracking-tight text-verial-dark mb-4">
+        <section className="w-full py-20 md:py-32 lg:py-40 bg-gradient-to-br from-verial-blue-50 to-verial-blue-100">
+          <div className="container flex flex-col items-center justify-center text-center px-4">
+            <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-verial-dark mb-4">
               Find Trusted Local Services in New Zealand
             </h1>
-            <p className="text-lg text-verial-muted md:text-xl mb-8">
+            <p className="text-lg text-verial-muted md:text-xl mb-8 max-w-2xl">
               From cleaning and plumbing to IT support, find trusted local Kiwis for any job. Transparent pricing, secure payments, and verified providers.
             </p>
-            <div className="flex w-full max-w-md mx-auto items-center space-x-2 p-1 bg-white rounded-lg shadow-md">
-              <form action={searchAction} className="flex w-full">
+            <form action={searchAction} className="w-full max-w-lg">
+              <div className="relative flex items-center">
                 <Input
                   name="query"
                   type="search"
                   placeholder="What service do you need? (e.g., 'window cleaning')"
-                  className="flex-1 border-none focus-visible:ring-0 shadow-none"
+                  className="w-full rounded-md pl-10 pr-16 h-12 shadow-sm"
                 />
-                <Button type="submit" className="bg-verial-blue-500 hover:bg-verial-blue-600">
-                  <Search className="h-5 w-5 mr-2" /> Search
+                <Button type="submit" variant="default" size="icon" className="absolute right-2.5">
+                  <Search className="h-5 w-5" />
                 </Button>
-              </form>
-            </div>
+              </div>
+            </form>
           </div>
         </section>
 
         {/* How It Works Section */}
-        <section className="w-full py-16 md:py-24 lg:py-32 bg-white">
-          <div className="container px-4 md:px-6 text-center">
-            <h2 className="text-3xl font-bold tracking-tight text-verial-dark mb-12">How It Works</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="flex flex-col items-center text-center p-6 bg-verial-light rounded-lg shadow-sm">
-                <CheckCircle2 className="h-12 w-12 text-verial-blue-500 mb-4" />
-                <h3 className="text-xl font-semibold text-verial-dark mb-2">1. Browse & Book</h3>
-                <p className="text-verial-muted">Find the service you need, see the price, and book in seconds.</p>
-              </div>
-              <div className="flex flex-col items-center text-center p-6 bg-verial-light rounded-lg shadow-sm">
-                <CheckCircle2 className="h-12 w-12 text-verial-blue-500 mb-4" />
-                <h3 className="text-xl font-semibold text-verial-dark mb-2">2. We Verify</h3>
-                <p className="text-verial-muted">We verify every provider's identity and track their reputation.</p>
-              </div>
-              <div className="flex flex-col items-center text-center p-6 bg-verial-light rounded-lg shadow-sm">
-                <CheckCircle2 className="h-12 w-12 text-verial-blue-500 mb-4" />
-                <h3 className="text-xl font-semibold text-verial-dark mb-2">3. Get It Done</h3>
-                <p className="text-verial-muted">Pay securely and get your job completed by a trusted local.</p>
-              </div>
+        <section className="w-full py-16 md:py-24 bg-white">
+          <div className="container px-4">
+            <h2 className="text-3xl font-bold tracking-tight text-verial-dark text-center mb-12">
+              How It Works
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
+              <Card className="bg-verial-light border-none shadow-sm">
+                <CardContent className="flex flex-col items-center text-center p-8">
+                  <CheckCircle className="h-12 w-12 text-primary mb-4" />
+                  <h3 className="text-xl font-semibold text-verial-dark mb-2">1. Browse & Book</h3>
+                  <p className="text-verial-muted">Find the service you need, see the price, and book in seconds.</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-verial-light border-none shadow-sm">
+                <CardContent className="flex flex-col items-center text-center p-8">
+                  <CheckCircle className="h-12 w-12 text-primary mb-4" />
+                  <h3 className="text-xl font-semibold text-verial-dark mb-2">2. We Verify</h3>
+                  <p className="text-verial-muted">We verify every provider's identity and track their reputation.</p>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-verial-light border-none shadow-sm">
+                <CardContent className="flex flex-col items-center text-center p-8">
+                  <CheckCircle className="h-12 w-12 text-primary mb-4" />
+                  <h3 className="text-xl font-semibold text-verial-dark mb-2">3. Get It Done</h3>
+                  <p className="text-verial-muted">Pay securely and get your job completed by a trusted local.</p>
+                </CardContent>
+              </Card>
             </div>
           </div>
         </section>
       </main>
 
       {/* Footer */}
-      <footer className="bg-verial-dark text-verial-light py-8">
-        <div className="container flex flex-col md:flex-row items-center justify-between px-4 md:px-6">
-          <p className="text-sm mb-4 md:mb-0">&copy; {new Date().getFullYear()} Verial Services Ltd. All rights reserved.</p>
+      <footer className="bg-verial-dark text-gray-400">
+        <div className="container flex flex-col md:flex-row items-center justify-between py-8 px-4">
+          <p className="text-sm mb-4 md:mb-0">
+            &copy; {new Date().getFullYear()} Verial Services Ltd. All rights reserved.
+          </p>
           <nav className="flex space-x-4 text-sm">
-            <Link href="/legal/terms" className="hover:underline">Terms of Service</Link>
-            <Link href="/legal/privacy" className="hover:underline">Privacy Policy</Link>
+            <Link href="/legal/terms" className="hover:underline hover:text-white">Terms of Service</Link>
+            <Link href="/legal/privacy" className="hover:underline hover:text-white">Privacy Policy</Link>
           </nav>
         </div>
       </footer>
