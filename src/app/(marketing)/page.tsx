@@ -129,7 +129,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/dashboard/register-provider"
-            className={buttonVariants({ variant: 'default', size: 'lg', className: 'bg-white text-primary hover:bg-gray-100' })}
+            className={buttonVariants({ variant: 'default', size: 'lg', className: 'bg-white text-verial-dark hover:bg-gray-100 hover:text-verial-dark' })}
           >
             Become a Provider Today
           </Link>

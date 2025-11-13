@@ -5,17 +5,22 @@ import { Badge } from '@/components/ui/badge';
 import { Package, CheckCircle } from 'lucide-react';
 import { db } from '@/lib/db';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
-import { services, providers } from '@/db/schema';
-import { eq, and, ilike, desc, isNotNull } from 'drizzle-orm';
+import { services, providers, serviceCategoryEnum } from '@/db/schema'; // Import enum
+import { eq, and, ilike, desc } from 'drizzle-orm';
 
 // This is a Server Component.
 
 // Data fetching function
-async function getServices({ query }: { query?: string }) {
+async function getServices({ query, category }: { query?: string, category?: string }) {
+
+  // Validate category if it exists
+  const isValidCategory = category ? serviceCategoryEnum.enumValues.includes(category as any) : false;
+
   // Build the 'where' clause dynamically
   const conditions = [
     eq(providers.status, 'approved'),
     query ? ilike(services.title, `%${query}%`) : undefined,
+    (category && isValidCategory) ? eq(services.category, category) : undefined,
   ];
 
   const allServices = await db.select({
@@ -43,21 +48,36 @@ async function getServices({ query }: { query?: string }) {
 export default async function BrowseServicesPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ q?: string }>;
+  searchParams?: Promise<{ q?: string; category?: string }>;
 }) {
   const params = await searchParams;
   const query = params?.q;
-  const allServices = await getServices({ query });
+  const category = params?.category;
+
+  const allServices = await getServices({ query, category });
+
+  // Create a dynamic title
+  let title = 'Browse All Services';
+  if (query) {
+    title = `Results for "${query}"`;
+  } else if (category) {
+    title = `Services in "${category}"`;
+  }
 
   const renderContent = () => {
     if (allServices.length === 0) {
+      let emptyMessage = 'No providers have listed any services yet.';
+      if (query) {
+        emptyMessage = `We couldn't find any services matching "${query}".`;
+      } else if (category) {
+        emptyMessage = `We couldn't find any services in the "${category}" category.`;
+      }
+
       return (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <Package className="h-16 w-16 text-muted-foreground mb-4" />
           <h3 className="text-xl font-semibold">No Services Found</h3>
-          <p className="text-muted-foreground">
-            {query ? `We couldn't find any services matching "${query}".` : `No providers have listed any services yet.`}
-          </p>
+          <p className="text-muted-foreground">{emptyMessage}</p>
         </div>
       );
     }
@@ -109,9 +129,9 @@ export default async function BrowseServicesPage({
   };
 
   return (
-    <div className="container py-12">
-      <h1 className="text-3xl font-bold mb-8">
-        {query ? `Results for "${query}"` : 'Browse All Services'}
+    <div className="container mx-auto py-12">
+      <h1 className="text-3xl font-bold mb-8 capitalize">
+        {title}
       </h1>
       {/* TODO: Add search and filter controls here */}
       {renderContent()}
