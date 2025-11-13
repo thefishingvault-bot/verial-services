@@ -3,6 +3,7 @@ import { bookings, services, providers, users } from "@/db/schema";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,13 @@ export async function POST(req: Request) {
     // 2. Get the service details from the database
     const service = await db.query.services.findFirst({
       where: eq(services.id, serviceId),
+      with: {
+        provider: {
+          with: {
+            user: { columns: { email: true } }
+          }
+        }
+      }
     });
     if (!service) {
       return new NextResponse("Service not found", { status: 404 });
@@ -74,6 +82,27 @@ export async function POST(req: Request) {
     }).returning();
 
     console.log(`[API_BOOKING_CREATE] User ${userId} created Booking ${newBooking.id} for Service ${service.id}`);
+
+    // --- 5. Send Notification Email to Provider ---
+    try {
+      const providerEmail = service.provider?.user?.email;
+
+      if (providerEmail) {
+        await sendEmail({
+          to: providerEmail,
+          subject: `New Booking Request for ${service.title}`,
+          html: `
+            <h1>New Booking Request</h1>
+            <p>A customer has requested your service: <strong>${service.title}</strong>.</p>
+            <p>Please log in to your dashboard to accept or reject this booking.</p>
+            <a href="${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/bookings/provider">Manage Bookings</a>
+          `,
+        });
+      }
+    } catch (emailError) {
+      console.error(`[API_BOOKING_CREATE] Failed to send email:`, emailError);
+    }
+
     return NextResponse.json(newBooking);
 
   } catch (error) {
