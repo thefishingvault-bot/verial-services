@@ -11,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
 
 // Define the form validation schema
@@ -24,6 +26,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 export default function ProfilePage() {
   const { user } = useUser();
+  const { toast } = useToast();
   const isProvider = user?.publicMetadata?.role === 'provider';
 
   const [isLoading, setIsLoading] = useState(true);
@@ -71,89 +74,138 @@ export default function ProfilePage() {
 
       // Refresh Clerk's user data
       await user?.reload();
-      alert('Profile updated successfully!');
-    } catch (err: any) {
-      setError(err.message);
+      toast({
+        title: 'Profile updated',
+        description: 'Your changes have been saved successfully.',
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      setError(message);
     } finally {
       setIsSaving(false);
     }
   };
 
   if (isLoading) {
-    return <div className="flex p-8 justify-center"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+      <div className="flex min-h-[calc(100vh-5rem)] items-center justify-center bg-verial-light">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
   }
 
   return (
-    <div className="max-w-xl mx-auto p-4 md:p-8">
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Profile</CardTitle>
-          <CardDescription>
-            Manage your public information.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-              <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="firstName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>First Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="lastName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Last Name</FormLabel>
-                      <FormControl>
-                        <Input {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
+    <div className="bg-verial-light py-10 md:py-16">
+      <div className="container flex justify-center">
+        <div className="w-full max-w-2xl">
+          <Tabs defaultValue="profile" className="w-full">
+            <div className="mb-4 space-y-1">
+              <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+              <p className="text-sm text-muted-foreground">
+                Manage your profile information and account settings.
+              </p>
+            </div>
 
-              {isProvider && (
-                <FormField
-                  control={form.control}
-                  name="bio"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Provider Bio</FormLabel>
-                      <FormControl>
-                        <Textarea
-                          placeholder="Tell customers about you and your services..."
-                          className="resize-none"
-                          rows={5}
-                          {...field}
+            <TabsList className="mb-4">
+              <TabsTrigger value="profile">Profile</TabsTrigger>
+              <TabsTrigger value="security">Account &amp; Security</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="profile">
+              <Card className="shadow-md">
+                <CardHeader>
+                  <CardTitle>Your Profile</CardTitle>
+                  <CardDescription>Manage your public information.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Form {...form}>
+                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <FormField
+                          control={form.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>First Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
                         />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              )}
+                        <FormField
+                          control={form.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Last Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
 
-              {error && <p className="text-sm font-medium text-destructive">{error}</p>}
+                      {isProvider && (
+                        <FormField
+                          control={form.control}
+                          name="bio"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Provider Bio</FormLabel>
+                              <FormControl>
+                                <Textarea
+                                  placeholder="Tell customers about you and your services..."
+                                  className="resize-none"
+                                  rows={5}
+                                  {...field}
+                                />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      )}
 
-              <Button type="submit" disabled={isSaving} className="w-full">
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}
-              </Button>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+                      {error && (
+                        <p className="text-sm font-medium text-destructive">{error}</p>
+                      )}
+
+                      <Button type="submit" disabled={isSaving} className="w-full">
+                        {isSaving ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          'Save Changes'
+                        )}
+                      </Button>
+                    </form>
+                  </Form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="security">
+              <Card className="shadow-md">
+                <CardHeader>
+                  <CardTitle>Account &amp; Security</CardTitle>
+                  <CardDescription>
+                    Manage your login details and security preferences. (Coming soon)
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    We&apos;ll soon let you manage things like your email address, password,
+                    and additional security options from here.
+                  </p>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </div>
     </div>
   );
 }

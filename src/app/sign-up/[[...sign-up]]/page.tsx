@@ -24,6 +24,8 @@ export default function Page() {
             formButtonPrimary: 'bg-primary text-primary-foreground h-10 hover:bg-primary/90',
             footerActionText: 'text-muted-foreground',
             footerActionLink: 'text-primary hover:text-primary/90 font-medium',
+            // Hide the default Clerk footer ("Secured by Clerk" / dev note)
+            footer: 'hidden',
           },
         }}
       />
