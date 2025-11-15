@@ -13,15 +13,16 @@ import { eq, and, ilike, desc } from 'drizzle-orm';
 // Data fetching function
 async function getServices({ query, category }: { query?: string, category?: string }) {
 
-  // Validate category if it exists
-  const isValidCategory = category ? serviceCategoryEnum.enumValues.includes(category as any) : false;
-
   // Build the 'where' clause dynamically
   const conditions = [
     eq(providers.status, 'approved'),
     query ? ilike(services.title, `%${query}%`) : undefined,
-    (category && isValidCategory) ? eq(services.category, category as typeof serviceCategoryEnum.enumValues[number]) : undefined,
   ];
+
+  // Add category filter if valid
+  if (category && serviceCategoryEnum.enumValues.includes(category as any)) {
+    conditions.push(eq(services.category, category as any));
+  }
 
   const allServices = await db.select({
     id: services.id,
