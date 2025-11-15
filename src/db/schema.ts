@@ -118,6 +118,24 @@ export const bookings = pgTable("bookings", {
 });
 
 
+/**
+ * Reviews Table
+ * Stores reviews left by customers for completed bookings.
+ */
+export const reviews = pgTable("reviews", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., rev_...
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // The customer who wrote it
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }), // The provider being reviewed
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }).unique(), // A booking can only have one review
+
+  rating: integer("rating").notNull(), // Rating from 1 to 5
+  comment: text("comment"),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+
+
 // --- RELATIONS ---
 // Define the relationships for our ORM
 
@@ -127,6 +145,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
     references: [providers.id],
   }),
   bookings: many(bookings),
+  reviews: many(reviews), // A user can write many reviews
 }));
 
 export const providersRelations = relations(providers, ({ one, many }) => ({
@@ -136,6 +155,7 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   }),
   services: many(services),
   bookings: many(bookings),
+  reviews: many(reviews), // A provider can have many reviews
 }));
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
@@ -145,6 +165,22 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
   }),
   bookings: many(bookings),
 }));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  user: one(users, {
+    fields: [reviews.userId],
+    references: [users.id],
+  }),
+  provider: one(providers, {
+    fields: [reviews.providerId],
+    references: [providers.id],
+  }),
+  booking: one(bookings, {
+    fields: [reviews.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
 
 export const bookingsRelations = relations(bookings, ({ one }) => ({
   user: one(users, {
@@ -159,5 +195,6 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
     fields: [bookings.providerId],
     references: [providers.id],
   }),
+  review: one(reviews), // A booking can have one review
 }));
 
