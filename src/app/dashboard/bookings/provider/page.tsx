@@ -148,6 +148,21 @@ export default function ProviderBookingsPage() {
                   <p className="font-semibold">{formatPrice(booking.priceAtBooking)}</p>
                 </div>
               </CardContent>
+              {/* --- NEW: Paid Status --- */}
+              {booking.status === 'paid' && (
+                <CardFooter className="flex space-x-2">
+                  <Button
+                    onClick={() => handleUpdateStatus(booking.id, 'completed')}
+                    disabled={isLoadingAction}
+                    className="w-full sm:w-auto"
+                  >
+                    {isLoadingAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Mark as Complete
+                  </Button>
+                </CardFooter>
+              )}
+
+              {/* --- Pending Status --- */}
               {booking.status === 'pending' && (
                 <CardFooter className="flex space-x-2">
                   <Button

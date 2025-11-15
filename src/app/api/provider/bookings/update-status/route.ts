@@ -77,6 +77,14 @@ export async function PATCH(req: Request) {
             <p>You have not been charged. You can browse for other services.</p>
             <a href="${process.env.NEXT_PUBLIC_SITE_URL}/services">Browse Services</a>
           `;
+        } else if (newStatus === 'completed') {
+          subject = `Your booking for ${bookingWithUser.service.title} is complete!`;
+          html = `
+            <h1>Job Complete!</h1>
+            <p>Your job for <strong>${bookingWithUser.service.title}</strong> has been marked as complete by the provider.</p>
+            <p>Please leave a review to help them and our community.</p>
+            <a href="${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/bookings">Leave a Review</a>
+          `;
         }
 
         if (subject) {
