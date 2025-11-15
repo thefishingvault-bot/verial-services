@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useUser } from '@clerk/nextjs';
+import { useUser, UserProfile } from '@clerk/nextjs';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,26 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { Loader2 } from 'lucide-react';
+
+// Clerk appearance for Account & Security tab
+const clerkAppearance = {
+  elements: {
+    rootBox: 'w-full',
+    card: 'shadow-none border-none bg-transparent',
+    headerTitle: 'text-xl font-semibold text-card-foreground',
+    headerSubtitle: 'hidden',
+    profileSectionTitleText: 'text-lg font-semibold text-card-foreground',
+    formFieldLabel: 'text-sm font-medium',
+    formFieldInput:
+      'h-10 border-border bg-background focus-visible:ring-primary focus-visible:ring-2 focus-visible:ring-offset-2 rounded-md',
+    formButtonPrimary: 'bg-primary text-primary-foreground h-10 hover:bg-primary/90',
+    formButtonReset: 'bg-destructive text-destructive-foreground h-10 hover:bg-destructive/90',
+    formButtonSecondary: 'bg-secondary text-secondary-foreground h-9 hover:bg-secondary/80',
+    profileSection__danger: 'mt-6',
+    profileSectionTitle__danger: 'text-destructive',
+    profileSectionContent__danger: 'border-destructive',
+  },
+} as const;
 
 // Define the form validation schema
 const formSchema = z.object({
@@ -75,7 +95,7 @@ export default function ProfilePage() {
       // Refresh Clerk's user data
       await user?.reload();
       toast({
-        title: 'Profile updated',
+        title: 'Profile Updated',
         description: 'Your changes have been saved successfully.',
       });
     } catch (err: unknown) {
@@ -106,7 +126,7 @@ export default function ProfilePage() {
               </p>
             </div>
 
-            <TabsList className="mb-4">
+            <TabsList className="mb-4 grid w-full grid-cols-2">
               <TabsTrigger value="profile">Profile</TabsTrigger>
               <TabsTrigger value="security">Account &amp; Security</TabsTrigger>
             </TabsList>
@@ -192,14 +212,11 @@ export default function ProfilePage() {
                 <CardHeader>
                   <CardTitle>Account &amp; Security</CardTitle>
                   <CardDescription>
-                    Manage your login details and security preferences. (Coming soon)
+                    Manage your password, email, and security settings.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    We&apos;ll soon let you manage things like your email address, password,
-                    and additional security options from here.
-                  </p>
+                  <UserProfile appearance={clerkAppearance} />
                 </CardContent>
               </Card>
             </TabsContent>
