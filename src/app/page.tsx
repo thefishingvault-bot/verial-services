@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import MarketingLayout from './(marketing)/layout';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
@@ -25,8 +26,7 @@ const categories = [
   { name: 'Detailing', icon: Car, href: '/services?category=detailing' },
 ];
 
-// This is now the Home Page at /
-export default function HomePage() {
+function HomeContent() {
   return (
     <>
       {/* Hero Section */}
@@ -62,11 +62,10 @@ export default function HomePage() {
             How It Works
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-5xl mx-auto">
-
             <Card className="bg-verial-light border-none shadow-sm">
               <CardContent className="flex flex-col items-center text-center p-8">
                 <CheckCircle className="h-12 w-12 text-primary mb-4" />
-                <h3 className="text-xl font-semibold text-verial-dark mb-2">1. Browse & Book</h3>
+                <h3 className="text-xl font-semibold text-verial-dark mb-2">1. Browse &amp; Book</h3>
                 <p className="text-verial-muted">Find the service you need, see the price, and book in seconds.</p>
               </CardContent>
             </Card>
@@ -86,7 +85,6 @@ export default function HomePage() {
                 <p className="text-verial-muted">Pay securely and get your job completed by a trusted local.</p>
               </CardContent>
             </Card>
-
           </div>
         </div>
       </section>
@@ -129,7 +127,11 @@ export default function HomePage() {
           </p>
           <Link
             href="/dashboard/register-provider"
-            className={buttonVariants({ variant: 'default', size: 'lg', className: 'bg-white text-verial-dark hover:bg-gray-100 hover:text-verial-dark' })}
+            className={buttonVariants({
+              variant: 'default',
+              size: 'lg',
+              className: 'bg-white text-verial-dark hover:bg-gray-100 hover:text-verial-dark',
+            })}
           >
             Become a Provider Today
           </Link>
@@ -138,3 +140,13 @@ export default function HomePage() {
     </>
   );
 }
+
+// Home page at "/" wrapped in the marketing layout
+export default function HomePage() {
+  return (
+    <MarketingLayout>
+      <HomeContent />
+    </MarketingLayout>
+  );
+}
+

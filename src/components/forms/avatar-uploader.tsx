@@ -96,10 +96,15 @@ export function AvatarUploader({ onUploadComplete }: AvatarUploaderProps) {
       />
       {status === 'uploading' && <Loader2 className="h-5 w-5 animate-spin" />}
       {status === 'error' && (
-        <AlertTriangle
-          className="h-5 w-5 text-destructive"
+        <span
+          className="inline-flex"
           title={message || 'Error uploading avatar'}
-        />
+        >
+          <AlertTriangle
+            className="h-5 w-5 text-destructive"
+            aria-hidden="true"
+          />
+        </span>
       )}
     </div>
   );
