@@ -18,8 +18,8 @@ export async function GET(req: Request) {
       where: eq(users.id, userId),
       with: {
         provider: {
-          columns: { bio: true } // Also fetch provider bio
-        }
+          columns: { bio: true, businessName: true, handle: true }, // Also fetch provider fields
+        },
       }
     });
 
@@ -44,7 +44,7 @@ export async function GET(req: Request) {
       // Try fetching again
       userProfile = await db.query.users.findFirst({
         where: eq(users.id, userId),
-        with: { provider: { columns: { bio: true } } }
+        with: { provider: { columns: { bio: true, businessName: true, handle: true } } },
       });
     }
 

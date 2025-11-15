@@ -5,10 +5,15 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useUser, UserProfile } from '@clerk/nextjs';
+import Image from 'next/image';
+
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { Badge } from '@/components/ui/badge';
+import { AvatarUploader } from '@/components/forms/avatar-uploader';
+
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,6 +44,15 @@ const clerkAppearance = {
 const formSchema = z.object({
   firstName: z.string().min(1, 'First name is required'),
   lastName: z.string().min(1, 'Last name is required'),
+  email: z.string().email().optional(),
+  avatarUrl: z.string().url().optional(),
+  businessName: z.string().optional(),
+  handle: z
+    .string()
+    .regex(/^[a-z0-9-]+$/, {
+      message: 'Handle must only contain lowercase letters, numbers, and hyphens.',
+    })
+    .optional(),
   bio: z.string().optional(),
 });
 
@@ -50,6 +64,8 @@ export default function ProfilePage() {
   const isProvider = user?.publicMetadata?.role === 'provider';
 
   const [isLoading, setIsLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
+
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -58,6 +74,10 @@ export default function ProfilePage() {
     defaultValues: {
       firstName: '',
       lastName: '',
+      email: '',
+      avatarUrl: '',
+      businessName: '',
+      handle: '',
       bio: '',
     },
   });
@@ -71,40 +91,100 @@ export default function ProfilePage() {
         form.reset({
           firstName: data.firstName || '',
           lastName: data.lastName || '',
+          email: data.email || user?.primaryEmailAddress?.emailAddress || '',
+          avatarUrl: data.avatarUrl || '',
+          businessName: data.provider?.businessName || '',
+          handle: data.provider?.handle || '',
           bio: data.provider?.bio || '',
         });
+        setUserRole(data.role ?? null);
         setIsLoading(false);
       })
       .catch(() => {
         setError('Failed to load profile data.');
         setIsLoading(false);
       });
-  }, [form]);
-
-  const onSubmit = async (values: FormValues) => {
+  }, [form, user]);
+  const handleAvatarUpload = async (publicUrl: string) => {
+    form.setValue('avatarUrl', publicUrl, { shouldDirty: true });
     setIsSaving(true);
     setError(null);
+
     try {
       const res = await fetch('/api/profile/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ avatarUrl: publicUrl }),
       });
-      if (!res.ok) throw new Error(await res.text());
 
-      // Refresh Clerk's user data
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      await user?.reload();
+      toast({
+        title: 'Avatar Updated',
+        description: 'Your profile picture has been updated.',
+      });
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while updating your avatar.';
+      setError(message);
+      toast({
+        variant: 'destructive',
+        title: 'Avatar update failed',
+        description: message,
+      });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+
+
+  const onSubmit = async (values: FormValues) => {
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      const payload = {
+        firstName: values.firstName,
+        lastName: values.lastName,
+        bio: values.bio ?? undefined,
+        businessName: isProvider ? values.businessName : undefined,
+        handle: isProvider ? values.handle : undefined,
+        avatarUrl: values.avatarUrl || undefined,
+      };
+
+      const res = await fetch('/api/profile/update', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
       await user?.reload();
       toast({
         title: 'Profile Updated',
         description: 'Your changes have been saved successfully.',
       });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+      const message =
+        err instanceof Error ? err.message : 'Something went wrong. Please try again.';
       setError(message);
     } finally {
       setIsSaving(false);
     }
   };
+
+  const avatarUrl = form.watch('avatarUrl');
+  const roleLabel = isProvider || userRole === 'provider' ? 'Provider' : 'Customer';
+
 
   if (isLoading) {
     return (
@@ -135,9 +215,52 @@ export default function ProfilePage() {
               <Card className="shadow-md">
                 <CardHeader>
                   <CardTitle>Your Profile</CardTitle>
-                  <CardDescription>Manage your public information.</CardDescription>
+                  <CardDescription>Manage how you appear to other users.</CardDescription>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-6">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="relative h-16 w-16 overflow-hidden rounded-full border bg-muted">
+                        {avatarUrl ? (
+                          <Image
+                            src={avatarUrl}
+                            alt="Profile avatar"
+                            fill
+                            sizes="64px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-sm font-medium text-muted-foreground">
+                            {user?.firstName?.[0]}
+                            {user?.lastName?.[0]}
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium">{user?.fullName ?? 'Your name'}</p>
+                        <p className="text-xs text-muted-foreground">
+                          This image is shown on your profile and bookings.
+                        </p>
+                      </div>
+                    </div>
+                    <AvatarUploader onUploadComplete={handleAvatarUpload} />
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Email</p>
+                      <p className="text-sm">
+                        {form.getValues('email') || user?.primaryEmailAddress?.emailAddress}
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">Account type</p>
+                      <Badge variant="outline" className="rounded-full px-2 py-0.5 text-xs">
+                        {roleLabel}
+                      </Badge>
+                    </div>
+                  </div>
+
                   <Form {...form}>
                     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -168,6 +291,43 @@ export default function ProfilePage() {
                           )}
                         />
                       </div>
+
+                      {isProvider && (
+                        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="businessName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Business Name</FormLabel>
+                                <FormDescription>
+                                  This name is shown on your public profile.
+                                </FormDescription>
+                                <FormControl>
+                                  <Input placeholder="e.g. Verial Plumbing Co." {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={form.control}
+                            name="handle"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>Handle</FormLabel>
+                                <FormDescription>
+                                  Lowercase, numbers, and hyphens only. Used in your public URL.
+                                </FormDescription>
+                                <FormControl>
+                                  <Input placeholder="e.g. verial-plumbing" {...field} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      )}
 
                       {isProvider && (
                         <FormField
