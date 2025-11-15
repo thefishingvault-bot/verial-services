@@ -7,6 +7,7 @@ import { db } from '@/lib/db';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 import { services, providers, serviceCategoryEnum } from '@/db/schema'; // Import enum
 import { eq, and, ilike, desc } from 'drizzle-orm';
+import { ServiceFilters } from '@/components/services/service-filters';
 
 // This is a Server Component.
 
@@ -134,7 +135,7 @@ export default async function BrowseServicesPage({
       <h1 className="text-3xl font-bold mb-8 capitalize">
         {title}
       </h1>
-      {/* TODO: Add search and filter controls here */}
+      <ServiceFilters />
       {renderContent()}
     </div>
   );
