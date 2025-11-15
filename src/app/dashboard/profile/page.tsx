@@ -4,21 +4,33 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useUser, UserProfile } from '@clerk/nextjs';
+import { useUser, UserProfile, useClerk } from '@clerk/nextjs';
 import Image from 'next/image';
+import { useRouter } from 'next/navigation';
 
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Badge } from '@/components/ui/badge';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { AvatarUploader } from '@/components/forms/avatar-uploader';
 
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 
 // Clerk appearance for Account & Security tab
 const clerkAppearance = {
@@ -68,6 +80,9 @@ export default function ProfilePage() {
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const { signOut } = useClerk();
+  const router = useRouter();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -81,6 +96,22 @@ export default function ProfilePage() {
       bio: '',
     },
   });
+
+  const { formState: { isDirty } } = form; // Get 'isDirty' for unsaved changes
+
+  // --- "Unsaved Changes" Warning (Item #7) ---
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isDirty) {
+        e.preventDefault();
+        e.returnValue = ''; // Required for most browsers
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isDirty]);
 
   // Fetch existing profile data
   useEffect(() => {
@@ -122,6 +153,7 @@ export default function ProfilePage() {
       }
 
       await user?.reload();
+      form.reset({ ...form.getValues(), avatarUrl: publicUrl }); // Mark form as 'pristine'
       toast({
         title: 'Avatar Updated',
         description: 'Your profile picture has been updated.',
@@ -169,6 +201,7 @@ export default function ProfilePage() {
       }
 
       await user?.reload();
+      form.reset(values); // Mark form as 'pristine'
       toast({
         title: 'Profile Updated',
         description: 'Your changes have been saved successfully.',
@@ -179,6 +212,34 @@ export default function ProfilePage() {
       setError(message);
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  // --- "Delete Account" Handler (Item #10) ---
+  const handleDeleteAccount = async () => {
+    setIsDeleting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/profile/delete', {
+        method: 'DELETE',
+      });
+
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+
+      // Success. Sign out and redirect to home.
+      await signOut();
+      router.push('/');
+
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong while deleting your account.';
+      setError(message);
+    } finally {
+      setIsDeleting(false); // This may not run if redirect is successful
     }
   };
 
@@ -377,6 +438,57 @@ export default function ProfilePage() {
                 </CardHeader>
                 <CardContent>
                   <UserProfile appearance={clerkAppearance} />
+                </CardContent>
+              </Card>
+
+              {/* --- NEW: Danger Zone --- */}
+              <Card className="border-destructive mt-6">
+                <CardHeader>
+                  <CardTitle className="text-destructive">Danger Zone</CardTitle>
+                  <CardDescription>
+                    Permanently delete your account and all associated data.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" disabled={isDeleting}>
+                        {isDeleting ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <AlertTriangle className="mr-2 h-4 w-4" />
+                        )}
+                        Delete My Account
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent>
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          This action cannot be undone. This will permanently delete your
+                          account, profile, and all your services and bookings.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={handleDeleteAccount}
+                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                        >
+                          {isDeleting ? (
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          ) : (
+                            'Yes, delete my account'
+                          )}
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                  {error && (
+                    <p className="mt-4 text-sm font-medium text-destructive">
+                      {error}
+                    </p>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
