@@ -2,6 +2,7 @@ import { db } from '@/lib/db';
 import { providers, services, reviews } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
+import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
@@ -11,6 +12,32 @@ import { formatPrice, getTrustBadge } from '@/lib/utils';
 
 // This is a Server Component
 
+// --- SEO Metadata Function ---
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ handle: string }>;
+}): Promise<Metadata> {
+  const { handle } = await params;
+
+  const provider = await db.query.providers.findFirst({
+    where: eq(providers.handle, handle),
+    columns: { businessName: true, bio: true },
+  });
+
+  if (!provider) {
+    return { title: 'Profile Not Found' };
+  }
+
+  return {
+    title: `${provider.businessName} | Verial`,
+    description:
+      provider.bio?.substring(0, 155) ||
+      `Find ${provider.businessName} on Verial, New Zealand's trusted service marketplace.`,
+  };
+}
+
+// --- Data Fetching Function ---
 async function getProviderData(handle: string) {
   const provider = await db.query.providers.findFirst({
     where: eq(providers.handle, handle),
@@ -78,7 +105,12 @@ function ProviderHeader({
         />
         <div className="flex-1">
           <h1 className="text-3xl font-bold">{provider.businessName}</h1>
-          <p className="text-lg text-muted-foreground">@{provider.handle}</p>
+          <Link
+            href={`/p/${provider.handle}`}
+            className="text-lg text-muted-foreground hover:underline"
+          >
+            @{provider.handle}
+          </Link>
           <div className="mt-4 flex flex-wrap items-center gap-4">
             {provider.isVerified && (
               <Badge variant="secondary" className="w-fit">

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useUser } from '@clerk/nextjs';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -139,8 +140,10 @@ export default function ServiceDetailPage() {
 
           <Card className="mt-6">
             <CardHeader>
-              <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
-              <CardDescription>@{service.provider.handle}</CardDescription>
+              <Link href={`/p/${service.provider.handle}`} className="hover:underline">
+                <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
+                <CardDescription>@{service.provider.handle}</CardDescription>
+              </Link>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col space-y-2">
