@@ -167,9 +167,10 @@ function ReviewCard({ review }: { review: Review }) {
 export default async function ProviderProfilePage({
   params,
 }: {
-  params: { handle: string };
+  params: Promise<{ handle: string }>;
 }) {
-  const { provider, averageRating } = await getProviderData(params.handle);
+  const { handle } = await params;
+  const { provider, averageRating } = await getProviderData(handle);
 
   return (
     <div className="container mx-auto max-w-6xl space-y-12 p-4 md:p-8">
