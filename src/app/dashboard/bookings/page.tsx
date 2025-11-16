@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Package } from 'lucide-react';
+import { ReviewForm } from '@/components/reviews/review-form';
 
 // Define a type for our joined booking data
 interface CustomerBooking {
@@ -14,7 +15,8 @@ interface CustomerBooking {
   createdAt: string;
   priceAtBooking: number;
   service: { title: string; slug: string };
-  provider: { businessName: string; handle: string; stripeConnectId: string };
+  provider: { id: string; businessName: string; handle: string; stripeConnectId: string };
+  review: { id: string } | null;
 }
 
 // Helper to format currency
@@ -139,7 +141,19 @@ export default function CustomerBookingsPage() {
                   Paid
                 </Button>
               )}
-              {/* We can add a "Leave Review" button for 'completed' status later */}
+              {booking.status === 'completed' && !booking.review && (
+                <ReviewForm
+                  bookingId={booking.id}
+                  serviceTitle={booking.service.title}
+                  providerId={booking.provider.id}
+                  onReviewSubmit={fetchBookings}
+                />
+              )}
+              {booking.status === 'completed' && booking.review && (
+                <Button variant="outline" disabled className="w-full sm:w-auto">
+                  Review Submitted
+                </Button>
+              )}
             </CardFooter>
           </Card>
         ))}
