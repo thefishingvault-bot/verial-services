@@ -134,6 +134,19 @@ export const reviews = pgTable("reviews", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Notifications Table
+ * Stores in-app notifications for users.
+ */
+export const notifications = pgTable("notifications", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., notif_...
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // The user who receives it
+  message: text("message").notNull(),
+  href: text("href").notNull(), // The link to go to (e.g., /dashboard/bookings/provider)
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 
 // --- RELATIONS ---
@@ -146,6 +159,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   }),
   bookings: many(bookings),
   reviews: many(reviews), // A user can write many reviews
+  notifications: many(notifications), // A user can have many notifications
 }));
 
 export const providersRelations = relations(providers, ({ one, many }) => ({
@@ -164,6 +178,13 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
     references: [providers.id],
   }),
   bookings: many(bookings),
+}));
+
+export const notificationsRelations = relations(notifications, ({ one }) => ({
+  user: one(users, {
+    fields: [notifications.userId],
+    references: [users.id],
+  }),
 }));
 
 export const reviewsRelations = relations(reviews, ({ one }) => ({
