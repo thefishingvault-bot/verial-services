@@ -4,6 +4,7 @@ import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { sendEmail } from "@/lib/email";
+import { createNotification } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -100,7 +101,24 @@ export async function POST(req: Request) {
         });
       }
     } catch (emailError) {
-      console.error(`[API_BOOKING_CREATE] Failed to send email:`, emailError);
+      console.error("[API_BOOKING_CREATE] Failed to send email:", emailError);
+    }
+
+    // --- 6. Create In-App Notification ---
+    try {
+      const providerUser = await db.query.users.findFirst({
+        where: eq(users.id, service.provider.userId),
+      });
+
+      if (providerUser) {
+        await createNotification({
+          userId: providerUser.id,
+          message: `New request for ${service.title}`,
+          href: "/dashboard/bookings/provider",
+        });
+      }
+    } catch (notifError) {
+      console.error("[API_BOOKING_CREATE] Failed to create notification:", notifError);
     }
 
     return NextResponse.json(newBooking);

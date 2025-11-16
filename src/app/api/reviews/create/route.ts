@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { reviews, bookings } from "@/db/schema";
+import { reviews, bookings, services } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
+import { createNotification } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -64,6 +65,23 @@ export async function POST(req: Request) {
     console.log(
       `[API_REVIEW_CREATE] User ${userId} created Review ${newReview.id} for Booking ${booking.id}`
     );
+
+    // --- 4. Notify Provider ---
+    try {
+      const service = await db.query.services.findFirst({
+        where: eq(services.id, booking.serviceId),
+        with: { provider: { columns: { handle: true } } },
+      });
+
+      await createNotification({
+        userId: booking.providerId,
+        message: `You received a ${rating}-star review on ${service?.title ?? "your service"}!`,
+        href: `/p/${service?.provider?.handle ?? ""}`,
+      });
+    } catch (notifError) {
+      console.error("[API_REVIEW_CREATE] Failed to send notification:", notifError);
+    }
+
     return NextResponse.json(newReview);
   } catch (error: unknown) {
     // Check for unique constraint violation on 'bookingId'

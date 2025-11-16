@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { sendEmail } from "@/lib/email";
+import { createNotification } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -52,16 +53,16 @@ export async function PATCH(req: Request) {
       const bookingWithUser = await db.query.bookings.findFirst({
         where: eq(bookings.id, bookingId),
         with: {
-          user: { columns: { email: true } },
+          user: { columns: { id: true, email: true } },
           service: { columns: { title: true } }
         }
       });
 
       if (bookingWithUser?.user?.email) {
-        let subject = '';
-        let html = '';
+        let subject = "";
+        let html = "";
 
-        if (newStatus === 'confirmed') {
+        if (newStatus === "confirmed") {
           subject = `Your booking for ${bookingWithUser.service.title} is confirmed!`;
           html = `
             <h1>Booking Confirmed!</h1>
@@ -69,7 +70,7 @@ export async function PATCH(req: Request) {
             <p>Please log in to your dashboard to pay and finalize the booking.</p>
             <a href="${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/bookings">Pay Now</a>
           `;
-        } else if (newStatus === 'canceled') {
+        } else if (newStatus === "canceled") {
           subject = `Your booking for ${bookingWithUser.service.title} was canceled`;
           html = `
             <h1>Booking Canceled</h1>
@@ -77,7 +78,7 @@ export async function PATCH(req: Request) {
             <p>You have not been charged. You can browse for other services.</p>
             <a href="${process.env.NEXT_PUBLIC_SITE_URL}/services">Browse Services</a>
           `;
-        } else if (newStatus === 'completed') {
+        } else if (newStatus === "completed") {
           subject = `Your booking for ${bookingWithUser.service.title} is complete!`;
           html = `
             <h1>Job Complete!</h1>
@@ -90,13 +91,23 @@ export async function PATCH(req: Request) {
         if (subject) {
           await sendEmail({
             to: bookingWithUser.user.email,
-            subject: subject,
-            html: html,
+            subject,
+            html,
+          });
+
+          // --- Create In-App Notification ---
+          await createNotification({
+            userId: bookingWithUser.user.id,
+            message: subject,
+            href:
+              newStatus === "confirmed" || newStatus === "completed"
+                ? "/dashboard/bookings"
+                : "/services",
           });
         }
       }
     } catch (emailError) {
-      console.error(`[API_BOOKING_UPDATE] Failed to send email:`, emailError);
+      console.error("[API_BOOKING_UPDATE] Failed to send email:", emailError);
     }
 
     return NextResponse.json(updatedBooking);
