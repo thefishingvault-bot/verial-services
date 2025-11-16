@@ -23,6 +23,9 @@ export async function GET(req: Request) {
         provider: {
           columns: { businessName: true, handle: true, stripeConnectId: true },
         },
+        review: {
+          columns: { id: true }, // Just need to know if it exists
+        },
       },
       orderBy: [desc(bookings.createdAt)],
     });
