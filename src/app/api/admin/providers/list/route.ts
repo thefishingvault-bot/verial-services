@@ -13,7 +13,7 @@ const isAdmin = async (userId: string): Promise<boolean> => {
   return user.publicMetadata.role === 'admin';
 };
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const { userId } = await auth();
     if (!userId || !(await isAdmin(userId))) {

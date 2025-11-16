@@ -1,6 +1,6 @@
 'use client';
 
-import { loadStripe, Stripe } from '@stripe/stripe-js';
+import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 
 // Load Stripe promise outside of component

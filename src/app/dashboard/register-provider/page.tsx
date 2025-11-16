@@ -65,8 +65,9 @@ export default function RegisterProviderPage() {
 
       // Registration successful! Redirect to the payouts dashboard.
       router.push('/dashboard/payouts');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to register.';
+      setError(message);
       setIsLoading(false);
     }
   };

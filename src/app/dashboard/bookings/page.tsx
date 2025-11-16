@@ -70,7 +70,11 @@ export default function CustomerBookingsPage() {
   }, []);
 
   useEffect(() => {
-    fetchBookings();
+    const timeoutId = setTimeout(() => {
+      fetchBookings();
+    }, 0);
+
+    return () => clearTimeout(timeoutId);
   }, [fetchBookings]);
 
   const handlePayNow = (booking: CustomerBooking) => {

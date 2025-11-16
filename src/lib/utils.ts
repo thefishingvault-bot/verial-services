@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { Gem, Award, Shield, type LucideIcon } from 'lucide-react';
+import { Gem, Award, Shield } from 'lucide-react';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))

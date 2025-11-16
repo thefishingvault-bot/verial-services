@@ -63,8 +63,9 @@ export default function AdminVerificationsPage() {
       if (!res.ok) throw new Error(await res.text());
 
       fetchProviders(); // Refresh the list
-    } catch (err: any) {
-      setError(`Failed to update ${providerId}: ${err.message}`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Unknown error';
+      setError(`Failed to update ${providerId}: ${message}`);
     } finally {
       setActionLoading(null);
     }

@@ -47,8 +47,9 @@ export default function PayoutsPage() {
 
       const { url } = await res.json();
       window.location.href = url; // Redirect user to Stripe
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create onboarding link.';
+      setError(message);
       setIsRedirecting(false);
     }
   };

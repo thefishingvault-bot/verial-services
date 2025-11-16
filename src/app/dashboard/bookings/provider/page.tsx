@@ -86,8 +86,9 @@ export default function ProviderBookingsPage() {
       }
 
       fetchBookings(); // Refresh the entire list
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to update booking.';
+      setError(message);
     } finally {
       setActionLoading(null); // Clear loading state
     }

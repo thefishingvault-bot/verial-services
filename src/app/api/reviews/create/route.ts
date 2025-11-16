@@ -65,10 +65,13 @@ export async function POST(req: Request) {
       `[API_REVIEW_CREATE] User ${userId} created Review ${newReview.id} for Booking ${booking.id}`
     );
     return NextResponse.json(newReview);
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Check for unique constraint violation on 'bookingId'
-    if (error.code === "23505" && error.constraint?.includes("reviews_booking_id_unique")) {
-      return new NextResponse("A review already exists for this booking.", { status: 409 });
+    if (typeof error === 'object' && error !== null) {
+      const pgError = error as { code?: string; constraint?: string };
+      if (pgError.code === "23505" && pgError.constraint?.includes("reviews_booking_id_unique")) {
+        return new NextResponse("A review already exists for this booking.", { status: 409 });
+      }
     }
     console.error("[API_REVIEW_CREATE]", error);
     return new NextResponse("Internal Server Error", { status: 500 });

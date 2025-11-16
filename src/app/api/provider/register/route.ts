@@ -78,12 +78,15 @@ export async function POST(req: Request) {
     console.log(`[API_PROVIDER_REGISTER] User ${userId} successfully registered as Provider ${newProvider.id}`);
     return NextResponse.json(newProvider);
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     // Check for unique constraint violation on 'handle'
-    if (error.code === '23505' && error.constraint?.includes('handle')) {
-      const handleMatch = error.detail?.match(/\((.*?)\)/);
-      const handleValue = handleMatch ? handleMatch[1] : 'this handle';
-      return new NextResponse(`Handle '${handleValue}' is already taken.`, { status: 409 });
+    if (typeof error === 'object' && error !== null) {
+      const pgError = error as { code?: string; constraint?: string; detail?: string };
+      if (pgError.code === '23505' && pgError.constraint?.includes('handle')) {
+        const handleMatch = pgError.detail?.match(/\((.*?)\)/);
+        const handleValue = handleMatch ? handleMatch[1] : 'this handle';
+        return new NextResponse(`Handle '${handleValue}' is already taken.`, { status: 409 });
+      }
     }
     console.error("[API_PROVIDER_REGISTER]", error);
     return new NextResponse("Internal Server Error", { status: 500 });

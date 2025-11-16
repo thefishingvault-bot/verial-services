@@ -103,8 +103,9 @@ export default function NewServicePage() {
       setServiceId(newService.id); // <-- This triggers the UI to show the uploader
       setIsLoading(false);
 
-    } catch (err: any) {
-      setApiError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to create service.';
+      setApiError(message);
       setIsLoading(false);
     }
   };

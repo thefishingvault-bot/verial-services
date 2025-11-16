@@ -100,9 +100,10 @@ export function ImageUploader({ serviceId, onUploadComplete }: ImageUploaderProp
       setMessage('Upload complete!');
       onUploadComplete(publicUrl);
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus('error');
-      setMessage(err.message || 'An unknown error occurred.');
+      const message = err instanceof Error ? err.message : 'An unknown error occurred.';
+      setMessage(message);
     }
   };
 

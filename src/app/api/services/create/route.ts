@@ -1,8 +1,7 @@
 import { db } from "@/lib/db";
-import { services, serviceCategoryEnum, providers } from "@/db/schema";
+import { services, serviceCategoryEnum } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 

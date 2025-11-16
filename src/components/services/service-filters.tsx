@@ -55,7 +55,7 @@ export function ServiceFilters() {
           placeholder="Search by title..."
           className="pl-10"
           defaultValue={currentQuery}
-          onChange={(e) => {
+          onChange={() => {
             // Basic debounce could be added here, but for MVP we use onBlur
           }}
           onBlur={(e) => handleFilterChange('q', e.target.value)}

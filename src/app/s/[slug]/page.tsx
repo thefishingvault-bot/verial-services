@@ -31,7 +31,7 @@ export default function ServiceDetailPage() {
   const params = useParams();
   const slug = params.slug as string;
   const router = useRouter();
-  const { user, isSignedIn } = useUser();
+  const { isSignedIn } = useUser();
 
   const [service, setService] = useState<ServiceDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -81,8 +81,9 @@ export default function ServiceDetailPage() {
       const newBooking = await res.json();
       alert(`Booking request sent! Your booking ID is ${newBooking.id}.`);
       router.push('/dashboard/bookings');
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Something went wrong while creating your booking.';
+      setError(message);
       setIsBooking(false);
     }
   };
@@ -131,7 +132,7 @@ export default function ServiceDetailPage() {
             </CardContent>
             <CardFooter>
               <p className="text-xs text-gray-500">
-                You won't be charged until the provider accepts your request.
+                You won&apos;t be charged until the provider accepts your request.
               </p>
             </CardFooter>
           </Card>

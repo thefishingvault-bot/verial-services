@@ -74,7 +74,7 @@ function HomeContent() {
               <CardContent className="flex flex-col items-center text-center p-8">
                 <CheckCircle className="h-12 w-12 text-primary mb-4" />
                 <h3 className="text-xl font-semibold text-verial-dark mb-2">2. We Verify</h3>
-                <p className="text-verial-muted">We verify every provider's identity and track their reputation.</p>
+                <p className="text-verial-muted">We verify every provider&apos;s identity and track their reputation.</p>
               </CardContent>
             </Card>
 
@@ -123,7 +123,7 @@ function HomeContent() {
             Ready to grow your business?
           </h2>
           <p className="text-lg text-verial-blue-100 mb-8 max-w-xl">
-            Join New Zealand's trusted marketplace. List your services, manage bookings, and get paid, all in one place.
+            Join New Zealand&apos;s trusted marketplace. List your services, manage bookings, and get paid, all in one place.
           </p>
           <Link
             href="/dashboard/register-provider"

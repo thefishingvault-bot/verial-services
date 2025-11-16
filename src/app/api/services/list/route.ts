@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 export const runtime = "nodejs";
 
 // This is a public route, no auth needed.
-export async function GET(req: Request) {
+export async function GET() {
   try {
     // Fetch all services and join with their provider's details
     const allServices = await db.query.services.findMany({

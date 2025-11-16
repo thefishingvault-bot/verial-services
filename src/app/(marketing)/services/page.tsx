@@ -11,6 +11,10 @@ import { ServiceFilters } from '@/components/services/service-filters';
 
 // This is a Server Component.
 
+
+// Valid service category type
+type ServiceCategory = (typeof serviceCategoryEnum.enumValues)[number];
+
 // Data fetching function
 async function getServices({ query, category }: { query?: string, category?: string }) {
 
@@ -21,8 +25,8 @@ async function getServices({ query, category }: { query?: string, category?: str
   ];
 
   // Add category filter if valid
-  if (category && serviceCategoryEnum.enumValues.includes(category as any)) {
-    conditions.push(eq(services.category, category as any));
+  if (category && serviceCategoryEnum.enumValues.includes(category as ServiceCategory)) {
+    conditions.push(eq(services.category, category as ServiceCategory));
   }
 
   const allServices = await db.select({

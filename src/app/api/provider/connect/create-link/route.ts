@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 // Get the base site URL from environment variables
 const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
 
-export async function POST(req: Request) {
+export async function POST() {
   try {
     const { userId } = await auth();
     if (!userId) {
