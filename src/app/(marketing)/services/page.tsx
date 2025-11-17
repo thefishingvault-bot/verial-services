@@ -6,7 +6,7 @@ import { Package, CheckCircle } from 'lucide-react';
 import { db } from '@/lib/db';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 import { services, providers, serviceCategoryEnum } from '@/db/schema'; // Import enum
-import { eq, and, ilike, desc } from 'drizzle-orm';
+import { eq, and, ilike, desc, or } from 'drizzle-orm';
 import { ServiceFilters } from '@/components/services/service-filters';
 
 // This is a Server Component.
@@ -20,14 +20,18 @@ async function getServices({ query, category }: { query?: string, category?: str
 
   // Build the 'where' clause dynamically
   const conditions = [
-    eq(providers.status, 'approved'),
-    query ? ilike(services.title, `%${query}%`) : undefined,
+    eq(providers.status, 'approved'), // Provider must be approved
+    (category && serviceCategoryEnum.enumValues.includes(category as ServiceCategory))
+      ? eq(services.category, category as ServiceCategory) // Category must match
+      : undefined,
+    query
+      ? or(
+          ilike(services.title, `%${query}%`),
+          ilike(services.description, `%${query}%`),
+          ilike(providers.businessName, `%${query}%`),
+        ) // Search query must match one of these fields
+      : undefined,
   ];
-
-  // Add category filter if valid
-  if (category && serviceCategoryEnum.enumValues.includes(category as ServiceCategory)) {
-    conditions.push(eq(services.category, category as ServiceCategory));
-  }
 
   const allServices = await db.select({
     id: services.id,
