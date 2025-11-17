@@ -6,6 +6,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Button } from "@/components/ui/button";
 import { Bell, Package } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
+import { formatDistanceToNow } from "date-fns";
 
 interface Notification {
   id: string;
@@ -113,7 +114,7 @@ export function NotificationBell() {
               >
                 <p className="text-sm font-medium">{notif.message}</p>
                 <p className="text-xs text-muted-foreground">
-                  {new Date(notif.createdAt).toLocaleDateString()}
+                  {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>
               </Link>
             ))}
