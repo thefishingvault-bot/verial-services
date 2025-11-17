@@ -6,6 +6,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth, UserButton } from '@clerk/nextjs'; // Import auth hooks
+import { NotificationBell } from '@/components/nav/notification-bell';
 
 // --- Guest Links (Signed Out) ---
 const guestLinks = [
@@ -46,7 +47,10 @@ export function SiteHeader() {
           ))}
 
           {isSignedIn ? (
-            <UserButton afterSignOutUrl="/" />
+            <div className="flex items-center space-x-2">
+              <NotificationBell />
+              <UserButton afterSignOutUrl="/" />
+            </div>
           ) : (
             <Link
               href="/sign-up"
@@ -79,9 +83,15 @@ export function SiteHeader() {
               ))}
 
               {isSignedIn ? (
-                 <div className="pt-4 border-t">
-                   <UserButton afterSignOutUrl="/" showName />
-                 </div>
+                <>
+                  <div className="flex items-center justify-between border-t pt-4">
+                    <span className="text-sm font-medium">Account</span>
+                    <NotificationBell />
+                  </div>
+                  <div className="pt-4">
+                    <UserButton afterSignOutUrl="/" showName />
+                  </div>
+                </>
               ) : (
                 <Link
                   href="/sign-up"
