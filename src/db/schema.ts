@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, pgEnum, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, boolean, pgEnum, integer, time } from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
 export const userRoleEnum = pgEnum("user_role", ["user", "provider", "admin"]);
@@ -147,6 +147,46 @@ export const notifications = pgTable("notifications", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// --- NEW ENUMS ---
+export const dayOfWeekEnum = pgEnum("day_of_week", [
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
+]);
+
+// --- NEW TABLES ---
+
+/**
+ * Provider Availabilities
+ * Stores the recurring weekly working hours for a provider.
+ */
+export const providerAvailabilities = pgTable("provider_availabilities", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., pavail_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+
+  dayOfWeek: dayOfWeekEnum("day_of_week").notNull(), // e.g., 'monday'
+  startTime: time("start_time").notNull(), // e.g., '09:00:00'
+  endTime: time("end_time").notNull(), // e.g., '17:00:00'
+  isEnabled: boolean("is_enabled").default(true).notNull(),
+});
+
+/**
+ * Provider Time Offs
+ * Stores specific date/time ranges when a provider is unavailable.
+ */
+export const providerTimeOffs = pgTable("provider_time_offs", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., ptoff_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+
+  reason: text("reason"), // e.g., "Holiday", "Doctor's Appointment"
+  startTime: timestamp("start_time", { withTimezone: true }).notNull(), // Full start timestamp
+  endTime: timestamp("end_time", { withTimezone: true }).notNull(), // Full end timestamp
+});
+
 
 
 // --- RELATIONS ---
@@ -170,6 +210,8 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   services: many(services),
   bookings: many(bookings),
   reviews: many(reviews), // A provider can have many reviews
+  availabilities: many(providerAvailabilities),
+  timeOffs: many(providerTimeOffs),
 }));
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
@@ -178,6 +220,20 @@ export const servicesRelations = relations(services, ({ one, many }) => ({
     references: [providers.id],
   }),
   bookings: many(bookings),
+}));
+
+export const providerAvailabilitiesRelations = relations(providerAvailabilities, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerAvailabilities.providerId],
+    references: [providers.id],
+  }),
+}));
+
+export const providerTimeOffsRelations = relations(providerTimeOffs, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerTimeOffs.providerId],
+    references: [providers.id],
+  }),
 }));
 
 export const notificationsRelations = relations(notifications, ({ one }) => ({
