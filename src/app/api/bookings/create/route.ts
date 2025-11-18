@@ -1,8 +1,9 @@
 import { db } from "@/lib/db";
-import { bookings, services, providers, users } from "@/db/schema";
+import { bookings, services, providers, users, providerAvailabilities, providerTimeOffs } from "@/db/schema";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { eq, and, lte, gte } from "drizzle-orm";
+import { getDay } from "date-fns"; // Helper to get day of week
 import { sendEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 
@@ -64,14 +65,70 @@ export async function POST(req: Request) {
 
     // 3. Check that a user is not booking their own service
     const userProvider = await db.query.providers.findFirst({
-      where: eq(providers.userId, userId)
+      where: eq(providers.userId, userId),
     });
 
     if (userProvider && service.providerId === userProvider.id) {
       return new NextResponse("You cannot book your own service", { status: 400 });
     }
 
-    // 4. Create the booking
+    // --- 4. NEW: Check Provider Availability ---
+    if (scheduledDate) {
+      const requestedTime = new Date(scheduledDate);
+
+      const dayOfWeekIndex = [
+        "sunday",
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+      ] as const;
+
+      const requestedDay = dayOfWeekIndex[getDay(requestedTime)]; // e.g., "monday"
+
+      const providerSchedule = await db.query.providerAvailabilities.findFirst({
+        where: and(
+          eq(providerAvailabilities.providerId, service.providerId),
+          eq(providerAvailabilities.dayOfWeek, requestedDay),
+          eq(providerAvailabilities.isEnabled, true),
+        ),
+      });
+
+      if (!providerSchedule) {
+        return new NextResponse(`Provider is not available on ${requestedDay}s.`, { status: 400 });
+      }
+
+      const requestedTimeStr = requestedTime.toTimeString().substring(0, 5); // "HH:mm"
+      const startTimeStr = providerSchedule.startTime.toString().substring(0, 5);
+      const endTimeStr = providerSchedule.endTime.toString().substring(0, 5);
+
+      if (requestedTimeStr < startTimeStr || requestedTimeStr > endTimeStr) {
+        return new NextResponse(
+          `Provider is only available between ${startTimeStr} and ${endTimeStr} on ${requestedDay}s.`,
+          { status: 400 },
+        );
+      }
+
+      const timeOff = await db.query.providerTimeOffs.findFirst({
+        where: and(
+          eq(providerTimeOffs.providerId, service.providerId),
+          lte(providerTimeOffs.startTime, requestedTime),
+          gte(providerTimeOffs.endTime, requestedTime),
+        ),
+      });
+
+      if (timeOff) {
+        return new NextResponse(
+          `Provider is unavailable on this date for: ${timeOff.reason || "Time Off"}.`,
+          { status: 400 },
+        );
+      }
+    }
+    // --- End Availability Check ---
+
+    // 5. Create the booking
     const [newBooking] = await db.insert(bookings).values({
       id: generateBookingId(),
       userId: userId,
