@@ -23,7 +23,7 @@ export function BottomNavigation() {
   const navLinks = isProvider
     ? [ // --- PROVIDER LINKS ---
         { href: '/dashboard/bookings/provider', label: 'Bookings', icon: Briefcase },
-        { href: '/dashboard/services/new', label: 'New Service', icon: Package },
+        { href: '/dashboard/services', label: 'Services', icon: Package },
         { href: '/dashboard/payouts', label: 'Payouts', icon: CreditCard },
       ]
     : [ // --- CUSTOMER LINKS ---
