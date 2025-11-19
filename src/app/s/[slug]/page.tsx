@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Loader2 } from 'lucide-react';
+import { CheckCircle, Loader2, Mail } from 'lucide-react';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
@@ -28,6 +28,9 @@ interface ServiceDetails {
     isVerified: boolean;
     trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
     bio: string;
+    user: {
+      email: string;
+    };
   };
 }
 
@@ -186,6 +189,16 @@ export default function ServiceDetailPage() {
               <p className="text-sm text-gray-600 mt-4">
                 {service.provider.bio || 'No bio provided.'}
               </p>
+              <div className="mt-4">
+                <Button asChild variant="outline" size="sm">
+                  <a
+                    href={`mailto:${service.provider.user.email}?subject=Inquiry about ${encodeURIComponent(service.title)}`}
+                  >
+                    <Mail className="mr-2 h-4 w-4" />
+                    Contact Provider
+                  </a>
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -202,15 +215,17 @@ export default function ServiceDetailPage() {
               <div className="space-y-4">
                 <div>
                   <Label className="mb-2 block">Select a date</Label>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    disabled={(date) =>
-                      date < new Date(new Date().setHours(0, 0, 0, 0))
-                    }
-                    className="rounded-md border"
-                  />
+                  <div className="flex justify-center">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) =>
+                        date < new Date(new Date().setHours(0, 0, 0, 0))
+                      }
+                      className="rounded-md border max-w-full [&_td]:w-8 [&_th]:w-8"
+                    />
+                  </div>
                 </div>
 
                 <div>

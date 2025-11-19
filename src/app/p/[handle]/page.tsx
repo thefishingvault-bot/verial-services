@@ -7,7 +7,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Star } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { CheckCircle, Star, Mail } from 'lucide-react';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 
 // This is a Server Component
@@ -46,6 +47,7 @@ async function getProviderData(handle: string) {
         columns: {
           avatarUrl: true,
           createdAt: true,
+          email: true,
         },
       },
       services: {
@@ -138,6 +140,16 @@ function ProviderHeader({
         <p className="whitespace-pre-wrap text-gray-700">
           {provider.bio || 'No bio provided yet.'}
         </p>
+        <div className="mt-4">
+          <Button asChild variant="outline">
+            <a
+              href={`mailto:${provider.user.email}?subject=Inquiry about ${encodeURIComponent(provider.businessName)}`}
+            >
+              <Mail className="mr-2 h-4 w-4" />
+              Contact Provider
+            </a>
+          </Button>
+        </div>
       </CardContent>
     </Card>
   );

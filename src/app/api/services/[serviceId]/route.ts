@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 
 export async function DELETE(
   req: Request,
-  { params }: { params: { serviceId: string } },
+  { params }: { params: Promise<{ serviceId: string }> },
 ) {
   try {
     const { userId } = await auth();
@@ -16,7 +16,7 @@ export async function DELETE(
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serviceId } = params;
+    const { serviceId } = await params;
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
