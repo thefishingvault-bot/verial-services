@@ -122,11 +122,11 @@ export default async function BrowseServicesPage({
                 <div className="text-sm text-muted-foreground">
                   <p className="truncate">{service.provider.businessName}</p>
                   <div className="flex items-center">
-                    {(() => {
+                    {service.provider.trustLevel && (() => {
                       const { Icon } = getTrustBadge(service.provider.trustLevel);
                       return <Icon className="h-4 w-4 mr-1" />;
                     })()}
-                    <span className="capitalize">{service.provider.trustLevel}</span>
+                    {service.provider.trustLevel && <span className="capitalize">{service.provider.trustLevel}</span>}
                     {service.provider.isVerified && <CheckCircle className="h-4 w-4 ml-2 text-green-500" />}
                   </div>
                 </div>
