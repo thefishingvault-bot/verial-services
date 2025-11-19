@@ -81,6 +81,27 @@ export default function CustomerBookingsPage() {
     router.push(`/checkout/${booking.id}`);
   };
 
+  const handleCancel = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to cancel this booking request?')) return;
+
+    setIsLoading(true);
+    try {
+      const res = await fetch('/api/bookings/cancel', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      // Refresh list
+      fetchBookings();
+    } catch (err: any) {
+      setError(err.message);
+      setIsLoading(false);
+    }
+  };
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -134,7 +155,16 @@ export default function CustomerBookingsPage() {
                 <p className="font-semibold">{formatPrice(booking.priceAtBooking)}</p>
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex gap-2">
+              {booking.status === 'pending' && (
+                <Button
+                  variant="destructive"
+                  onClick={() => handleCancel(booking.id)}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel Request
+                </Button>
+              )}
               {booking.status === 'confirmed' && (
                 <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
                   Pay Now

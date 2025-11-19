@@ -2,57 +2,64 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Package, CheckCircle } from 'lucide-react';
+import { Package, CheckCircle, Star } from 'lucide-react';
 import { db } from '@/lib/db';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
-import { services, providers, serviceCategoryEnum } from '@/db/schema'; // Import enum
-import { eq, and, ilike, desc, or } from 'drizzle-orm';
+import { services, serviceCategoryEnum, providers } from '@/db/schema';
+import { desc, eq, and, ilike, or } from 'drizzle-orm';
 import { ServiceFilters } from '@/components/services/service-filters';
 
 // This is a Server Component.
 
 
-// Valid service category type
-type ServiceCategory = (typeof serviceCategoryEnum.enumValues)[number];
-
 // Data fetching function
-async function getServices({ query, category }: { query?: string, category?: string }) {
+async function getServices({ query, category }: { query?: string; category?: string }) {
+  const isValidCategory = category
+    ? (serviceCategoryEnum.enumValues as readonly string[]).includes(category)
+    : false;
 
-  // Build the 'where' clause dynamically
   const conditions = [
-    eq(providers.status, 'approved'), // Provider must be approved
-    (category && serviceCategoryEnum.enumValues.includes(category as ServiceCategory))
-      ? eq(services.category, category as ServiceCategory) // Category must match
-      : undefined,
+    eq(providers.status, 'approved'), // Always filter for approved providers
+
+    // Category Filter
+    isValidCategory ? eq(services.category, category as any) : undefined,
+
+    // Search Filter (Full-Text: Title OR Description OR Business Name)
     query
       ? or(
           ilike(services.title, `%${query}%`),
           ilike(services.description, `%${query}%`),
           ilike(providers.businessName, `%${query}%`),
-        ) // Search query must match one of these fields
+        )
       : undefined,
   ];
 
-  const allServices = await db.select({
-    id: services.id,
-    title: services.title,
-    slug: services.slug,
-    priceInCents: services.priceInCents,
-    category: services.category,
-    coverImageUrl: services.coverImageUrl,
-    provider: {
-      handle: providers.handle,
-      businessName: providers.businessName,
-      isVerified: providers.isVerified,
-      trustLevel: providers.trustLevel,
-    }
-  })
-  .from(services)
-  .innerJoin(providers, eq(services.providerId, providers.id)) // Use innerJoin to ensure provider is not null
-  .where(and(...conditions.filter(Boolean))) // Filter out undefined
-  .orderBy(desc(services.createdAt));
+  const rows = await db
+    .select({
+      service: services,
+      provider: providers,
+    })
+    .from(services)
+    .leftJoin(providers, eq(services.providerId, providers.id))
+    .where(and(...(conditions.filter(Boolean) as any[])))
+    .orderBy(desc(services.createdAt));
 
-  return allServices;
+  const processed = rows.map(({ service, provider }) => {
+    const ratings = (provider?.reviews ?? []).map((r) => r.rating).filter((r) => typeof r === 'number');
+    const avgRating =
+      ratings.length > 0
+        ? ratings.reduce((a, b) => a + b, 0) / ratings.length
+        : 0;
+
+    return {
+      ...service,
+      provider,
+      avgRating,
+      reviewCount: ratings.length,
+    };
+  });
+
+  return processed;
 }
 
 export default async function BrowseServicesPage({
@@ -115,19 +122,29 @@ export default async function BrowseServicesPage({
               </CardHeader>
               <CardContent className="p-4 flex-grow">
                 <Badge variant="outline" className="mb-2 capitalize">{service.category}</Badge>
-                <h3 className="font-semibold text-lg">{service.title}</h3>
+                <h3 className="font-semibold text-lg line-clamp-1" title={service.title}>{service.title}</h3>
               </CardContent>
-              <CardFooter className="p-4 pt-0 flex flex-col items-start">
-                <p className="font-bold text-xl mb-2">{formatPrice(service.priceInCents)}</p>
-                <div className="text-sm text-muted-foreground">
-                  <p className="truncate">{service.provider.businessName}</p>
+              <CardFooter className="p-4 pt-0 flex flex-col items-start gap-2">
+                <div className="flex items-center w-full justify-between">
+                  <p className="font-bold text-xl">{formatPrice(service.priceInCents)}</p>
+                  {service.reviewCount > 0 && (
+                    <div className="flex items-center gap-1 text-sm font-medium">
+                      <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                      <span>{service.avgRating.toFixed(1)}</span>
+                      <span className="text-muted-foreground">({service.reviewCount})</span>
+                    </div>
+                  )}
+                </div>
+                <div className="text-sm text-muted-foreground w-full flex justify-between items-center">
+                  <span className="truncate max-w-[120px]">{service.provider.businessName}</span>
                   <div className="flex items-center">
                     {(() => {
                       const { Icon } = getTrustBadge(service.provider.trustLevel);
                       return <Icon className="h-4 w-4 mr-1" />;
                     })()}
-                    <span className="capitalize">{service.provider.trustLevel}</span>
-                    {service.provider.isVerified && <CheckCircle className="h-4 w-4 ml-2 text-green-500" />}
+                    {service.provider.isVerified && (
+                      <CheckCircle className="h-3 w-3 ml-1 text-green-500" />
+                    )}
                   </div>
                 </div>
               </CardFooter>

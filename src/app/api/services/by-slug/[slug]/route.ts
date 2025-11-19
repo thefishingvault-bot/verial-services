@@ -26,6 +26,13 @@ export async function GET(
             trustLevel: true,
             bio: true,
           },
+          with: {
+            user: {
+              columns: {
+                email: true,
+              },
+            },
+          },
         },
       },
     });

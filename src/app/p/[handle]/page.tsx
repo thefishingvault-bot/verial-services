@@ -7,6 +7,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { CheckCircle, Star } from 'lucide-react';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
 
@@ -46,6 +47,7 @@ async function getProviderData(handle: string) {
         columns: {
           avatarUrl: true,
           createdAt: true,
+          email: true,
         },
       },
       services: {
@@ -130,6 +132,18 @@ function ProviderHeader({
               <span>({provider.reviews.length} reviews)</span>
             </div>
             <span className="text-muted-foreground">Member since {memberSinceYear}</span>
+          </div>
+          <div className="mt-4">
+            <Button
+              variant="outline"
+              onClick={() =>
+                (window.location.href = `mailto:${provider.user.email}?subject=${encodeURIComponent(
+                  `Enquiry for ${provider.businessName}`,
+                )}`)
+              }
+            >
+              Contact Provider
+            </Button>
           </div>
         </div>
       </CardHeader>

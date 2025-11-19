@@ -28,6 +28,9 @@ interface ServiceDetails {
     isVerified: boolean;
     trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
     bio: string;
+    user: {
+      email: string;
+    };
   };
 }
 
@@ -200,17 +203,46 @@ export default function ServiceDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="mb-3 w-full"
+                  onClick={() =>
+                    (window.location.href = `mailto:${service.provider.user.email}?subject=${encodeURIComponent(
+                      `Enquiry about ${service.title}`,
+                    )}`)
+                  }
+                >
+                  Contact Provider
+                </Button>
                 <div>
                   <Label className="mb-2 block">Select a date</Label>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    disabled={(date) =>
-                      date < new Date(new Date().setHours(0, 0, 0, 0))
-                    }
-                    className="rounded-md border"
-                  />
+                  <div className="flex justify-center w-full overflow-hidden">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) =>
+                        date < new Date(new Date().setHours(0, 0, 0, 0))
+                      }
+                      className="rounded-md border w-full max-w-[280px] flex justify-center"
+                      classNames={{
+                        head_cell:
+                          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
+                        cell:
+                          "h-8 w-8 text-center text-sm p-0 relative [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
+                        day: "h-8 w-8 p-0 font-normal aria-selected:opacity-100 hover:bg-accent hover:text-accent-foreground rounded-md",
+                        day_selected:
+                          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+                        day_today: "bg-accent text-accent-foreground",
+                        day_outside: "text-muted-foreground opacity-50",
+                        day_disabled: "text-muted-foreground opacity-50",
+                        day_range_middle:
+                          "aria-selected:bg-accent aria-selected:text-accent-foreground",
+                        day_hidden: "invisible",
+                      }}
+                    />
+                  </div>
                 </div>
 
                 <div>
