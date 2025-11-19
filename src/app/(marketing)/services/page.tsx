@@ -9,13 +9,22 @@ import { services, providers, reviews, serviceCategoryEnum } from '@/db/schema';
 import { eq, and, ilike, desc, or, inArray } from 'drizzle-orm';
 import { ServiceFilters } from '@/components/services/service-filters';
 
-// Helper type for our result
-type ServiceWithProvider = typeof services.$inferSelect & {
+// Helper type for our result (aligned to the selected fields below)
+type ServiceWithProvider = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  priceInCents: number;
+  category: (typeof serviceCategoryEnum.enumValues)[number];
+  coverImageUrl: string | null;
+  createdAt: Date;
   provider: {
-    handle: string;
-    businessName: string;
+    id: string;
+    handle: string | null;
+    businessName: string | null;
     isVerified: boolean;
-    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
+    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum' | null;
   };
   avgRating: number;
   reviewCount: number;
@@ -94,22 +103,30 @@ async function getServices({ query, category }: { query?: string; category?: str
   }
 
   // 4. Merge and Format
-  return serviceResults.map((s) => {
+  return serviceResults.map<ServiceWithProvider>((s) => {
     const key = String(s.providerId);
     const stats = reviewMap[key] || { total: 0, count: 0 };
     const avgRating = stats.count > 0 ? stats.total / stats.count : 0;
 
     return {
-      ...s,
+      id: s.id,
+      title: s.title,
+      slug: s.slug,
+      description: s.description,
+      priceInCents: s.priceInCents,
+      category: s.category as ServiceWithProvider['category'],
+      coverImageUrl: s.coverImageUrl,
+      createdAt: s.createdAt,
       provider: {
+        id: s.providerId!,
         handle: s.providerHandle,
         businessName: s.providerName,
-        isVerified: s.providerVerified,
-        trustLevel: s.providerTrust,
+        isVerified: s.providerVerified ?? false,
+        trustLevel: (s.providerTrust ?? 'bronze') as ServiceWithProvider['provider']['trustLevel'],
       },
       avgRating,
       reviewCount: stats.count,
-    } as ServiceWithProvider;
+    };
   });
 }
 
@@ -185,7 +202,9 @@ export default async function BrowseServicesPage({
                     <span className="truncate max-w-[120px]">{service.provider.businessName}</span>
                     <div className="flex items-center">
                       {(() => {
-                        const { Icon } = getTrustBadge(service.provider.trustLevel);
+                        const { Icon } = getTrustBadge(
+                          (service.provider.trustLevel ?? 'bronze') as 'bronze' | 'silver' | 'gold' | 'platinum',
+                        );
                         return <Icon className="h-4 w-4 mr-1" />;
                       })()}
                     </div>
