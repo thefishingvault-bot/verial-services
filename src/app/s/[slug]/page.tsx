@@ -215,15 +215,17 @@ export default function ServiceDetailPage() {
               <div className="space-y-4">
                 <div>
                   <Label className="mb-2 block">Select a date</Label>
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    disabled={(date) =>
-                      date < new Date(new Date().setHours(0, 0, 0, 0))
-                    }
-                    className="rounded-md border"
-                  />
+                  <div className="flex justify-center">
+                    <Calendar
+                      mode="single"
+                      selected={selectedDate}
+                      onSelect={setSelectedDate}
+                      disabled={(date) =>
+                        date < new Date(new Date().setHours(0, 0, 0, 0))
+                      }
+                      className="rounded-md border max-w-full [&_td]:w-8 [&_th]:w-8"
+                    />
+                  </div>
                 </div>
 
                 <div>
