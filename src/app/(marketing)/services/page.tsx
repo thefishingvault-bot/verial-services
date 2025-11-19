@@ -116,9 +116,9 @@ async function getServices({ query, category }: { query?: string; category?: str
 export default async function BrowseServicesPage({
   searchParams,
 }: {
-  searchParams?: { q?: string; category?: string };
+  searchParams?: Promise<{ q?: string; category?: string }>;
 }) {
-  const resolvedParams = await Promise.resolve(searchParams);
+  const resolvedParams = await searchParams;
   const query = resolvedParams?.q?.toLowerCase();
   const category = resolvedParams?.category;
 
