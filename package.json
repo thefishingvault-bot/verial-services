@@ -2,6 +2,14 @@
   "name": "verialservices",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thefishingvault-bot/verial-services.git"
+  },
+  "homepage": "https://github.com/thefishingvault-bot/verial-services#readme",
+  "bugs": {
+    "url": "https://github.com/thefishingvault-bot/verial-services/issues"
+  },
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build --webpack",
