@@ -81,6 +81,31 @@ export default function CustomerBookingsPage() {
     router.push(`/checkout/${booking.id}`);
   };
 
+  const handleCancelBooking = async (bookingId: string) => {
+    if (!confirm('Are you sure you want to cancel this booking request?')) {
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/bookings/cancel', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId }),
+      });
+
+      if (!res.ok) {
+        const errorText = await res.text();
+        throw new Error(errorText || 'Failed to cancel booking');
+      }
+
+      // Refresh the bookings list
+      fetchBookings();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to cancel booking';
+      setError(message);
+    }
+  };
+
   const renderContent = () => {
     if (isLoading) {
       return (
@@ -134,7 +159,16 @@ export default function CustomerBookingsPage() {
                 <p className="font-semibold">{formatPrice(booking.priceAtBooking)}</p>
               </div>
             </CardContent>
-            <CardFooter>
+            <CardFooter className="flex gap-2">
+              {booking.status === 'pending' && (
+                <Button
+                  variant="destructive"
+                  onClick={() => handleCancelBooking(booking.id)}
+                  className="w-full sm:w-auto"
+                >
+                  Cancel Request
+                </Button>
+              )}
               {booking.status === 'confirmed' && (
                 <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
                   Pay Now
