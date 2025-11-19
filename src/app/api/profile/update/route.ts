@@ -32,8 +32,14 @@ export async function PATCH(req: Request) {
     if (typeof lastName === 'string') {
       clerkUpdate.lastName = lastName;
     }
+    
+    // If avatarUrl is provided, merge it with existing publicMetadata
     if (typeof avatarUrl === 'string') {
-      clerkUpdate.publicMetadata = { avatar_url: avatarUrl };
+      const user = await client.users.getUser(userId);
+      clerkUpdate.publicMetadata = {
+        ...user.publicMetadata,
+        avatar_url: avatarUrl,
+      };
     }
 
     if (Object.keys(clerkUpdate).length > 0) {
