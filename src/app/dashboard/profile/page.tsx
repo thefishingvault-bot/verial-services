@@ -213,7 +213,7 @@ export default function ProfilePage() {
                     />
                     <FormItem>
                       <FormLabel>Account Type</FormLabel>
-                      <Badge variant="outline" className="block w-fit mt-2 capitalize h-10 flex items-center px-4">
+                      <Badge variant="outline" className="w-fit mt-2 capitalize h-10 flex items-center px-4">
                         {userRole}
                       </Badge>
                     </FormItem>
