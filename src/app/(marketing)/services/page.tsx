@@ -64,6 +64,8 @@ async function getServices({ query, category }: { query?: string; category?: str
       category: services.category,
       coverImageUrl: services.coverImageUrl,
       createdAt: services.createdAt,
+      updatedAt: services.updatedAt,
+      chargesGst: services.chargesGst,
       // Provider fields
       providerId: providers.id,
       providerHandle: providers.handle,

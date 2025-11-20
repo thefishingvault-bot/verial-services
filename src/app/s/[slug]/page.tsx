@@ -217,7 +217,7 @@ export default function ServiceDetailPage() {
                 </Button>
                 <div>
                   <Label className="mb-2 block">Select a date</Label>
-                  <div className="flex justify-center w-full overflow-hidden">
+                  <div className="flex justify-center w-full">
                     <Calendar
                       mode="single"
                       selected={selectedDate}
@@ -225,7 +225,7 @@ export default function ServiceDetailPage() {
                       disabled={(date) =>
                         date < new Date(new Date().setHours(0, 0, 0, 0))
                       }
-                      className="rounded-md border w-full max-w-[280px] flex justify-center"
+                      className="rounded-md border shadow-sm"
                       classNames={{
                         head_cell:
                           "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
