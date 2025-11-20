@@ -49,6 +49,7 @@ export default function ServiceDetailPage() {
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
+  const [blockedDays, setBlockedDays] = useState<{ from: Date; to: Date }[]>([]);
 
   useEffect(() => {
     if (!slug) return;
@@ -97,6 +98,24 @@ export default function ServiceDetailPage() {
         setIsLoadingSlots(false);
       });
   }, [service, selectedDate]);
+
+  // Fetch blocked dates (time offs) for this provider
+  useEffect(() => {
+    if (!service?.providerId) return;
+
+    fetch(`/api/public/provider/time-offs?providerId=${service.providerId}`)
+      .then((res) => res.json())
+      .then((data: { startTime: string; endTime: string }[]) => {
+        const ranges = data.map((off) => ({
+          from: new Date(off.startTime),
+          to: new Date(off.endTime),
+        }));
+        setBlockedDays(ranges);
+      })
+      .catch((err) => {
+        console.error('[SERVICE_TIME_OFFS]', err);
+      });
+  }, [service?.providerId]);
 
   const handleBookNow = async () => {
     if (!selectedSlot) {
@@ -222,9 +241,10 @@ export default function ServiceDetailPage() {
                       mode="single"
                       selected={selectedDate}
                       onSelect={setSelectedDate}
-                      disabled={(date) =>
-                        date < new Date(new Date().setHours(0, 0, 0, 0))
-                      }
+                      disabled={[
+                        (date) => date < new Date(new Date().setHours(0, 0, 0, 0)),
+                        ...blockedDays,
+                      ]}
                       className="rounded-md border shadow-sm"
                       classNames={{
                         head_cell:
