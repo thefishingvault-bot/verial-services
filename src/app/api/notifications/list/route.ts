@@ -1,21 +1,23 @@
-import { NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { notifications } from '@/db/schema';
-import { and, desc, eq } from 'drizzle-orm';
+import { auth } from '@clerk/nextjs/server';
+import { NextResponse } from 'next/server';
+import { eq, and, desc } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const { userId } = auth();
-
+    const { userId } = await auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
     const userNotifications = await db.query.notifications.findMany({
-      where: and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
+      where: and(
+        eq(notifications.userId, userId),
+        eq(notifications.isRead, false),
+      ),
       orderBy: [desc(notifications.createdAt)],
       limit: 10,
     });
@@ -24,36 +26,6 @@ export async function GET() {
   } catch (error) {
     console.error('[API_NOTIFICATIONS_LIST]', error);
     return new NextResponse('Internal Server Error', { status: 500 });
-  }
-}
-import { db } from "@/lib/db";
-import { notifications } from "@/db/schema";
-import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
-import { eq, and, desc } from "drizzle-orm";
-
-export const runtime = "nodejs";
-
-export async function GET() {
-  try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-
-    const userNotifications = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.userId, userId),
-        eq(notifications.isRead, false)
-      ),
-      orderBy: [desc(notifications.createdAt)],
-      limit: 10, // Only get the 10 most recent
-    });
-
-    return NextResponse.json(userNotifications);
-  } catch (error) {
-    console.error("[API_NOTIFICATIONS_LIST]", error);
-    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }
 
