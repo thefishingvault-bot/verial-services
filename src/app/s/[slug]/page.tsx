@@ -223,7 +223,7 @@ export default function ServiceDetailPage() {
                       disabled={(date) =>
                         date < new Date(new Date().setHours(0, 0, 0, 0))
                       }
-                      className="rounded-md border max-w-full [&_td]:w-8 [&_th]:w-8"
+                      className="rounded-md border"
                     />
                   </div>
                 </div>
