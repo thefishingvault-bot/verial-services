@@ -1,15 +1,15 @@
 import { db } from '@/lib/db';
-import { providers, services, reviews } from '@/db/schema';
+import { providers, services, reviews, bookings } from '@/db/schema';
 import { eq, desc } from 'drizzle-orm';
 import { notFound } from 'next/navigation';
-import type { Metadata } from 'next';
 import Image from 'next/image';
 import Link from 'next/link';
-import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
+import type { Metadata } from 'next';
+import { Card, CardContent, CardFooter, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { CheckCircle, Star } from 'lucide-react';
+import { CheckCircle, Star, Briefcase } from 'lucide-react';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
+import { ContactButton } from '@/components/common/contact-button';
 
 // This is a Server Component
 
@@ -21,6 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { handle } = await params;
 
+  // Fetch only the data needed for SEO
   const provider = await db.query.providers.findFirst({
     where: eq(providers.handle, handle),
     columns: { businessName: true, bio: true },
@@ -45,9 +46,9 @@ async function getProviderData(handle: string) {
     with: {
       user: {
         columns: {
-          avatarUrl: true,
-          createdAt: true,
           email: true,
+          avatarUrl: true,
+          createdAt: true, // For 'Member Since'
         },
       },
       services: {
@@ -56,108 +57,109 @@ async function getProviderData(handle: string) {
       },
       reviews: {
         with: {
-          user: {
+          user: { // Get the reviewer's name
             columns: { firstName: true, lastName: true },
           },
         },
         orderBy: [desc(reviews.createdAt)],
       },
+      bookings: {
+        columns: { id: true },
+        where: eq(bookings.status, 'completed'), // Only count completed jobs
+      },
     },
   });
 
   if (!provider || provider.status !== 'approved') {
-    notFound();
+    notFound(); // 404 if provider doesn't exist or isn't approved
   }
 
-  const safeProvider = provider as NonNullable<typeof provider>;
+  // Calculate average rating
+  let averageRating = 0;
+  if (provider.reviews.length > 0) {
+    const total = provider.reviews.reduce((acc, r) => acc + r.rating, 0);
+    averageRating = total / provider.reviews.length;
+  }
 
-  const averageRating =
-    safeProvider.reviews.length > 0
-      ? safeProvider.reviews.reduce((acc, r) => acc + r.rating, 0) / safeProvider.reviews.length
-      : 0;
-
-  return { provider: safeProvider, averageRating };
+  return { provider, averageRating, bookingCount: provider.bookings.length };
 }
 
-type ProviderData = Awaited<ReturnType<typeof getProviderData>>;
-type ProviderWithRelations = ProviderData['provider'];
-
-type Service = ProviderWithRelations['services'][number];
-type Review = ProviderWithRelations['reviews'][number];
-
+// --- Helper Components ---
 function ProviderHeader({
   provider,
   averageRating,
+  bookingCount,
 }: {
-  provider: ProviderWithRelations;
+  provider: any;
   averageRating: number;
+  bookingCount: number;
 }) {
   const { Icon, color } = getTrustBadge(provider.trustLevel);
-  const memberSinceYear = new Date(provider.user.createdAt).getFullYear();
+  const memberSince = new Date(provider.user.createdAt).getFullYear();
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col items-start gap-6 p-6 md:flex-row">
-        <Image
-          src={provider.user.avatarUrl || '/default-avatar.png'}
-          alt={provider.businessName}
-          width={128}
-          height={128}
-          className="aspect-square rounded-full border object-cover"
-        />
+        <div className="relative h-32 w-32 flex-shrink-0">
+          <Image
+            src={provider.user.avatarUrl || '/default-avatar.png'}
+            alt={provider.businessName}
+            fill
+            className="rounded-full border object-cover"
+          />
+        </div>
         <div className="flex-1">
-          <h1 className="text-3xl font-bold">{provider.businessName}</h1>
-          <Link
-            href={`/p/${provider.handle}`}
-            className="text-lg text-muted-foreground hover:underline"
-          >
-            @{provider.handle}
-          </Link>
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h1 className="text-3xl font-bold">{provider.businessName}</h1>
+              <Link
+                href={`/p/${provider.handle}`}
+                className="text-lg text-muted-foreground hover:underline"
+              >
+                @{provider.handle}
+              </Link>
+            </div>
+            <ContactButton
+              email={provider.user.email}
+              subject={`Enquiry for ${provider.businessName}`}
+            />
+          </div>
+
           <div className="mt-4 flex flex-wrap items-center gap-4">
             {provider.isVerified && (
               <Badge variant="secondary" className="w-fit">
                 <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
-                Verified provider
+                Verified Provider
               </Badge>
             )}
             <Badge variant="secondary" className={`flex w-fit items-center gap-1 ${color}`}>
               <Icon className="h-4 w-4" />
-              <span>
-                {provider.trustLevel.charAt(0).toUpperCase() + provider.trustLevel.slice(1)} trust
-              </span>
+              {provider.trustLevel.charAt(0).toUpperCase() + provider.trustLevel.slice(1)} Trust
             </Badge>
             <div className="flex items-center gap-1 text-muted-foreground">
-              <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+              <Star className="h-4 w-4 text-yellow-400" />
               <span className="font-semibold">{averageRating.toFixed(1)}</span>
               <span>({provider.reviews.length} reviews)</span>
             </div>
-            <span className="text-muted-foreground">Member since {memberSinceYear}</span>
-          </div>
-          <div className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() =>
-                (window.location.href = `mailto:${provider.user.email}?subject=${encodeURIComponent(
-                  `Enquiry for ${provider.businessName}`,
-                )}`)
-              }
-            >
-              Contact Provider
-            </Button>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Briefcase className="h-4 w-4" />
+              <span>{bookingCount} jobs completed</span>
+            </div>
+            <span className="text-muted-foreground">Member since {memberSince}</span>
           </div>
         </div>
       </CardHeader>
       <CardContent className="p-6">
         <h2 className="mb-2 text-xl font-semibold">About {provider.businessName}</h2>
         <p className="whitespace-pre-wrap text-gray-700">
-          {provider.bio || 'No bio provided yet.'}
+          {provider.bio || 'No bio provided.'}
         </p>
       </CardContent>
     </Card>
   );
 }
 
-function ServiceCard({ service }: { service: Service }) {
+function ServiceCard({ service }: { service: any }) {
   return (
     <Link href={`/s/${service.slug}`} key={service.id}>
       <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
@@ -186,7 +188,7 @@ function ServiceCard({ service }: { service: Service }) {
   );
 }
 
-function ReviewCard({ review }: { review: Review }) {
+function ReviewCard({ review }: { review: any }) {
   const firstName = review.user.firstName ?? 'Customer';
   const lastInitial = review.user.lastName ? ` ${review.user.lastName.charAt(0)}.` : '';
   const reviewerName = `${firstName}${lastInitial}`;
@@ -198,7 +200,7 @@ function ReviewCard({ review }: { review: Review }) {
           <span className="font-semibold">{reviewerName}</span>
           <div className="flex items-center gap-1">
             <span className="font-bold">{review.rating}</span>
-            <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+            <Star className="h-4 w-4 text-yellow-400" />
           </div>
         </div>
         <CardDescription>{new Date(review.createdAt).toLocaleDateString()}</CardDescription>
@@ -210,23 +212,26 @@ function ReviewCard({ review }: { review: Review }) {
   );
 }
 
+// --- The Page Component ---
 export default async function ProviderProfilePage({
   params,
 }: {
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const { provider, averageRating } = await getProviderData(handle);
+  const { provider, averageRating, bookingCount } = await getProviderData(handle);
 
   return (
     <div className="container mx-auto max-w-6xl space-y-12 p-4 md:p-8">
-      <ProviderHeader provider={provider} averageRating={averageRating} />
+      {/* Section 1: Provider Header */}
+      <ProviderHeader provider={provider} averageRating={averageRating} bookingCount={bookingCount} />
 
+      {/* Section 2: Services List */}
       <section>
         <h2 className="mb-6 text-2xl font-bold">Services offered by {provider.businessName}</h2>
         {provider.services.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {provider.services.map((service) => (
+            {provider.services.map((service: any) => (
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
@@ -235,11 +240,12 @@ export default async function ProviderProfilePage({
         )}
       </section>
 
+      {/* Section 3: Reviews List */}
       <section>
         <h2 className="mb-6 text-2xl font-bold">What customers are saying</h2>
         {provider.reviews.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {provider.reviews.map((review) => (
+            {provider.reviews.map((review: any) => (
               <ReviewCard key={review.id} review={review} />
             ))}
           </div>
