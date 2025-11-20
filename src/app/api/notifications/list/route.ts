@@ -1,3 +1,31 @@
+import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { db } from '@/lib/db';
+import { notifications } from '@/db/schema';
+import { and, desc, eq } from 'drizzle-orm';
+
+export const runtime = 'nodejs';
+
+export async function GET() {
+  try {
+    const { userId } = auth();
+
+    if (!userId) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    const userNotifications = await db.query.notifications.findMany({
+      where: and(eq(notifications.userId, userId), eq(notifications.isRead, false)),
+      orderBy: [desc(notifications.createdAt)],
+      limit: 10,
+    });
+
+    return NextResponse.json(userNotifications);
+  } catch (error) {
+    console.error('[API_NOTIFICATIONS_LIST]', error);
+    return new NextResponse('Internal Server Error', { status: 500 });
+  }
+}
 import { db } from "@/lib/db";
 import { notifications } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
