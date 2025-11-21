@@ -1,4 +1,33 @@
 # Privacy Policy
+﻿# Privacy Policy
+
+**Last Updated:** November 23, 2025
+
+Verial Services Ltd ("we," "our," or "us") respects your privacy. This policy explains how we collect and use your data.
+
+## 1. Information We Collect
+- **Account Data:** Name, email, and profile picture (via Clerk).
+- **Provider Data:** Business name, bio, and bank account details (via Stripe).
+- **Usage Data:** Information about how you use the site (via Sentry).
+
+## 2. How We Use Your Data
+- To facilitate bookings and payments.
+- To send transactional emails (via Resend).
+- To improve our platform and prevent fraud.
+
+## 3. Data Sharing
+We share data with trusted third parties only when necessary:
+- **Stripe:** For payment processing.
+- **Clerk:** For authentication.
+- **Cloudflare R2:** For image storage.
+
+We do **not** sell your personal data to advertisers.
+
+## 4. Your Rights
+You have the right to access, correct, or delete your personal data. You can delete your account at any time via the Dashboard.
+
+## 5. Contact
+For privacy concerns, contact `privacy@verial.co.nz`.
 
 **Last Updated:** January 2025
 

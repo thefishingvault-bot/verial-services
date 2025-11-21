@@ -1,4 +1,35 @@
 # Terms of Service
+﻿# Terms of Service
+
+**Last Updated:** November 23, 2025
+
+Welcome to Verial Services ("we," "our," or "us"). By accessing or using our website, `verial.co.nz` (the "Site"), you agree to be bound by these Terms of Service ("Terms").
+
+## 1. The Platform
+Verial is a marketplace that connects customers with independent service providers. We are not a service provider ourselves. We act as a facilitator for bookings and payments.
+
+## 2. User Accounts
+You must be at least 18 years old to use our services. You are responsible for maintaining the security of your account credentials.
+
+## 3. For Providers
+- You represent that you are legally allowed to work in New Zealand.
+- You agree to provide services as described in your listings.
+- You acknowledge that Verial charges a **10% platform fee** on all completed bookings.
+- You are responsible for your own tax obligations (including GST).
+
+## 4. For Customers
+- You agree to pay for services booked through the platform.
+- Payments are processed securely via Stripe.
+- Cancellations made within 24 hours of the scheduled time may be subject to a fee.
+
+## 5. Limitation of Liability
+Verial Services Ltd is not liable for the conduct of any user or the quality of services provided. We do not background check users. Use the platform at your own risk.
+
+## 6. Disputes
+Users should attempt to resolve disputes directly. If a resolution cannot be reached, Verial may intervene at its sole discretion.
+
+## 7. Contact
+For support, please contact us at `support@verial.co.nz`.
 
 **Last Updated:** January 2025
 
