@@ -70,6 +70,23 @@ async function getProviderData(handle: string) {
     },
   });
 
+  if (provider) {
+    console.log(
+      `[PROFILE_DEBUG] Found Provider: ${provider.id} (${provider.businessName})`,
+    );
+    console.log(`[PROFILE_DEBUG] Service Count (via relation): ${provider.services.length}`);
+
+    if (provider.services.length === 0) {
+      const manualServices = await db.query.services.findMany({
+        where: (svc, { eq }) => eq(svc.providerId, provider.id),
+        orderBy: [desc(services.createdAt)],
+      });
+      console.log(
+        `[PROFILE_DEBUG] Manual Service Fetch Count: ${manualServices.length} for provider ${provider.id}`,
+      );
+    }
+  }
+
   if (!provider || provider.status !== 'approved') {
     notFound(); // 404 if provider doesn't exist or isn't approved
   }
