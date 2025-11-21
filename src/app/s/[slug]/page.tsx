@@ -197,11 +197,25 @@ export default function ServiceDetailPage() {
           </p>
 
           <Card className="mt-6">
-            <CardHeader>
-              <Link href={`/p/${service.provider.handle}`} className="hover:underline">
-                <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
-                <CardDescription>@{service.provider.handle}</CardDescription>
-              </Link>
+            <CardHeader className="flex flex-row items-start justify-between space-y-0">
+              <div className="flex flex-col space-y-1.5">
+                <Link href={`/p/${service.provider.handle}`} className="hover:underline">
+                  <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
+                  <CardDescription>@{service.provider.handle}</CardDescription>
+                </Link>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  (window.location.href = `mailto:${service.provider.user.email}?subject=${encodeURIComponent(
+                    `Enquiry about ${service.title}`,
+                  )}`)
+                }
+              >
+                Contact Provider
+              </Button>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col space-y-2">
@@ -235,18 +249,6 @@ export default function ServiceDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="mb-3 w-full"
-                  onClick={() =>
-                    (window.location.href = `mailto:${service.provider.user.email}?subject=${encodeURIComponent(
-                      `Enquiry about ${service.title}`,
-                    )}`)
-                  }
-                >
-                  Contact Provider
-                </Button>
                 <div>
                   <Label className="mb-2 block">Select a date</Label>
                   <div className="flex justify-center w-full">
