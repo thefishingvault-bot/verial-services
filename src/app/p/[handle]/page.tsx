@@ -5,7 +5,7 @@ import { notFound } from 'next/navigation';
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Metadata } from 'next';
-import { Card, CardContent, CardFooter, CardHeader, CardDescription, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { CheckCircle, Star, Briefcase } from 'lucide-react';
 import { formatPrice, getTrustBadge } from '@/lib/utils';
@@ -21,7 +21,6 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { handle } = await params;
 
-  // Fetch only the data needed for SEO
   const provider = await db.query.providers.findFirst({
     where: eq(providers.handle, handle),
     columns: { businessName: true, bio: true },
@@ -48,16 +47,16 @@ async function getProviderData(handle: string) {
         columns: {
           email: true,
           avatarUrl: true,
-          createdAt: true, // For 'Member Since'
+          createdAt: true,
         },
       },
       services: {
-        where: eq(services.providerId, providers.id),
+        // Let the Drizzle relation filter by providerId
         orderBy: [desc(services.createdAt)],
       },
       reviews: {
         with: {
-          user: { // Get the reviewer's name
+          user: {
             columns: { firstName: true, lastName: true },
           },
         },
@@ -65,33 +64,15 @@ async function getProviderData(handle: string) {
       },
       bookings: {
         columns: { id: true },
-        where: eq(bookings.status, 'completed'), // Only count completed jobs
+        where: eq(bookings.status, 'completed'),
       },
     },
   });
 
-  if (provider) {
-    console.log(
-      `[PROFILE_DEBUG] Found Provider: ${provider.id} (${provider.businessName})`,
-    );
-    console.log(`[PROFILE_DEBUG] Service Count (via relation): ${provider.services.length}`);
-
-    if (provider.services.length === 0) {
-      const manualServices = await db.query.services.findMany({
-        where: (svc, { eq }) => eq(svc.providerId, provider.id),
-        orderBy: [desc(services.createdAt)],
-      });
-      console.log(
-        `[PROFILE_DEBUG] Manual Service Fetch Count: ${manualServices.length} for provider ${provider.id}`,
-      );
-    }
-  }
-
   if (!provider || provider.status !== 'approved') {
-    notFound(); // 404 if provider doesn't exist or isn't approved
+    notFound();
   }
 
-  // Calculate average rating
   let averageRating = 0;
   if (provider.reviews.length > 0) {
     const total = provider.reviews.reduce((acc, r) => acc + r.rating, 0);
@@ -112,7 +93,7 @@ function ProviderHeader({
   bookingCount: number;
 }) {
   const { Icon, color } = getTrustBadge(provider.trustLevel);
-  const memberSince = new Date(provider.user.createdAt).getFullYear();
+  const memberSinceYear = new Date(provider.user.createdAt).getFullYear();
 
   return (
     <Card className="overflow-hidden">
@@ -146,7 +127,7 @@ function ProviderHeader({
             {provider.isVerified && (
               <Badge variant="secondary" className="w-fit">
                 <CheckCircle className="mr-1 h-4 w-4 text-green-500" />
-                Verified Provider
+                Verified provider
               </Badge>
             )}
             <Badge variant="secondary" className={`flex w-fit items-center gap-1 ${color}`}>
@@ -162,7 +143,7 @@ function ProviderHeader({
               <Briefcase className="h-4 w-4" />
               <span>{bookingCount} jobs completed</span>
             </div>
-            <span className="text-muted-foreground">Member since {memberSince}</span>
+            <span className="text-muted-foreground">Member since {memberSinceYear}</span>
           </div>
         </div>
       </CardHeader>
@@ -240,10 +221,8 @@ export default async function ProviderProfilePage({
 
   return (
     <div className="container mx-auto max-w-6xl space-y-12 p-4 md:p-8">
-      {/* Section 1: Provider Header */}
       <ProviderHeader provider={provider} averageRating={averageRating} bookingCount={bookingCount} />
 
-      {/* Section 2: Services List */}
       <section>
         <h2 className="mb-6 text-2xl font-bold">Services offered by {provider.businessName}</h2>
         {provider.services.length > 0 ? (
@@ -257,7 +236,6 @@ export default async function ProviderProfilePage({
         )}
       </section>
 
-      {/* Section 3: Reviews List */}
       <section>
         <h2 className="mb-6 text-2xl font-bold">What customers are saying</h2>
         {provider.reviews.length > 0 ? (
