@@ -66,14 +66,9 @@ export function ChatThread({
               !!previous && previous.senderId === msg.senderId;
 
             return (
-              <div
-                key={msg.id}
-                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-              >
+              <div key={msg.id} className="flex justify-start">
                 <div
-                  className={`flex max-w-[75%] items-end gap-2 ${
-                    isMe ? "flex-row-reverse" : "flex-row"
-                  }`}
+                  className="flex max-w-[75%] items-end gap-2 flex-row"
                 >
                   {!isMe && !isSameSenderAsPrevious && (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -97,9 +92,7 @@ export function ChatThread({
                       {msg.content}
                     </p>
                     <span
-                      className={`mt-1 block text-[10px] opacity-70 transition-opacity ${
-                        isMe ? "text-right" : "text-left"
-                      }`}
+                      className="mt-1 block text-[10px] opacity-70 transition-opacity text-left"
                     >
                       {new Date(msg.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
