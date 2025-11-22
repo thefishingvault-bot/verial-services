@@ -103,8 +103,8 @@ export default function ConversationPage() {
 	const viewerUserId = isProviderViewer ? provider?.id ?? null : customer.id;
 
 	return (
-		<div className="flex h-full flex-1 flex-col px-4 py-4 md:px-8 md:py-6">
-			<div className="mx-auto flex h-full w-full max-w-4xl flex-1 flex-col rounded-xl border bg-white shadow-sm">
+		<div className="flex h-full flex-1 flex-col bg-muted/20 px-4 py-4 md:px-8 md:py-6">
+			<div className="mx-auto flex h-full w-full max-w-4xl flex-1 flex-col rounded-2xl border border-border bg-white shadow-md">
 				{counterpart && (
 					<ConversationHeader
 						listHref="/dashboard/messages"
@@ -136,7 +136,7 @@ export default function ConversationPage() {
 					/>
 				)}
 
-				<div className="flex min-h-0 flex-1 flex-col bg-muted/10">
+				<div className="flex min-h-0 flex-1 flex-col">
 					<ChatThread
 						conversationId={conversationId}
 						viewerUserId={viewerUserId}
