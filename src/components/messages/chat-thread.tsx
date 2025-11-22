@@ -43,7 +43,7 @@ export function ChatThread({
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
-        <div className="mx-auto flex max-w-2xl flex-1 flex-col space-y-4">
+        <div className="mx-auto flex max-w-2xl flex-1 flex-col justify-end space-y-4">
           {messages.length === 0 && (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-xs text-muted-foreground">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-base font-medium">
