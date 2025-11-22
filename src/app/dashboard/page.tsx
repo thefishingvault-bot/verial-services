@@ -98,6 +98,18 @@ export default function DashboardPage() {
             </Card>
           </Link>
 
+          <Link href="/dashboard/messages">
+            <Card className="hover:shadow-lg transition-shadow h-full">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Messages</CardTitle>
+                  <CardDescription>Chat with your customers.</CardDescription>
+                </div>
+                <User className="h-8 w-8 text-primary" />
+              </CardHeader>
+            </Card>
+          </Link>
+
           <Link href="/dashboard/payouts">
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -162,6 +174,17 @@ export default function DashboardPage() {
                 <CardDescription>View your booking history and status.</CardDescription>
               </div>
               <Calendar className="h-8 w-8 text-muted-foreground" />
+            </CardHeader>
+          </Card>
+        </Link>
+        <Link href="/dashboard/messages">
+          <Card className="hover:shadow-lg transition-shadow">
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div className="space-y-1">
+                <CardTitle>Messages</CardTitle>
+                <CardDescription>Chat with your providers.</CardDescription>
+              </div>
+              <User className="h-8 w-8 text-muted-foreground" />
             </CardHeader>
           </Card>
         </Link>
