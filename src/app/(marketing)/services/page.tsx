@@ -25,6 +25,9 @@ type ServiceWithProvider = {
     businessName: string | null;
     isVerified: boolean;
     trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum' | null;
+    baseSuburb: string | null;
+    baseRegion: string | null;
+    serviceRadiusKm: number | null;
   };
   avgRating: number;
   reviewCount: number;
@@ -72,6 +75,9 @@ async function getServices({ query, category }: { query?: string; category?: str
       providerName: providers.businessName,
       providerVerified: providers.isVerified,
       providerTrust: providers.trustLevel,
+      providerBaseSuburb: providers.baseSuburb,
+      providerBaseRegion: providers.baseRegion,
+      providerServiceRadiusKm: providers.serviceRadiusKm,
     })
     .from(services)
     .leftJoin(providers, eq(services.providerId, providers.id))
@@ -125,6 +131,9 @@ async function getServices({ query, category }: { query?: string; category?: str
         businessName: s.providerName,
         isVerified: s.providerVerified ?? false,
         trustLevel: (s.providerTrust ?? 'bronze') as ServiceWithProvider['provider']['trustLevel'],
+        baseSuburb: s.providerBaseSuburb,
+        baseRegion: s.providerBaseRegion,
+        serviceRadiusKm: s.providerServiceRadiusKm,
       },
       avgRating,
       reviewCount: stats.count,
@@ -201,7 +210,16 @@ export default async function BrowseServicesPage({
                     )}
                   </div>
                   <div className="text-sm text-muted-foreground w-full flex justify-between items-center">
-                    <span className="truncate max-w-[120px]">{service.provider.businessName}</span>
+                    <div className="flex flex-col gap-1 max-w-[180px]">
+                      <span className="truncate">{service.provider.businessName}</span>
+                      {service.provider.serviceRadiusKm && (service.provider.baseSuburb || service.provider.baseRegion) && (
+                        <span className="truncate text-[0.75rem] text-muted-foreground">
+                          {service.provider.baseSuburb
+                            ? `Within ${service.provider.serviceRadiusKm} km of ${service.provider.baseSuburb}`
+                            : `Services ${service.provider.baseRegion} area`}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center">
                       {(() => {
                         const { Icon } = getTrustBadge(
