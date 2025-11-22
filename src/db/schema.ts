@@ -45,6 +45,11 @@ export const providers = pgTable("providers", {
   trustLevel: trustLevelEnum("trust_level").default("bronze").notNull(),
   trustScore: integer("trust_score").default(0).notNull(),
 
+  // Service area
+  baseSuburb: varchar("base_suburb", { length: 255 }),
+  baseRegion: varchar("base_region", { length: 255 }),
+  serviceRadiusKm: integer("service_radius_km").default(10).notNull(),
+
   // Stripe Connect
   stripeConnectId: varchar("stripe_connect_id", { length: 255 }).unique(),
   chargesEnabled: boolean("charges_enabled").default(false).notNull(),

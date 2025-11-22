@@ -17,6 +17,9 @@ export async function GET() {
       columns: {
         id: true,
         chargesGst: true,
+        baseSuburb: true,
+        baseRegion: true,
+        serviceRadiusKm: true,
       },
     });
 
@@ -24,7 +27,12 @@ export async function GET() {
       return new NextResponse('Provider not found', { status: 404 });
     }
 
-    return NextResponse.json({ chargesGst: provider.chargesGst });
+    return NextResponse.json({
+      chargesGst: provider.chargesGst,
+      baseSuburb: provider.baseSuburb,
+      baseRegion: provider.baseRegion,
+      serviceRadiusKm: provider.serviceRadiusKm,
+    });
 
   } catch (error) {
     console.error('[API_PROVIDER_SETTINGS_GET]', error);

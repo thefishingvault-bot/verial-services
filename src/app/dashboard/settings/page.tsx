@@ -10,6 +10,9 @@ import { useUser } from '@clerk/nextjs';
 
 interface ProviderSettings {
   chargesGst: boolean;
+  baseSuburb: string | null;
+  baseRegion: string | null;
+  serviceRadiusKm: number | null;
 }
 
 export default function ProviderSettingsPage() {
@@ -17,6 +20,9 @@ export default function ProviderSettingsPage() {
   const isProvider = user?.publicMetadata?.role === 'provider';
 
   const [chargesGst, setChargesGst] = useState(true); // Default to true
+  const [baseSuburb, setBaseSuburb] = useState('');
+  const [baseRegion, setBaseRegion] = useState('');
+  const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +37,9 @@ export default function ProviderSettingsPage() {
         })
         .then((data: ProviderSettings) => {
           setChargesGst(data.chargesGst);
+          setBaseSuburb(data.baseSuburb ?? '');
+          setBaseRegion(data.baseRegion ?? '');
+          setServiceRadiusKm(data.serviceRadiusKm ?? 10);
           setIsLoading(false);
         })
         .catch((err) => {
@@ -46,16 +55,22 @@ export default function ProviderSettingsPage() {
     setIsSaving(true);
     setError(null);
     try {
+      const payload = {
+        chargesGst,
+        baseSuburb: baseSuburb.trim() || null,
+        baseRegion: baseRegion.trim() || null,
+        serviceRadiusKm,
+      };
+
       const res = await fetch('/api/provider/settings/update', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chargesGst }),
+        body: JSON.stringify(payload),
       });
 
       if (!res.ok) throw new Error(await res.text());
 
       alert('Settings saved successfully!');
-
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save settings.';
       setError(message);
@@ -120,8 +135,71 @@ export default function ProviderSettingsPage() {
               <div className="space-y-1">
                 <p className="text-sm font-medium">Important Note</p>
                 <p className="text-sm text-muted-foreground">
-                  This setting only affects <strong>new services</strong> you create. 
+                  This setting only affects <strong>new services</strong> you create.
                   Existing services will keep their original GST status to maintain pricing consistency.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 p-4 border rounded-lg">
+            <div>
+              <p className="text-sm font-medium">Service area</p>
+              <p className="text-xs text-muted-foreground">
+                Tell customers where you&apos;re based and how far you&apos;ll travel.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <div className="space-y-1">
+                <Label htmlFor="base-suburb">Base suburb</Label>
+                <input
+                  id="base-suburb"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  placeholder="e.g. Manukau, New Lynn"
+                  value={baseSuburb}
+                  onChange={(e) => setBaseSuburb(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="base-region">Region</Label>
+                <select
+                  id="base-region"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={baseRegion}
+                  onChange={(e) => setBaseRegion(e.target.value)}
+                >
+                  <option value="">Select a region</option>
+                  <option value="Auckland">Auckland</option>
+                  <option value="Waikato">Waikato</option>
+                  <option value="Bay of Plenty">Bay of Plenty</option>
+                  <option value="Wellington">Wellington</option>
+                  <option value="Canterbury">Canterbury</option>
+                  <option value="Otago">Otago</option>
+                  <option value="Other / NZ-wide">Other / NZ-wide</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="service-radius">Service radius (km)</Label>
+                <input
+                  id="service-radius"
+                  type="number"
+                  min={5}
+                  max={50}
+                  step={5}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={serviceRadiusKm}
+                  onChange={(e) => {
+                    const value = Number(e.target.value);
+                    if (!Number.isNaN(value)) {
+                      setServiceRadiusKm(Math.min(50, Math.max(5, value)));
+                    }
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Shown on your listings as &quot;Travels up to {serviceRadiusKm} km from {baseSuburb || baseRegion || 'your area'}&quot;.
                 </p>
               </div>
             </div>
