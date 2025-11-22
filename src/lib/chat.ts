@@ -1,8 +1,14 @@
 import { auth } from "@clerk/nextjs/server";
-import { desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { bookings, conversations, messages } from "@/db/schema";
+import {
+	bookings,
+	conversations,
+	messages,
+	providers,
+	users,
+} from "@/db/schema";
 
 export interface ConversationSummary {
 	id: string;
@@ -33,10 +39,22 @@ export async function getConversationsForUser(
 		where: or(eq(conversations.user1Id, userId), eq(conversations.user2Id, userId)),
 		with: {
 			user1: {
-				columns: { id: true, firstName: true, lastName: true, avatarUrl: true },
+				columns: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					avatarUrl: true,
+					providerId: true,
+				},
 			},
 			user2: {
-				columns: { id: true, firstName: true, lastName: true, avatarUrl: true },
+				columns: {
+					id: true,
+					firstName: true,
+					lastName: true,
+					avatarUrl: true,
+					providerId: true,
+				},
 			},
 			messages: {
 				orderBy: [desc(messages.createdAt)],
@@ -51,6 +69,23 @@ export async function getConversationsForUser(
 			const otherUser = c.user1Id === userId ? c.user2 : c.user1;
 			const lastMsg = c.messages[0];
 
+			// Figure out which participant is the provider for naming
+			const providerUser =
+				c.user1.providerId || c.user2.providerId
+					? await db.query.users.findFirst({
+						where: eq(
+							users.id,
+							c.user1.providerId ? c.user1.id : c.user2.id,
+						),
+					})
+					: null;
+
+			const providerEntity = providerUser
+				? await db.query.providers.findFirst({
+						where: eq(providers.userId, providerUser.id),
+					})
+				: null;
+
 			const booking = await db.query.bookings.findFirst({
 				where: or(eq(bookings.userId, c.user1Id), eq(bookings.userId, c.user2Id)),
 				with: {
@@ -59,13 +94,16 @@ export async function getConversationsForUser(
 				},
 			});
 
+			// Prefer provider business name in the list when available
+			const counterpartDisplayName =
+				providerEntity?.businessName ||
+				`${otherUser.firstName || "User"} ${otherUser.lastName || ""}`.trim();
+
 			return {
 				id: c.id,
 				counterpart: {
 					id: otherUser.id,
-					name: `${otherUser.firstName || "User"} ${
-						otherUser.lastName || ""
-					}`.trim(),
+					name: counterpartDisplayName,
 					handle: undefined,
 					avatarUrl: otherUser.avatarUrl,
 				},
