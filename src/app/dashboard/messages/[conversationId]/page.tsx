@@ -58,9 +58,6 @@ export default function ConversationPage() {
 
 		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
 
-		setIsLoading(true);
-		setError(null);
-
 		fetch(`${baseUrl}/api/chat/${conversationId}/messages`, {
 			cache: "no-store",
 		})
@@ -71,8 +68,8 @@ export default function ConversationPage() {
 				return res.json();
 			})
 			.then((json: ConversationContext) => {
-				setData(json);
 				setIsLoading(false);
+				setData(json);
 			})
 			.catch((err: Error) => {
 				setError(err.message);
