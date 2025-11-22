@@ -26,6 +26,9 @@ export async function GET(
             isVerified: true,
             trustLevel: true,
             bio: true,
+            baseSuburb: true,
+            baseRegion: true,
+            serviceRadiusKm: true,
           },
           with: {
             user: {

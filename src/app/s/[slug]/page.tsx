@@ -32,6 +32,9 @@ interface ServiceDetails {
     isVerified: boolean;
     trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
     bio: string;
+		baseSuburb: string | null;
+		baseRegion: string | null;
+		serviceRadiusKm: number | null;
     user: {
       email: string;
     };
@@ -187,9 +190,20 @@ export default function ServiceDetailPage() {
           </div>
 
           <h1 className="text-3xl font-bold mb-2">{service.title}</h1>
-          <Badge variant="outline" className="mb-4 capitalize">
-            {service.category}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2 mb-4">
+            <Badge variant="outline" className="capitalize">
+              {service.category}
+            </Badge>
+            {service.provider.serviceRadiusKm &&
+              (service.provider.baseSuburb || service.provider.baseRegion) && (
+                <Badge variant="secondary" className="rounded-full text-xs font-normal">
+                  Travels up to {service.provider.serviceRadiusKm} km{' '}
+                  {service.provider.baseSuburb
+                    ? `from ${service.provider.baseSuburb}`
+                    : `in ${service.provider.baseRegion}`}
+                </Badge>
+              )}
+          </div>
 
           <Separator className="my-4" />
 
