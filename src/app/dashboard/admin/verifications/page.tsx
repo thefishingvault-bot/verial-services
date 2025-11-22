@@ -23,6 +23,9 @@ interface ProviderData {
   chargesEnabled: boolean;
   payoutsEnabled: boolean;
   userId: string;
+  baseSuburb: string | null;
+  baseRegion: string | null;
+  serviceRadiusKm: number | null;
 }
 
 export default function AdminVerificationsPage() {
@@ -91,6 +94,7 @@ export default function AdminVerificationsPage() {
             <TableRow>
               <TableHead>Provider</TableHead>
               <TableHead>Handle</TableHead>
+              <TableHead>Service area</TableHead>
               <TableHead>Stripe Status</TableHead>
               <TableHead>Actions</TableHead>
             </TableRow>
@@ -109,6 +113,13 @@ export default function AdminVerificationsPage() {
                 </TableCell>
                 <TableCell>
                   <code className="text-sm">@{p.handle}</code>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {p.serviceRadiusKm && (p.baseSuburb || p.baseRegion)
+                    ? p.baseSuburb
+                      ? `${p.serviceRadiusKm} km from ${p.baseSuburb}`
+                      : `${p.serviceRadiusKm} km in ${p.baseRegion}`
+                    : 'Not set'}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2">
@@ -149,13 +160,14 @@ export default function AdminVerificationsPage() {
               <TableHead>Provider</TableHead>
               <TableHead>Handle</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Service area</TableHead>
               <TableHead>Stripe Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {otherProviders.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="text-center text-muted-foreground">No other providers.</TableCell>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">No other providers.</TableCell>
               </TableRow>
             )}
             {otherProviders.map((p) => (
@@ -171,6 +183,13 @@ export default function AdminVerificationsPage() {
                   <Badge variant={p.status === 'approved' ? 'default' : 'destructive'}>
                     {p.status}
                   </Badge>
+                </TableCell>
+                <TableCell className="text-sm text-muted-foreground">
+                  {p.serviceRadiusKm && (p.baseSuburb || p.baseRegion)
+                    ? p.baseSuburb
+                      ? `${p.serviceRadiusKm} km from ${p.baseSuburb}`
+                      : `${p.serviceRadiusKm} km in ${p.baseRegion}`
+                    : 'Not set'}
                 </TableCell>
                 <TableCell>
                   <div className="flex gap-2">
