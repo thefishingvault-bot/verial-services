@@ -42,7 +42,7 @@ export function ChatThread({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto bg-muted/10 px-3 py-3 md:px-6 md:py-6">
+      <div className="flex min-h-0 flex-1 flex-col justify-end overflow-y-auto bg-muted/10 px-3 py-3 md:px-6 md:py-6">
         <div className="mx-auto flex max-w-2xl flex-1 flex-col justify-end space-y-2 md:space-y-3">
           {messages.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-xs text-muted-foreground">
@@ -57,7 +57,7 @@ export function ChatThread({
           ) : null}
 
           {messages.map((msg, index) => {
-            const isMe = viewerUserId === msg.senderId;
+            const isMe = msg.senderId === viewerUserId;
             const displayName = isMe ? "You" : counterpart.name;
             const otherInitial = counterpart.name.charAt(0).toUpperCase();
 
@@ -66,9 +66,16 @@ export function ChatThread({
               !!previous && previous.senderId === msg.senderId;
 
             return (
-              <div key={msg.id} className="flex justify-start">
+              <div
+                key={msg.id}
+                className={`flex w-full mb-1.5 md:mb-2 ${
+                  isMe ? "justify-end" : "justify-start"
+                }`}
+              >
                 <div
-                  className="flex max-w-[75%] items-end gap-2 flex-row"
+                  className={`flex max-w-[75%] items-end gap-2 ${
+                    isMe ? "flex-row-reverse" : "flex-row"
+                  }`}
                 >
                   {!isMe && !isSameSenderAsPrevious && (
                     <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-medium">
@@ -80,7 +87,7 @@ export function ChatThread({
                     className={`overflow-hidden rounded-2xl px-3 py-2 text-sm shadow-sm ${
                       isMe
                         ? "bg-primary text-primary-foreground"
-                        : "bg-background text-foreground"
+                        : "bg-muted text-foreground"
                     }`}
                   >
                     {!isSameSenderAsPrevious && (
@@ -92,7 +99,9 @@ export function ChatThread({
                       {msg.content}
                     </p>
                     <span
-                      className="mt-1 block text-[10px] opacity-70 transition-opacity text-left"
+                      className={`mt-1 block text-[10px] opacity-70 transition-opacity ${
+                        isMe ? "text-right" : "text-left"
+                      }`}
                     >
                       {new Date(msg.createdAt).toLocaleTimeString([], {
                         hour: "2-digit",
