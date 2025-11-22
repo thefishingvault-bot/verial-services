@@ -57,6 +57,7 @@ export default function ServiceDetailPage() {
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
   const [blockedDays, setBlockedDays] = useState<{ from: Date; to: Date }[]>([]);
+  const [customerRegion, setCustomerRegion] = useState<string>("");
 
   useEffect(() => {
     if (!slug) return;
@@ -145,12 +146,24 @@ export default function ServiceDetailPage() {
         body: JSON.stringify({
           serviceId: service!.id,
           scheduledDate: selectedSlot,
+          customerRegion: customerRegion || undefined,
         }),
       });
 
       if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(errorText || 'Failed to create booking.');
+        let message = 'Failed to create booking.';
+        try {
+          const data = await res.json();
+          if (data?.error === 'OUT_OF_AREA' && data?.message) {
+            message = data.message;
+          } else if (typeof data === 'string') {
+            message = data;
+          }
+        } catch {
+          const errorText = await res.text();
+          if (errorText) message = errorText;
+        }
+        throw new Error(message);
       }
 
       const newBooking = await res.json();
@@ -310,6 +323,17 @@ export default function ServiceDetailPage() {
                       </Button>
                     ))}
                   </div>
+                </div>
+
+                <div>
+                  <Label className="mb-2 block">Your region</Label>
+                  <input
+                    type="text"
+                    value={customerRegion}
+                    onChange={(e) => setCustomerRegion(e.target.value)}
+                    placeholder="e.g. Auckland, Waikato, Wellington"
+                    className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                  />
                 </div>
 
                 {error && service && (

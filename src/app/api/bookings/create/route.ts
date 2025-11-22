@@ -19,7 +19,7 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serviceId, scheduledDate } = await req.json();
+    const { serviceId, scheduledDate, customerRegion } = await req.json();
     if (!serviceId) {
       return new NextResponse("Missing serviceId", { status: 400 });
     }
@@ -53,14 +53,49 @@ export async function POST(req: Request) {
       where: eq(services.id, serviceId),
       with: {
         provider: {
+          columns: {
+            id: true,
+            userId: true,
+            baseRegion: true,
+          },
           with: {
-            user: { columns: { email: true } }
-          }
+            user: { columns: { email: true } },
+          },
         }
       }
     });
     if (!service) {
       return new NextResponse("Service not found", { status: 404 });
+    }
+
+    // --- 2b. Simple region-based service-area check (MVP) ---
+    const providerRegionRaw = service.provider?.baseRegion;
+    const customerRegionRaw = customerRegion as string | undefined;
+
+    const normalizeRegion = (value: string | null | undefined) =>
+      value?.toString().trim().toLowerCase() || null;
+
+    const normalizedProviderRegion = normalizeRegion(providerRegionRaw);
+    const normalizedCustomerRegion = normalizeRegion(customerRegionRaw);
+
+    if (normalizedProviderRegion && normalizedCustomerRegion) {
+      if (normalizedProviderRegion !== normalizedCustomerRegion) {
+        console.warn("[BOOKING_OUT_OF_AREA]", {
+          providerId: service.providerId,
+          providerRegion: providerRegionRaw,
+          customerRegion: customerRegionRaw,
+          serviceId: service.id,
+          timestamp: new Date().toISOString(),
+        });
+
+        return NextResponse.json(
+          {
+            error: "OUT_OF_AREA",
+            message: "This provider doesnt currently service your area.",
+          },
+          { status: 400 },
+        );
+      }
     }
 
     // 3. Check that a user is not booking their own service
