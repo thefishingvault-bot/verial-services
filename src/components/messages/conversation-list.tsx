@@ -64,7 +64,7 @@ function formatTime(iso: string) {
 }
 
 interface ConversationListProps {
-  activeConversationId?: string;
+  activeConversationId?: string | null;
 }
 
 export async function ConversationList({
