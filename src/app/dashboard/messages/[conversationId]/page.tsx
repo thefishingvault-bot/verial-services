@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import Pusher from 'pusher-js';
-import { Loader2, Send } from 'lucide-react';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Loader2, Send, ArrowLeft } from 'lucide-react';
+import Link from 'next/link';
+import Pusher from 'pusher-js';
 
 interface Message {
   id: string;
@@ -23,29 +23,34 @@ interface Message {
   };
 }
 
+interface ChatData {
+  messages: Message[];
+  otherUser: {
+    id: string;
+    name: string;
+    avatarUrl: string | null;
+  };
+}
+
 export default function ChatWindowPage() {
   const { user } = useUser();
   const params = useParams();
   const conversationId = params.conversationId as string;
 
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [data, setData] = useState<ChatData | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-
-  const scrollToBottom = () => {
-    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!conversationId) return;
 
-    const fetchMessages = () => {
+    const fetchData = () => {
       fetch(`/api/chat/${conversationId}/messages`)
         .then((res) => res.json())
-        .then((data: Message[]) => {
-          setMessages(data);
+        .then((chatData: ChatData) => {
+          setData(chatData);
           setIsLoading(false);
           setTimeout(scrollToBottom, 100);
         })
@@ -54,7 +59,7 @@ export default function ChatWindowPage() {
         });
     };
 
-    fetchMessages();
+    fetchData();
 
     const pusher = new Pusher('b61aeb262f2da10e632d', {
       cluster: 'ap4',
@@ -62,22 +67,24 @@ export default function ChatWindowPage() {
 
     const channel = pusher.subscribe(`chat-${conversationId}`);
 
-    channel.bind('new-message', (data: any) => {
-      if (data?.senderId !== user?.id) {
-        fetchMessages();
+    channel.bind('new-message', (msg: any) => {
+      if (msg.senderId !== user?.id) {
+        fetchData();
       }
     });
 
     return () => {
-      channel.unbind_all();
-      channel.unsubscribe();
-      pusher.disconnect();
+      pusher.unsubscribe(`chat-${conversationId}`);
     };
   }, [conversationId, user?.id]);
 
+  const scrollToBottom = () => {
+    scrollRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !data) return;
 
     const tempContent = newMessage;
     setNewMessage('');
@@ -90,15 +97,16 @@ export default function ChatWindowPage() {
         body: JSON.stringify({
           conversationId,
           content: tempContent,
+          recipientId: data.otherUser.id,
         }),
       });
 
       const res = await fetch(`/api/chat/${conversationId}/messages`);
-      const data: Message[] = await res.json();
-      setMessages(data);
+      const newData: ChatData = await res.json();
+      setData(newData);
       setTimeout(scrollToBottom, 100);
-    } catch (error) {
-      console.error('Failed to send message', error);
+    } catch (err) {
+      console.error('Failed to send', err);
     } finally {
       setIsSending(false);
     }
@@ -112,17 +120,37 @@ export default function ChatWindowPage() {
     );
   }
 
+  if (!data) {
+    return <div className="p-4">Error loading chat.</div>;
+  }
+
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] container max-w-4xl mx-auto p-4">
       <Card className="flex-1 flex flex-col overflow-hidden">
+        <CardHeader className="border-b p-4 flex flex-row items-center gap-4 bg-muted/20">
+          <Link href="/dashboard/messages">
+            <Button variant="ghost" size="icon">
+              <ArrowLeft className="h-5 w-5" />
+            </Button>
+          </Link>
+          <Avatar>
+            <AvatarImage src={data.otherUser.avatarUrl || undefined} />
+            <AvatarFallback>{data.otherUser.name.charAt(0)}</AvatarFallback>
+          </Avatar>
+          <div>
+            <CardTitle className="text-base">{data.otherUser.name}</CardTitle>
+            <p className="text-xs text-muted-foreground">Ref: {conversationId.split('_')[1]}</p>
+          </div>
+        </CardHeader>
+
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {messages.length === 0 && (
+          {data.messages.length === 0 && (
             <p className="text-center text-muted-foreground mt-10">
               No messages yet. Say hello!
             </p>
           )}
 
-          {messages.map((msg) => {
+          {data.messages.map((msg) => {
             const isMe = msg.senderId === user?.id;
             return (
               <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -131,12 +159,14 @@ export default function ChatWindowPage() {
                     isMe ? 'flex-row-reverse' : 'flex-row'
                   }`}
                 >
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={msg.sender?.avatarUrl || undefined} />
-                    <AvatarFallback>
-                      {msg.sender?.firstName?.charAt(0) || 'U'}
-                    </AvatarFallback>
-                  </Avatar>
+                  {!isMe && (
+                    <Avatar className="h-6 w-6">
+                      <AvatarImage src={msg.sender?.avatarUrl || undefined} />
+                      <AvatarFallback>
+                        {msg.sender?.firstName?.charAt(0) || 'U'}
+                      </AvatarFallback>
+                    </Avatar>
+                  )}
                   <div
                     className={`p-3 rounded-lg ${
                       isMe ? 'bg-primary text-primary-foreground' : 'bg-muted'
