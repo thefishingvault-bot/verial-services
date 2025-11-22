@@ -187,6 +187,31 @@ export const providerTimeOffs = pgTable("provider_time_offs", {
   endTime: timestamp("end_time", { withTimezone: true }).notNull(), // Full end timestamp
 });
 
+/**
+ * Conversations Table
+ * Links two users (customer and provider) in a chat thread.
+ */
+export const conversations = pgTable("conversations", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., conv_...
+  user1Id: varchar("user1_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  user2Id: varchar("user2_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
+ * Messages Table
+ * Individual messages within a conversation.
+ */
+export const messages = pgTable("messages", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., msg_...
+  conversationId: varchar("conversation_id", { length: 255 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 
 // --- RELATIONS ---
@@ -233,6 +258,31 @@ export const providerTimeOffsRelations = relations(providerTimeOffs, ({ one }) =
   provider: one(providers, {
     fields: [providerTimeOffs.providerId],
     references: [providers.id],
+  }),
+}));
+
+export const conversationsRelations = relations(conversations, ({ one, many }) => ({
+  user1: one(users, {
+    fields: [conversations.user1Id],
+    references: [users.id],
+    relationName: "user1",
+  }),
+  user2: one(users, {
+    fields: [conversations.user2Id],
+    references: [users.id],
+    relationName: "user2",
+  }),
+  messages: many(messages),
+}));
+
+export const messagesRelations = relations(messages, ({ one }) => ({
+  conversation: one(conversations, {
+    fields: [messages.conversationId],
+    references: [conversations.id],
+  }),
+  sender: one(users, {
+    fields: [messages.senderId],
+    references: [users.id],
   }),
 }));
 
