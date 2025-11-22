@@ -7,7 +7,7 @@ import { eq } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const { userId } = await auth();
     if (!userId) {

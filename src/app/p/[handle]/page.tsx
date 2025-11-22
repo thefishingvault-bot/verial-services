@@ -84,12 +84,17 @@ async function getProviderData(handle: string) {
 }
 
 // --- Helper Components ---
+type ProviderData = Awaited<ReturnType<typeof getProviderData>>;
+type Provider = ProviderData['provider'];
+type ProviderService = Provider['services'][number];
+type ProviderReview = Provider['reviews'][number];
+
 function ProviderHeader({
   provider,
   averageRating,
   bookingCount,
 }: {
-  provider: any;
+  provider: Provider;
   averageRating: number;
   bookingCount: number;
 }) {
@@ -155,7 +160,7 @@ function ProviderHeader({
   );
 }
 
-function ServiceCard({ service }: { service: any }) {
+function ServiceCard({ service }: { service: ProviderService }) {
   return (
     <Link href={`/s/${service.slug}`} key={service.id}>
       <Card className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-lg">
@@ -184,7 +189,7 @@ function ServiceCard({ service }: { service: any }) {
   );
 }
 
-function ReviewCard({ review }: { review: any }) {
+function ReviewCard({ review }: { review: ProviderReview }) {
   const firstName = review.user.firstName ?? 'Customer';
   const lastInitial = review.user.lastName ? ` ${review.user.lastName.charAt(0)}.` : '';
   const reviewerName = `${firstName}${lastInitial}`;
@@ -225,7 +230,7 @@ export default async function ProviderProfilePage({
         <h2 className="mb-6 text-2xl font-bold">Services offered by {provider.businessName}</h2>
         {provider.services.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {provider.services.map((service: any) => (
+            {provider.services.map((service) => (
               <ServiceCard key={service.id} service={service} />
             ))}
           </div>
@@ -238,7 +243,7 @@ export default async function ProviderProfilePage({
         <h2 className="mb-6 text-2xl font-bold">What customers are saying</h2>
         {provider.reviews.length > 0 ? (
           <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-            {provider.reviews.map((review: any) => (
+            {provider.reviews.map((review) => (
               <ReviewCard key={review.id} review={review} />
             ))}
           </div>

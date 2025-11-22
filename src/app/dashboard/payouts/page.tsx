@@ -52,8 +52,8 @@ export default function PayoutsPage() {
           setSummary(summaryData);
         }
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to load financial data.');
     } finally {
       setIsLoading(false);
     }
@@ -70,8 +70,8 @@ export default function PayoutsPage() {
       if (!res.ok) throw new Error('Failed to create onboarding link.');
       const { url } = await res.json();
       window.location.href = url;
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to create onboarding link.');
       setIsRedirecting(false);
     }
   };

@@ -32,7 +32,7 @@ type ServiceWithProvider = {
 
 async function getServices({ query, category }: { query?: string; category?: string }) {
   const isValidCategory = category
-    ? (serviceCategoryEnum.enumValues as readonly string[]).includes(category as any)
+    ? (serviceCategoryEnum.enumValues as readonly string[]).includes(category)
     : false;
 
   // 1. Build the SQL Conditions
@@ -44,7 +44,7 @@ async function getServices({ query, category }: { query?: string; category?: str
       )
     : undefined;
 
-  const categoryCondition = isValidCategory && category ? eq(services.category, category as any) : undefined;
+  const categoryCondition = isValidCategory && category ? eq(services.category, category as ServiceWithProvider['category']) : undefined;
 
   const conditions = [
     eq(providers.status, 'approved'), // Only approved providers

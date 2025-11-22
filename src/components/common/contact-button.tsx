@@ -42,7 +42,7 @@ export function ContactButton({
 
       const { conversationId } = await res.json();
       router.push(`/dashboard/messages/${conversationId}`);
-    } catch (error) {
+    } catch {
       toast.error('Error', {
         description: 'Could not start chat. Please try again.',
       });

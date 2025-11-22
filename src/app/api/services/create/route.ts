@@ -33,8 +33,9 @@ export async function POST(req: Request) {
       return new NextResponse("Not a provider. Register as a provider first.", { status: 403 });
     }
 
-    // --- TODO: Check if provider is verified ---
-    // We will add this check later. For now, any provider can create.
+    if (provider.status !== 'approved') {
+      return new NextResponse('You must be an approved provider to list services.', { status: 403 });
+    }
 
     const { title, description, priceInCents, category } = await req.json();
 

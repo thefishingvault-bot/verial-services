@@ -64,7 +64,7 @@ export default function CustomerBookingsPage() {
         setIsLoading(false);
       })
       .catch((err) => {
-        setError(err.message);
+        setError((err as Error).message ?? 'Failed to fetch your bookings.');
         setIsLoading(false);
       });
   }, []);
@@ -96,8 +96,8 @@ export default function CustomerBookingsPage() {
 
       // Refresh list
       fetchBookings();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to cancel booking.');
       setIsLoading(false);
     }
   };

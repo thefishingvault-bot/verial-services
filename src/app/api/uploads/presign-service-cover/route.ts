@@ -1,9 +1,9 @@
 import { db } from '@/lib/db';
 import { getR2Client } from '@/lib/r2';
-import { providers } from '@/db/schema';
+import { providers, services } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { PutObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -24,6 +24,10 @@ export async function POST(req: Request) {
       return new NextResponse('Not a provider', { status: 403 });
     }
 
+    if (provider.status !== 'approved') {
+      return new NextResponse('Provider must be approved to upload images.', { status: 403 });
+    }
+
     const { serviceId, fileType, fileSize } = await req.json();
     if (!serviceId || !fileType || !fileSize) {
       return new NextResponse('Missing serviceId, fileType, or fileSize', { status: 400 });
@@ -38,8 +42,17 @@ export async function POST(req: Request) {
       return new NextResponse('File size exceeds 5MB limit.', { status: 400 });
     }
 
-    // 3. TODO: Verify serviceId belongs to this provider
-    // (Skipping for MVP, but add in production)
+    // 3. Verify service ownership
+    const service = await db.query.services.findFirst({
+      where: and(
+        eq(services.id, serviceId),
+        eq(services.providerId, provider.id)
+      ),
+    });
+
+    if (!service) {
+      return new NextResponse('Service not found or you do not own it.', { status: 404 });
+    }
 
     // 4. Generate a unique key for the file
     const fileExtension = fileType.split('/')[1];
