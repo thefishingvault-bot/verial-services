@@ -99,6 +99,7 @@ export default function ConversationPage() {
 	const isProviderViewer = viewerRole === "provider";
 	const counterpart =
 		viewerRole === "provider" ? customer : provider ?? customer;
+	const viewerUserId = isProviderViewer ? provider?.id : customer.id;
 
 	return (
 		<div className="flex h-full flex-col bg-muted/10">
@@ -110,20 +111,18 @@ export default function ConversationPage() {
 					counterpartAvatarUrl={counterpart.avatarUrl}
 					counterpartRole={isProviderViewer ? "customer" : "provider"}
 					serviceTitle={booking?.serviceTitle ?? "Direct message"}
-					bookingRef={booking?.publicRef ?? "—"}
-					scheduledAt={
-						booking?.scheduledAt ?? new Date().toISOString()
-					}
-					amountInCents={booking?.totalInCents ?? 0}
-					includesGst={booking?.includesGst ?? false}
-					status={booking?.status ?? "pending"}
+					bookingRef={booking?.publicRef ?? null}
+					scheduledAt={booking?.scheduledAt ?? null}
+					amountInCents={booking?.totalInCents ?? null}
+					includesGst={booking?.includesGst ?? null}
+					status={booking?.status ?? null}
 					rating={provider?.rating}
 					jobsCompleted={provider?.jobsCompleted}
 					isVerified={provider?.isVerified ?? false}
 					bookingUrl={
 						booking
 							? `/dashboard/bookings/${booking.id}`
-							: "/dashboard/bookings"
+							: null
 					}
 					profileUrl={
 						isProviderViewer
@@ -144,29 +143,47 @@ export default function ConversationPage() {
 					)}
 
 					{messages.map((msg) => {
-						const isMe = false; // viewer id not available client-side here yet
+						const isMe = viewerUserId === msg.senderId;
+						const displayName = isMe
+							? "You"
+							: msg.sender.firstName || msg.sender.lastName
+									? `${msg.sender.firstName ?? ""} ${msg.sender.lastName ?? ""}`.trim()
+									: counterpart.name;
 						return (
 							<div
 								key={msg.id}
-								className={`flex ${isMe ? "justify-end" : "justify-start"}`}
+									className={`flex ${isMe ? "justify-end" : "justify-start"}`}
 							>
 								<div
-									className={`flex max-w-[80%] items-end gap-2 ${
-										isMe ? "flex-row-reverse" : "flex-row"
-									}`}
-								>
-									{!isMe && (
-										<div className="h-6 w-6 rounded-full bg-muted" />
-									)}
-									<div
-										className={`rounded-lg p-3 ${
-											isMe
-												? "bg-primary text-primary-foreground"
-												: "bg-muted"
+										className={`flex max-w-[70%] items-end gap-2 ${
+											isMe ? "flex-row-reverse" : "flex-row"
 										}`}
+								>
+										{!isMe && (
+											<div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
+												{(msg.sender.firstName || msg.sender.lastName
+														? `${msg.sender.firstName ?? ""} ${msg.sender.lastName ?? ""}`.trim()
+														: counterpart.name
+													)?.charAt(0)
+													?.toUpperCase()}
+											</div>
+										)}
+									<div
+											className={`rounded-lg p-3 text-sm ${
+												isMe
+													? "bg-primary text-primary-foreground"
+													: "bg-muted text-foreground"
+											}`}
 									>
-										<p className="text-sm">{msg.content}</p>
-										<span className="mt-1 block text-right text-[10px] opacity-70">
+											<p className="mb-1 text-[11px] font-medium opacity-80">
+												{displayName}
+											</p>
+											<p>{msg.content}</p>
+											<span
+												className={`mt-1 block text-[10px] opacity-70 ${
+													isMe ? "text-right" : "text-left"
+												}`}
+											>
 											{new Date(msg.createdAt).toLocaleTimeString([], {
 												hour: "2-digit",
 												minute: "2-digit",
