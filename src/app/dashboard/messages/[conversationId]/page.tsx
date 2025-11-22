@@ -96,34 +96,42 @@ export default function ConversationPage() {
 	}
 
 	const { booking, provider, customer, viewerRole, messages } = data;
+	const isProviderViewer = viewerRole === "provider";
 	const counterpart =
 		viewerRole === "provider" ? customer : provider ?? customer;
-	const isProviderViewer = viewerRole === "provider";
 
 	return (
 		<div className="flex h-full flex-col bg-muted/10">
-			{booking && provider && counterpart && (
+			{counterpart && (
 				<ConversationHeader
 					listHref="/dashboard/messages"
 					counterpartName={counterpart.name}
 					counterpartHandle={counterpart.handle}
 					counterpartAvatarUrl={counterpart.avatarUrl}
 					counterpartRole={isProviderViewer ? "customer" : "provider"}
-					serviceTitle={booking.serviceTitle}
-					bookingRef={booking.publicRef}
-					scheduledAt={booking.scheduledAt ?? new Date().toISOString()}
-					amountInCents={booking.totalInCents}
-					includesGst={booking.includesGst}
-					status={booking.status}
-					rating={provider.rating}
-					jobsCompleted={provider.jobsCompleted}
-					isVerified={provider.isVerified}
-					bookingUrl={`/dashboard/bookings/${booking.id}`}
+					serviceTitle={booking?.serviceTitle ?? "Direct message"}
+					bookingRef={booking?.publicRef ?? "—"}
+					scheduledAt={
+						booking?.scheduledAt ?? new Date().toISOString()
+					}
+					amountInCents={booking?.totalInCents ?? 0}
+					includesGst={booking?.includesGst ?? false}
+					status={booking?.status ?? "pending"}
+					rating={provider?.rating}
+					jobsCompleted={provider?.jobsCompleted}
+					isVerified={provider?.isVerified ?? false}
+					bookingUrl={
+						booking
+							? `/dashboard/bookings/${booking.id}`
+							: "/dashboard/bookings"
+					}
 					profileUrl={
 						isProviderViewer
 							? `/dashboard/customers/${customer.id}`
-							: `/p/${provider.handle}`
-						}
+							: provider
+								? `/p/${provider.handle}`
+								: "/dashboard/profile"
+					}
 				/>
 			)}
 
