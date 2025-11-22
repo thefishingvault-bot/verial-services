@@ -172,13 +172,29 @@ export default async function BrowseServicesPage({ searchParams }: BrowseService
       )}
 
       <div className="mt-8 flex items-center justify-center gap-4">
-        <PaginationControls currentPage={currentPage} hasMore={hasMore} />
+        <PaginationControls
+          currentPage={currentPage}
+          hasMore={hasMore}
+          searchParams={{
+            category,
+            region,
+            minPrice,
+            maxPrice,
+            sort,
+          }}
+        />
       </div>
     </div>
   );
 }
 
-function PaginationControls({ currentPage, hasMore }: { currentPage: number; hasMore: boolean }) {
+interface PaginationControlsProps {
+  currentPage: number;
+  hasMore: boolean;
+  searchParams?: Record<string, string | undefined>;
+}
+
+function PaginationControls({ currentPage, hasMore, searchParams }: PaginationControlsProps) {
   const prevPage = currentPage > 1 ? currentPage - 1 : 1;
   const nextPage = currentPage + 1;
 
@@ -186,6 +202,15 @@ function PaginationControls({ currentPage, hasMore }: { currentPage: number; has
 
   const buildHref = (page: number) => {
     const params = new URLSearchParams();
+
+    if (searchParams) {
+      for (const [key, value] of Object.entries(searchParams)) {
+        if (value !== undefined && value !== "") {
+          params.set(key, value);
+        }
+      }
+    }
+
     params.set("page", String(page));
     return `${basePath}?${params.toString()}`;
   };
