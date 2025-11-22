@@ -23,22 +23,24 @@ async function fetchConversations(): Promise<ConversationSummary[]> {
     return [];
   }
 
-  const data: { conversations?: {
-    id: string;
-    counterpart: {
+  const data: {
+    conversations?: {
       id: string;
-      name: string;
-      handle?: string;
-      avatarUrl: string | null;
-    };
-    lastMessage: string;
-    lastMessageAt: string;
-    unreadCount: number;
-    booking?: {
-      publicRef: string;
-      serviceTitle: string;
-    } | null;
-  }[] } = await res.json();
+      counterpart: {
+        id: string;
+        name: string;
+        handle?: string;
+        avatarUrl: string | null;
+      };
+      lastMessage: string;
+      lastMessageAt: string;
+      unreadCount: number;
+      booking?: {
+        publicRef: string;
+        serviceTitle: string;
+      } | null;
+    }[];
+  } = await res.json();
 
   return (data.conversations ?? []).map((c) => ({
     id: c.id,
@@ -61,7 +63,13 @@ function formatTime(iso: string) {
   }).format(d);
 }
 
-export async function ConversationList() {
+interface ConversationListProps {
+  activeConversationId?: string;
+}
+
+export async function ConversationList({
+  activeConversationId,
+}: ConversationListProps) {
   const conversations = await fetchConversations();
 
   if (!conversations.length) {
@@ -74,53 +82,60 @@ export async function ConversationList() {
 
   return (
     <ul className="divide-y text-sm">
-      {conversations.map((c) => (
-        <li key={c.id}>
-          <Link
-            href={`/dashboard/messages/${c.id}`}
-            className="flex gap-3 px-4 py-3 hover:bg-muted/60"
-          >
-            <Avatar className="mt-0.5 h-8 w-8">
-              {c.counterpartAvatarUrl && (
-                <AvatarImage
-                  src={c.counterpartAvatarUrl}
-                  alt={c.counterpartName}
-                />
-              )}
-              <AvatarFallback>
-                {c.counterpartName.charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
+      {conversations.map((c) => {
+        const isActive = c.id === activeConversationId;
+        return (
+          <li key={c.id}>
+            <Link
+              href={`/dashboard/messages/${c.id}`}
+              className={`flex gap-3 px-4 py-3 text-xs hover:bg-muted/60 ${
+                isActive
+                  ? "border-l-2 border-sky-500 bg-muted/80 font-medium"
+                  : "border-l-2 border-transparent"
+              }`}
+            >
+              <Avatar className="mt-0.5 h-8 w-8">
+                {c.counterpartAvatarUrl && (
+                  <AvatarImage
+                    src={c.counterpartAvatarUrl}
+                    alt={c.counterpartName}
+                  />
+                )}
+                <AvatarFallback>
+                  {c.counterpartName.charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-xs font-medium">
-                  {c.counterpartName}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate">{c.counterpartName}</p>
+                  <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                    {formatTime(c.lastMessageAt)}
+                  </span>
+                </div>
+
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {c.serviceTitle
+                    ? c.serviceTitle
+                    : c.bookingRef
+                      ? `Booking #${c.bookingRef}`
+                      : "Direct message"}
                 </p>
-                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-                  {formatTime(c.lastMessageAt)}
-                </span>
+
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {c.lastMessagePreview || "No messages yet"}
+                </p>
               </div>
 
-              {c.serviceTitle && (
-                <p className="truncate text-[11px] text-muted-foreground">
-                  {c.serviceTitle}
-                </p>
+              {c.unreadCount > 0 && (
+                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-500 px-1 text-[11px] font-semibold text-white">
+                  {c.unreadCount}
+                </span>
               )}
-
-              <p className="truncate text-[11px] text-muted-foreground">
-                {c.lastMessagePreview || "No messages yet"}
-              </p>
-            </div>
-
-            {c.unreadCount > 0 && (
-              <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-500 px-1 text-[11px] font-semibold text-white">
-                {c.unreadCount}
-              </span>
-            )}
-          </Link>
-        </li>
-      ))}
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }

@@ -9,7 +9,7 @@ export default function MessagesLayout({
   return (
     <div className="flex h-full overflow-hidden bg-muted/10">
       {/* LEFT: inbox / conversations list */}
-      <aside className="hidden w-full max-w-xs flex-col border-r bg-white md:flex">
+      <aside className="hidden w-[300px] flex-col border-r bg-white md:flex">
         <div className="flex items-center justify-between border-b px-4 py-3">
           <h1 className="text-sm font-semibold">Messages</h1>
         </div>
