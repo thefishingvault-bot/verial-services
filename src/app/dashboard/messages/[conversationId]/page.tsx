@@ -103,7 +103,7 @@ export default function ConversationPage() {
 	const viewerUserId = isProviderViewer ? provider?.id ?? null : customer.id;
 
 	return (
-		<div className="flex h-full flex-col bg-muted/10">
+		<div className="flex h-full flex-1 flex-col bg-muted/10">
 			{counterpart && (
 				<ConversationHeader
 					listHref="/dashboard/messages"
@@ -124,7 +124,7 @@ export default function ConversationPage() {
 						booking
 							? `/dashboard/bookings/${booking.id}`
 							: null
-					}
+						}
 					profileUrl={
 						isProviderViewer
 							? `/dashboard/customers/${customer.id}`
@@ -135,17 +135,19 @@ export default function ConversationPage() {
 				/>
 			)}
 
-			<ChatThread
-				conversationId={conversationId}
-				viewerUserId={viewerUserId}
-				counterpart={{
-					id: counterpart.id,
-					name: counterpart.name,
-					handle: counterpart.handle,
-					avatarUrl: counterpart.avatarUrl,
-				}}
-				initialMessages={messages}
-			/>
+			<div className="flex min-h-0 flex-1 flex-col">
+				<ChatThread
+					conversationId={conversationId}
+					viewerUserId={viewerUserId}
+					counterpart={{
+						id: counterpart.id,
+						name: counterpart.name,
+						handle: counterpart.handle,
+						avatarUrl: counterpart.avatarUrl,
+					}}
+					initialMessages={messages}
+				/>
+			</div>
 		</div>
 	);
 }
