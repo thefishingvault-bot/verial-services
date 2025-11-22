@@ -1,16 +1,13 @@
-import Link from 'next/link';
-import Image from 'next/image';
-import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Package, Star } from 'lucide-react';
-import { db } from '@/lib/db';
-import { formatPrice, getTrustBadge } from '@/lib/utils';
-import { services, providers, reviews, serviceCategoryEnum } from '@/db/schema';
-import { eq, and, ilike, desc, or, inArray } from 'drizzle-orm';
-import { ServiceFilters } from '@/components/services/service-filters';
+import Link from "next/link";
+import Image from "next/image";
+import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Package, Star } from "lucide-react";
+import { formatPrice, getTrustBadge } from "@/lib/utils";
+import { serviceCategoryEnum } from "@/db/schema";
+import { ServicesFiltersBar } from "@/components/services/services-filters-bar";
 
-// Helper type for our result (aligned to the selected fields below)
-type ServiceWithProvider = {
+type ServiceSummary = {
   id: string;
   title: string;
   slug: string;
@@ -18,156 +15,94 @@ type ServiceWithProvider = {
   priceInCents: number;
   category: (typeof serviceCategoryEnum.enumValues)[number];
   coverImageUrl: string | null;
-  createdAt: Date;
+  createdAt: string;
   provider: {
     id: string;
     handle: string | null;
     businessName: string | null;
     isVerified: boolean;
-    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum' | null;
-    baseSuburb: string | null;
+    trustLevel: "bronze" | "silver" | "gold" | "platinum" | null;
     baseRegion: string | null;
-    serviceRadiusKm: number | null;
+    baseSuburb?: string | null;
+    serviceRadiusKm?: number | null;
   };
   avgRating: number;
   reviewCount: number;
 };
 
-async function getServices({ query, category }: { query?: string; category?: string }) {
-  const isValidCategory = category
-    ? (serviceCategoryEnum.enumValues as readonly string[]).includes(category)
-    : false;
-
-  // 1. Build the SQL Conditions
-  const searchCondition = query
-    ? or(
-        ilike(services.title, `%${query}%`),
-        ilike(services.description, `%${query}%`),
-        ilike(providers.businessName, `%${query}%`),
-      )
-    : undefined;
-
-  const categoryCondition = isValidCategory && category ? eq(services.category, category as ServiceWithProvider['category']) : undefined;
-
-  const conditions = [
-    eq(providers.status, 'approved'), // Only approved providers
-    categoryCondition,
-    searchCondition,
-  ].filter((c): c is NonNullable<typeof c> => !!c);
-
-  // 2. Main Query: Fetch Services + Providers
-  const serviceResults = await db
-    .select({
-      // Service fields
-      id: services.id,
-      title: services.title,
-      slug: services.slug,
-      description: services.description,
-      priceInCents: services.priceInCents,
-      category: services.category,
-      coverImageUrl: services.coverImageUrl,
-      createdAt: services.createdAt,
-      updatedAt: services.updatedAt,
-      chargesGst: services.chargesGst,
-      // Provider fields
-      providerId: providers.id,
-      providerHandle: providers.handle,
-      providerName: providers.businessName,
-      providerVerified: providers.isVerified,
-      providerTrust: providers.trustLevel,
-      providerBaseSuburb: providers.baseSuburb,
-      providerBaseRegion: providers.baseRegion,
-      providerServiceRadiusKm: providers.serviceRadiusKm,
-    })
-    .from(services)
-    .leftJoin(providers, eq(services.providerId, providers.id))
-    .where(and(...conditions))
-    .orderBy(desc(services.createdAt));
-
-  // 3. Fetch Reviews for these providers to calculate ratings
-  const providerIds = [...new Set(serviceResults.map((s) => s.providerId))].filter(Boolean) as string[];
-
-  const reviewMap: Record<string, { total: number; count: number }> = {};
-
-  if (providerIds.length > 0) {
-    const reviewData = await db
-      .select({
-        providerId: reviews.providerId,
-        rating: reviews.rating,
-      })
-      .from(reviews)
-      .where(inArray(reviews.providerId, providerIds));
-
-    reviewData.forEach((r) => 
-      {
-        const key = String(r.providerId);
-        if (!reviewMap[key]) {
-          reviewMap[key] = { total: 0, count: 0 };
-        }
-        reviewMap[key].total += r.rating ?? 0;
-        reviewMap[key].count += 1;
-      },
-    );
-  }
-
-  // 4. Merge and Format
-  return serviceResults.map<ServiceWithProvider>((s) => {
-    const key = String(s.providerId);
-    const stats = reviewMap[key] || { total: 0, count: 0 };
-    const avgRating = stats.count > 0 ? stats.total / stats.count : 0;
-
-    return {
-      id: s.id,
-      title: s.title,
-      slug: s.slug,
-      description: s.description,
-      priceInCents: s.priceInCents,
-      category: s.category as ServiceWithProvider['category'],
-      coverImageUrl: s.coverImageUrl,
-      createdAt: s.createdAt,
-      provider: {
-        id: s.providerId!,
-        handle: s.providerHandle,
-        businessName: s.providerName,
-        isVerified: s.providerVerified ?? false,
-        trustLevel: (s.providerTrust ?? 'bronze') as ServiceWithProvider['provider']['trustLevel'],
-        baseSuburb: s.providerBaseSuburb,
-        baseRegion: s.providerBaseRegion,
-        serviceRadiusKm: s.providerServiceRadiusKm,
-      },
-      avgRating,
-      reviewCount: stats.count,
-    };
-  });
+interface BrowseServicesPageProps {
+  searchParams?: Promise<{
+    category?: string;
+    region?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    sort?: string;
+    page?: string;
+  }>;
 }
 
-export default async function BrowseServicesPage({
-  searchParams,
-}: {
-  searchParams?: Promise<{ q?: string; category?: string }>;
-}) {
+export default async function BrowseServicesPage({ searchParams }: BrowseServicesPageProps) {
   const resolvedParams = await searchParams;
-  const query = resolvedParams?.q?.toLowerCase();
   const category = resolvedParams?.category;
+  const region = resolvedParams?.region;
+  const minPrice = resolvedParams?.minPrice;
+  const maxPrice = resolvedParams?.maxPrice;
+  const sort = resolvedParams?.sort;
+  const page = resolvedParams?.page ?? "1";
 
-  const servicesList = await getServices({ query, category });
+  const search = new URLSearchParams();
+  if (category) search.set("category", category);
+  if (region) search.set("region", region);
+  if (minPrice) search.set("minPrice", minPrice);
+  if (maxPrice) search.set("maxPrice", maxPrice);
+  if (sort) search.set("sort", sort);
+  if (page) search.set("page", page);
 
-  let title = 'Browse All Services';
-  if (query) title = `Results for "${query}"`;
-  else if (category) title = `Services in "${category}"`;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+  const res = await fetch(`${baseUrl}/api/services/list?${search.toString()}`, {
+    // Always fetch server-side; no caching for now to keep it simple
+    cache: "no-store",
+  });
+
+  if (!res.ok) {
+    throw new Error("Failed to load services");
+  }
+
+  const data = (await res.json()) as {
+    services: ServiceSummary[];
+    page: number;
+    pageSize: number;
+    hasMore: boolean;
+  };
+
+  const servicesList = data.services;
+  const currentPage = data.page;
+  const hasMore = data.hasMore;
+
+  let title = "Browse All Services";
+  if (category) title = `Services in "${category}"`;
+  if (region) title = `${title} near ${region}`;
 
   return (
     <div className="container mx-auto py-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold capitalize mb-6">{title}</h1>
-        <ServiceFilters />
+      <div className="mb-8 space-y-4">
+        <h1 className="text-3xl font-bold capitalize">{title}</h1>
+        <ServicesFiltersBar
+          initialCategory={category}
+          initialRegion={region}
+          initialMinPrice={minPrice}
+          initialMaxPrice={maxPrice}
+          initialSort={sort ?? "relevance"}
+        />
       </div>
 
       {servicesList.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center">
           <Package className="h-16 w-16 text-muted-foreground mb-4" />
-          <h3 className="text-xl font-semibold">No Services Found</h3>
-          <p className="text-muted-foreground">No services match your criteria.</p>
+          <h3 className="text-xl font-semibold">No services found</h3>
+          <p className="text-muted-foreground">
+            No services match your filters. Try widening your search.
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -235,6 +170,51 @@ export default async function BrowseServicesPage({
           ))}
         </div>
       )}
+
+      <div className="mt-8 flex items-center justify-center gap-4">
+        <PaginationControls currentPage={currentPage} hasMore={hasMore} />
+      </div>
+    </div>
+  );
+}
+
+function PaginationControls({ currentPage, hasMore }: { currentPage: number; hasMore: boolean }) {
+  const prevPage = currentPage > 1 ? currentPage - 1 : 1;
+  const nextPage = currentPage + 1;
+
+  const basePath = "/services";
+
+  const buildHref = (page: number) => {
+    const params = new URLSearchParams();
+    params.set("page", String(page));
+    return `${basePath}?${params.toString()}`;
+  };
+
+  return (
+    <div className="flex items-center gap-4">
+      <Link
+        href={buildHref(prevPage)}
+        aria-disabled={currentPage === 1}
+        className={`text-sm font-medium underline-offset-4 ${
+          currentPage === 1
+            ? "pointer-events-none cursor-default text-muted-foreground"
+            : "hover:underline"
+        }`}
+      >
+        Previous
+      </Link>
+      <span className="text-xs text-muted-foreground">Page {currentPage}</span>
+      <Link
+        href={buildHref(nextPage)}
+        aria-disabled={!hasMore}
+        className={`text-sm font-medium underline-offset-4 ${
+          !hasMore
+            ? "pointer-events-none cursor-default text-muted-foreground"
+            : "hover:underline"
+        }`}
+      >
+        Next
+      </Link>
     </div>
   );
 }
