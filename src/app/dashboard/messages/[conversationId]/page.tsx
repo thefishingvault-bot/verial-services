@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
+import { ChatThread } from "@/components/messages/chat-thread";
 import { ConversationHeader } from "@/components/messages/conversation-header";
-import { ChatInput } from "@/components/messages/chat-input";
 
 type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
 
@@ -69,8 +69,8 @@ export default function ConversationPage() {
 				return res.json();
 			})
 			.then((json: ConversationContext) => {
-				setIsLoading(false);
 				setData(json);
+				setIsLoading(false);
 			})
 			.catch((err: Error) => {
 				setError(err.message);
@@ -100,12 +100,7 @@ export default function ConversationPage() {
 	const isProviderViewer = viewerRole === "provider";
 	const counterpart =
 		viewerRole === "provider" ? customer : provider ?? customer;
-	const viewerUserId = isProviderViewer ? provider?.id : customer.id;
-	const [localMessages, setLocalMessages] = useState(data.messages);
-
-	useEffect(() => {
-		setLocalMessages(messages);
-	}, [messages]);
+	const viewerUserId = isProviderViewer ? provider?.id ?? null : customer.id;
 
 	return (
 		<div className="flex h-full flex-col bg-muted/10">
@@ -140,84 +135,17 @@ export default function ConversationPage() {
 				/>
 			)}
 
-			<div className="flex flex-1 flex-col">
-				<div className="flex-1 space-y-4 overflow-y-auto p-4">
-					{localMessages.length === 0 && (
-						<p className="mt-10 text-center text-muted-foreground">
-							No messages yet. Say hello!
-						</p>
-					)}
-
-					{localMessages.map((msg) => {
-						const isMe = viewerUserId === msg.senderId;
-						const displayName = isMe
-							? "You"
-							: msg.sender.firstName || msg.sender.lastName
-									? `${msg.sender.firstName ?? ""} ${msg.sender.lastName ?? ""}`.trim()
-									: counterpart.name;
-						return (
-							<div
-								key={msg.id}
-									className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-							>
-								<div
-										className={`flex max-w-[70%] items-end gap-2 ${
-											isMe ? "flex-row-reverse" : "flex-row"
-										}`}
-								>
-										{!isMe && (
-											<div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
-												{(msg.sender.firstName || msg.sender.lastName
-														? `${msg.sender.firstName ?? ""} ${msg.sender.lastName ?? ""}`.trim()
-														: counterpart.name
-													)?.charAt(0)
-													?.toUpperCase()}
-											</div>
-										)}
-									<div
-											className={`rounded-lg p-3 text-sm ${
-												isMe
-													? "bg-primary text-primary-foreground"
-													: "bg-muted text-foreground"
-											}`}
-									>
-											<p className="mb-1 text-[11px] font-medium opacity-80">
-												{displayName}
-											</p>
-											<p>{msg.content}</p>
-											<span
-												className={`mt-1 block text-[10px] opacity-70 ${
-													isMe ? "text-right" : "text-left"
-												}`}
-											>
-											{new Date(msg.createdAt).toLocaleTimeString([], {
-												hour: "2-digit",
-												minute: "2-digit",
-											})}
-										</span>
-									</div>
-								</div>
-							</div>
-						);
-					})}
-				</div>
-
-				<div className="border-t bg-background p-4">
-					<ChatInput
-						conversationId={conversationId}
-						onMessageSent={(msg) =>
-							setLocalMessages((prev) => [...prev, {
-								...msg,
-								sender: {
-									firstName: isProviderViewer ? provider?.name ?? null : customer.name,
-									lastName: null,
-									avatarUrl: isProviderViewer ? provider?.avatarUrl ?? null : customer.avatarUrl,
-								},
-							}])
-						}
-					/>
-				</div>
-			</div>
+			<ChatThread
+				conversationId={conversationId}
+				viewerUserId={viewerUserId}
+				counterpart={{
+					id: counterpart.id,
+					name: counterpart.name,
+					handle: counterpart.handle,
+					avatarUrl: counterpart.avatarUrl,
+				}}
+				initialMessages={messages}
+			/>
 		</div>
 	);
 }
