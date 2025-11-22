@@ -20,6 +20,7 @@ export async function GET(
       with: {
         provider: {
           columns: {
+            userId: true,
             handle: true,
             businessName: true,
             isVerified: true,

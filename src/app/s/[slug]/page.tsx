@@ -14,6 +14,7 @@ import { formatPrice, getTrustBadge } from '@/lib/utils';
 import { Calendar } from '@/components/ui/calendar';
 import { Label } from '@/components/ui/label';
 import { format } from 'date-fns';
+import { ContactButton } from '@/components/common/contact-button';
 
 interface ServiceDetails {
   id: string;
@@ -25,6 +26,7 @@ interface ServiceDetails {
   coverImageUrl: string | null;
   providerId: string;
   provider: {
+		userId: string;
     handle: string;
     businessName: string;
     isVerified: boolean;
@@ -204,18 +206,7 @@ export default function ServiceDetailPage() {
                   <CardDescription>@{service.provider.handle}</CardDescription>
                 </Link>
               </div>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  (window.location.href = `mailto:${service.provider.user.email}?subject=${encodeURIComponent(
-                    `Enquiry about ${service.title}`,
-                  )}`)
-                }
-              >
-                Contact Provider
-              </Button>
+        <ContactButton providerUserId={service.provider.userId} />
             </CardHeader>
             <CardContent>
               <div className="flex flex-col space-y-2">

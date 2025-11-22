@@ -45,6 +45,7 @@ async function getProviderData(handle: string) {
     with: {
       user: {
         columns: {
+          id: true,
           email: true,
           avatarUrl: true,
           createdAt: true,
@@ -117,10 +118,7 @@ function ProviderHeader({
                 @{provider.handle}
               </Link>
             </div>
-            <ContactButton
-              email={provider.user.email}
-              subject={`Enquiry for ${provider.businessName}`}
-            />
+				<ContactButton providerUserId={provider.user.id} />
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">
