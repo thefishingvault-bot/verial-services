@@ -3,8 +3,10 @@ import { auth } from "@clerk/nextjs/server";
 import { and, eq, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { conversations, messages } from "@/db/schema";
+import { conversations, messages, users } from "@/db/schema";
 import { pusherServer } from "@/lib/pusher";
+import { createNotification } from "@/lib/notifications";
+import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
@@ -67,6 +69,32 @@ export async function POST(req: Request) {
 
     if (pusherServer) {
       await pusherServer.trigger(`chat-${activeConversationId}`, "new-message", newMessage);
+    }
+
+    // Notify recipient if provided
+    if (recipientId) {
+      await createNotification({
+        userId: recipientId,
+        message: "New message",
+        href: `/dashboard/messages/${activeConversationId}`,
+      });
+
+      try {
+        const recipient = await db.query.users.findFirst({
+          where: eq(users.id, recipientId),
+          columns: { email: true },
+        });
+
+        if (recipient?.email) {
+          await sendEmail({
+            to: recipient.email,
+            subject: "New Message on Verial",
+            html: `<p>You have a new message.</p><a href='${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/messages/${activeConversationId}'>View Message</a>`,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to send email notification", e);
+      }
     }
 
     return NextResponse.json(newMessage);
