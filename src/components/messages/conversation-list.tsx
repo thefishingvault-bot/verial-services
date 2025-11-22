@@ -74,8 +74,11 @@ export async function ConversationList({
 
   if (!conversations.length) {
     return (
-      <div className="flex h-full items-center justify-center px-4 text-center text-xs text-muted-foreground">
-        No conversations yet. Messages from your bookings will appear here.
+      <div className="flex h-full flex-col items-center justify-center px-4 text-center text-xs text-muted-foreground">
+        <p className="mb-1 font-medium text-foreground">No conversations yet</p>
+        <p className="max-w-[220px] text-[11px] text-muted-foreground">
+          Once you book providers, your conversations will appear here.
+        </p>
       </div>
     );
   }

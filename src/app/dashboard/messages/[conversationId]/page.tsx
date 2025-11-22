@@ -103,50 +103,52 @@ export default function ConversationPage() {
 	const viewerUserId = isProviderViewer ? provider?.id ?? null : customer.id;
 
 	return (
-		<div className="flex h-full flex-1 flex-col bg-muted/10">
-			{counterpart && (
-				<ConversationHeader
-					listHref="/dashboard/messages"
-					counterpartName={counterpart.name}
-					counterpartHandle={counterpart.handle}
-					counterpartAvatarUrl={counterpart.avatarUrl}
-					counterpartRole={isProviderViewer ? "customer" : "provider"}
-					serviceTitle={booking?.serviceTitle ?? "Direct message"}
-					bookingRef={booking?.publicRef ?? null}
-					scheduledAt={booking?.scheduledAt ?? null}
-					amountInCents={booking?.totalInCents ?? null}
-					includesGst={booking?.includesGst ?? null}
-					status={booking?.status ?? null}
-					rating={provider?.rating}
-					jobsCompleted={provider?.jobsCompleted}
-					isVerified={provider?.isVerified ?? false}
-					bookingUrl={
-						booking
-							? `/dashboard/bookings/${booking.id}`
-							: null
+		<div className="flex h-full flex-1 flex-col px-4 py-4 md:px-8 md:py-6">
+			<div className="mx-auto flex h-full w-full max-w-4xl flex-1 flex-col rounded-xl border bg-white shadow-sm">
+				{counterpart && (
+					<ConversationHeader
+						listHref="/dashboard/messages"
+						counterpartName={counterpart.name}
+						counterpartHandle={counterpart.handle}
+						counterpartAvatarUrl={counterpart.avatarUrl}
+						counterpartRole={isProviderViewer ? "customer" : "provider"}
+						serviceTitle={booking?.serviceTitle ?? "Direct message"}
+						bookingRef={booking?.publicRef ?? null}
+						scheduledAt={booking?.scheduledAt ?? null}
+						amountInCents={booking?.totalInCents ?? null}
+						includesGst={booking?.includesGst ?? null}
+						status={booking?.status ?? null}
+						rating={provider?.rating}
+						jobsCompleted={provider?.jobsCompleted}
+						isVerified={provider?.isVerified ?? false}
+						bookingUrl={
+							booking
+								? `/dashboard/bookings/${booking.id}`
+								: null
 						}
-					profileUrl={
-						isProviderViewer
-							? `/dashboard/customers/${customer.id}`
-							: provider
-								? `/p/${provider.handle}`
-								: "/dashboard/profile"
-					}
-				/>
-			)}
+						profileUrl={
+							isProviderViewer
+								? `/dashboard/customers/${customer.id}`
+								: provider
+									? `/p/${provider.handle}`
+									: "/dashboard/profile"
+						}
+					/>
+				)}
 
-			<div className="flex min-h-0 flex-1 flex-col">
-				<ChatThread
-					conversationId={conversationId}
-					viewerUserId={viewerUserId}
-					counterpart={{
-						id: counterpart.id,
-						name: counterpart.name,
-						handle: counterpart.handle,
-						avatarUrl: counterpart.avatarUrl,
-					}}
-					initialMessages={messages}
-				/>
+				<div className="flex min-h-0 flex-1 flex-col bg-muted/10">
+					<ChatThread
+						conversationId={conversationId}
+						viewerUserId={viewerUserId}
+						counterpart={{
+							id: counterpart.id,
+							name: counterpart.name,
+							handle: counterpart.handle,
+							avatarUrl: counterpart.avatarUrl,
+						}}
+						initialMessages={messages}
+					/>
+				</div>
 			</div>
 		</div>
 	);

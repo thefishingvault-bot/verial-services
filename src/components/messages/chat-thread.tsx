@@ -42,28 +42,37 @@ export function ChatThread({
 
   return (
     <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages.length === 0 && (
-          <p className="mt-10 text-center text-xs text-muted-foreground">
-            Say hi to get the conversation started.
-          </p>
-        )}
+      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+        <div className="mx-auto flex max-w-2xl flex-1 flex-col space-y-4">
+          {messages.length === 0 && (
+            <div className="flex flex-1 flex-col items-center justify-center text-center text-xs text-muted-foreground">
+              <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-base font-medium">
+                💬
+              </div>
+              <p className="mb-1 font-medium text-foreground">
+                Start the conversation
+              </p>
+              <p className="max-w-xs text-[11px] text-muted-foreground">
+                Your messages with this provider will show up here.
+              </p>
+            </div>
+          )}
 
-        {messages.map((msg) => {
+          {messages.map((msg) => {
           const isMe = viewerUserId === msg.senderId;
           const displayName = isMe ? "You" : counterpart.name;
           const otherInitial = counterpart.name.charAt(0).toUpperCase();
 
-          return (
-            <div
-              key={msg.id}
-              className={`flex ${isMe ? "justify-end" : "justify-start"}`}
-            >
+            return (
               <div
-                className={`flex max-w-[70%] items-end gap-2 ${
-                  isMe ? "flex-row-reverse" : "flex-row"
-                }`}
+                key={msg.id}
+                className={`flex ${isMe ? "justify-end" : "justify-start"}`}
               >
+                <div
+                  className={`flex max-w-[70%] items-end gap-2 ${
+                    isMe ? "flex-row-reverse" : "flex-row"
+                  }`}
+                >
                 {!isMe && (
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
                     {otherInitial}
@@ -92,13 +101,14 @@ export function ChatThread({
                     })}
                   </span>
                 </div>
+                </div>
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </div>
 
-      <div className="border-t bg-background p-4">
+      <div className="border-t bg-background px-4 py-3 md:px-6 md:py-4">
         <ChatInput
           conversationId={conversationId}
           onMessageSent={(msg) =>
