@@ -104,7 +104,7 @@ export default function ConversationPage() {
 
 	return (
 		<div className="flex h-full flex-1 flex-col bg-muted/20 px-4 py-4 md:px-8 md:py-6">
-			<div className="mx-auto flex h-full w-full max-w-4xl flex-1 flex-col rounded-2xl border border-border bg-white shadow-md">
+			<div className="flex h-full w-full max-w-4xl flex-1 flex-col rounded-2xl border border-border bg-white shadow-md">
 				{counterpart && (
 					<ConversationHeader
 						listHref="/dashboard/messages"
