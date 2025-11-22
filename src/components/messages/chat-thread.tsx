@@ -51,11 +51,8 @@ export function ChatThread({
 
         {messages.map((msg) => {
           const isMe = viewerUserId === msg.senderId;
-          const senderName =
-            msg.sender.firstName || msg.sender.lastName
-              ? `${msg.sender.firstName ?? ""} ${msg.sender.lastName ?? ""}`.trim()
-              : counterpart.name;
-          const displayName = isMe ? "You" : senderName;
+          const displayName = isMe ? "You" : counterpart.name;
+          const otherInitial = counterpart.name.charAt(0).toUpperCase();
 
           return (
             <div
@@ -69,9 +66,7 @@ export function ChatThread({
               >
                 {!isMe && (
                   <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {(senderName || counterpart.name)
-                      .charAt(0)
-                      .toUpperCase()}
+                    {otherInitial}
                   </div>
                 )}
 
