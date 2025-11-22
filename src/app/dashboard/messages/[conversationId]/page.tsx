@@ -1,3 +1,7 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { useParams } from "next/navigation";
 import { ConversationHeader } from "@/components/messages/conversation-header";
 
 type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
@@ -41,37 +45,62 @@ interface ConversationContext {
 	viewerRole: "provider" | "customer";
 }
 
-async function getConversationContext(
-	conversationId: string,
-): Promise<ConversationContext> {
-	const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-	const res = await fetch(
-		`${baseUrl}/api/chat/${conversationId}/messages`,
-		{
-			cache: "no-store",
-		},
-	);
+export default function ConversationPage() {
+	const params = useParams();
+	const conversationId = params.conversationId as string;
 
-	if (!res.ok) {
-		throw new Error("Failed to load conversation");
+	const [data, setData] = useState<ConversationContext | null>(null);
+	const [isLoading, setIsLoading] = useState(true);
+	const [error, setError] = useState<string | null>(null);
+
+	useEffect(() => {
+		if (!conversationId) return;
+
+		const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
+
+		setIsLoading(true);
+		setError(null);
+
+		fetch(`${baseUrl}/api/chat/${conversationId}/messages`, {
+			cache: "no-store",
+		})
+			.then((res) => {
+				if (!res.ok) {
+					throw new Error("Failed to load conversation");
+				}
+				return res.json();
+			})
+			.then((json: ConversationContext) => {
+				setData(json);
+				setIsLoading(false);
+			})
+			.catch((err: Error) => {
+				setError(err.message);
+				setIsLoading(false);
+			});
+	}, [conversationId]);
+
+	if (isLoading) {
+		return (
+			<div className="flex h-[calc(100vh-8rem)] items-center justify-center">
+				<p className="text-sm text-muted-foreground">Loading conversation…</p>
+			</div>
+		);
 	}
 
-	const data = await res.json();
-	return data as ConversationContext;
-}
+	if (error || !data) {
+		return (
+			<div className="flex h-[calc(100vh-8rem)] items-center justify-center">
+				<p className="text-sm text-red-500">
+					{error || "Error loading conversation."}
+				</p>
+			</div>
+		);
+	}
 
-export default async function ConversationPage({
-	params,
-}: {
-	params: { conversationId: string };
-}) {
-	const { conversationId } = params;
-	const { booking, provider, customer, viewerRole, messages } =
-		await getConversationContext(conversationId);
-
+	const { booking, provider, customer, viewerRole, messages } = data;
 	const counterpart =
 		viewerRole === "provider" ? customer : provider ?? customer;
-
 	const isProviderViewer = viewerRole === "provider";
 
 	return (
@@ -97,12 +126,12 @@ export default async function ConversationPage({
 						isProviderViewer
 							? `/dashboard/customers/${customer.id}`
 							: `/p/${provider.handle}`
-					}
+						}
 				/>
 			)}
 
 			<div className="flex flex-1 flex-col">
-				<div className="flex-1 overflow-y-auto p-4 space-y-4">
+				<div className="flex-1 space-y-4 overflow-y-auto p-4">
 					{messages.length === 0 && (
 						<p className="mt-10 text-center text-muted-foreground">
 							No messages yet. Say hello!
@@ -110,7 +139,7 @@ export default async function ConversationPage({
 					)}
 
 					{messages.map((msg) => {
-						const isMe = false; // viewer id is not in this context currently
+						const isMe = false; // viewer id not available client-side here yet
 						return (
 							<div
 								key={msg.id}
@@ -146,7 +175,7 @@ export default async function ConversationPage({
 				</div>
 
 				<div className="border-t bg-background p-4">
-					{/* Input is still handled client-side in a separate component in Step 3 */}
+					{/* Input will be added/enhanced in a later step */}
 				</div>
 			</div>
 		</div>
