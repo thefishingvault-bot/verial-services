@@ -7,17 +7,15 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   return (
-    <>
+    <div className="flex min-h-screen flex-col">
       <SiteHeader />
 
       {/* Page Content */}
-      <main className="pb-20">
-        {children}
-      </main>
+      <main className="flex-1 overflow-hidden pb-20">{children}</main>
 
       {/* Mobile Bottom Navigation */}
       <BottomNavigation />
-    </>
+    </div>
   );
 }
 

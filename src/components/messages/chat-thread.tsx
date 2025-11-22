@@ -41,7 +41,7 @@ export function ChatThread({
   const [messages, setMessages] = useState<Message[]>(initialMessages);
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className="flex flex-1 flex-col overflow-hidden">
       <div className="flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 && (
           <p className="mt-10 text-center text-muted-foreground">

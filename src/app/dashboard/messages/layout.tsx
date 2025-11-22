@@ -7,7 +7,7 @@ export default function MessagesLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="flex h-[calc(100vh-56px)] bg-muted/10">
+    <div className="flex h-full overflow-hidden bg-muted/10">
       {/* LEFT: inbox / conversations list */}
       <aside className="hidden w-full max-w-xs flex-col border-r bg-white md:flex">
         <div className="flex items-center justify-between border-b px-4 py-3">
@@ -28,7 +28,7 @@ export default function MessagesLayout({
       </aside>
 
       {/* RIGHT: active conversation */}
-      <main className="flex min-w-0 flex-1 flex-col bg-muted/10">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-muted/10">
         {children}
       </main>
     </div>
