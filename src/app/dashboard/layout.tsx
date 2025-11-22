@@ -11,7 +11,7 @@ export default function DashboardLayout({
       <SiteHeader />
 
       {/* Page Content */}
-      <main className="flex-1 overflow-hidden pb-20">{children}</main>
+      <main className="flex-1 overflow-hidden">{children}</main>
 
       {/* Mobile Bottom Navigation */}
       <BottomNavigation />
