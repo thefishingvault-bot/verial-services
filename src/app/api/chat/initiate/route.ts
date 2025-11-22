@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
-import { conversations } from '@/db/schema';
-import { auth } from '@clerk/nextjs/server';
+import { conversations, users } from '@/db/schema';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq, and, or } from 'drizzle-orm';
 
@@ -12,6 +12,26 @@ export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse('Unauthorized', { status: 401 });
+
+    // Ensure the current user exists in our local DB before creating a conversation
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      const userEmail = user.emailAddresses[0]?.emailAddress;
+
+      if (userEmail) {
+        await db.insert(users).values({
+          id: userId,
+          email: userEmail,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          avatarUrl: user.imageUrl,
+          role: 'user',
+        });
+      }
+    } catch (syncError) {
+      console.error('[API_CHAT_INITIATE] Failed to sync user:', syncError);
+    }
 
     const { recipientId } = await req.json();
     if (!recipientId) return new NextResponse('Missing recipientId', { status: 400 });
