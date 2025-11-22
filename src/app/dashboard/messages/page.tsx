@@ -10,9 +10,10 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 
 interface Conversation {
   id: string;
-  otherUser: {
+  counterpart: {
     id: string;
     name: string;
+    handle?: string;
     avatarUrl: string | null;
   };
   lastMessage: string;
@@ -24,15 +25,36 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetch('/api/chat/conversations')
-      .then((res) => res.json())
-      .then((data: Conversation[]) => {
-        setConversations(data);
+    async function load() {
+      try {
+        const res = await fetch('/api/chat/conversations');
+
+        if (!res.ok) {
+          setConversations([]);
+          setIsLoading(false);
+          return;
+        }
+
+        const data: unknown = await res.json();
+
+        const conversationsArray =
+          typeof data === 'object' && data !== null &&
+          Array.isArray((data as { conversations?: Conversation[] }).conversations)
+            ? (data as { conversations: Conversation[] }).conversations
+            : [];
+
+        setConversations(conversationsArray);
+      } catch (error) {
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Failed to load conversations', error);
+        }
+        setConversations([]);
+      } finally {
         setIsLoading(false);
-      })
-      .catch(() => {
-        setIsLoading(false);
-      });
+      }
+    }
+
+    void load();
   }, []);
 
   if (isLoading) {
@@ -64,12 +86,12 @@ export default function MessagesPage() {
             <Card className="hover:bg-accent transition-colors cursor-pointer">
               <CardContent className="p-4 flex items-center gap-4">
                 <Avatar>
-                  <AvatarImage src={conv.otherUser.avatarUrl || undefined} />
-                  <AvatarFallback>{conv.otherUser.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={conv.counterpart.avatarUrl || undefined} />
+                  <AvatarFallback>{conv.counterpart.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-baseline">
-                    <h3 className="font-semibold truncate">{conv.otherUser.name}</h3>
+                    <h3 className="font-semibold truncate">{conv.counterpart.name}</h3>
                     <span className="text-xs text-muted-foreground whitespace-nowrap ml-2">
                       {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
                     </span>

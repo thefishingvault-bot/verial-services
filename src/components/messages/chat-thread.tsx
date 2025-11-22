@@ -41,22 +41,20 @@ export function ChatThread({
   const [messages, setMessages] = useState<Message[]>(initialMessages);
 
   return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex-1 overflow-y-auto px-4 py-4 md:px-6 md:py-6">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-4 md:px-6 md:py-6">
         <div className="mx-auto flex max-w-2xl flex-1 flex-col justify-end space-y-4">
-          {messages.length === 0 && (
+          {messages.length === 0 ? (
             <div className="flex flex-1 flex-col items-center justify-center text-center text-xs text-muted-foreground">
               <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted text-base font-medium">
                 💬
               </div>
-              <p className="mb-1 font-medium text-foreground">
-                Start the conversation
-              </p>
+              <p className="mb-1 font-medium text-foreground">No messages yet</p>
               <p className="max-w-xs text-[11px] text-muted-foreground">
-                Your messages with this provider will show up here.
+                Send a message to get the conversation started.
               </p>
             </div>
-          )}
+          ) : null}
 
           {messages.map((msg) => {
           const isMe = viewerUserId === msg.senderId;
@@ -73,34 +71,34 @@ export function ChatThread({
                     isMe ? "flex-row-reverse" : "flex-row"
                   }`}
                 >
-                {!isMe && (
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
-                    {otherInitial}
-                  </div>
-                )}
+                  {!isMe && (
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-medium">
+                      {otherInitial}
+                    </div>
+                  )}
 
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    isMe
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
-                  }`}
-                >
-                  <p className="mb-1 text-[11px] font-medium opacity-80">
-                    {displayName}
-                  </p>
-                  <p>{msg.content}</p>
-                  <span
-                    className={`mt-1 block text-[10px] opacity-70 ${
-                      isMe ? "text-right" : "text-left"
+                  <div
+                    className={`rounded-lg p-3 text-sm ${
+                      isMe
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-foreground"
                     }`}
                   >
-                    {new Date(msg.createdAt).toLocaleTimeString([], {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                </div>
+                    <p className="mb-1 text-[11px] font-medium opacity-80">
+                      {displayName}
+                    </p>
+                    <p>{msg.content}</p>
+                    <span
+                      className={`mt-1 block text-[10px] opacity-70 ${
+                        isMe ? "text-right" : "text-left"
+                      }`}
+                    >
+                      {new Date(msg.createdAt).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
                 </div>
               </div>
             );
