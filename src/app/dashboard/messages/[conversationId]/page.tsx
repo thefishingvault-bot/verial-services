@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { ConversationHeader } from "@/components/messages/conversation-header";
+import { ChatInput } from "@/components/messages/chat-input";
 
 type BookingStatus = "pending" | "confirmed" | "completed" | "cancelled";
 
@@ -100,6 +101,11 @@ export default function ConversationPage() {
 	const counterpart =
 		viewerRole === "provider" ? customer : provider ?? customer;
 	const viewerUserId = isProviderViewer ? provider?.id : customer.id;
+	const [localMessages, setLocalMessages] = useState(data.messages);
+
+	useEffect(() => {
+		setLocalMessages(messages);
+	}, [messages]);
 
 	return (
 		<div className="flex h-full flex-col bg-muted/10">
@@ -136,13 +142,13 @@ export default function ConversationPage() {
 
 			<div className="flex flex-1 flex-col">
 				<div className="flex-1 space-y-4 overflow-y-auto p-4">
-					{messages.length === 0 && (
+					{localMessages.length === 0 && (
 						<p className="mt-10 text-center text-muted-foreground">
 							No messages yet. Say hello!
 						</p>
 					)}
 
-					{messages.map((msg) => {
+					{localMessages.map((msg) => {
 						const isMe = viewerUserId === msg.senderId;
 						const displayName = isMe
 							? "You"
@@ -197,7 +203,19 @@ export default function ConversationPage() {
 				</div>
 
 				<div className="border-t bg-background p-4">
-					{/* Input will be added/enhanced in a later step */}
+					<ChatInput
+						conversationId={conversationId}
+						onMessageSent={(msg) =>
+							setLocalMessages((prev) => [...prev, {
+								...msg,
+								sender: {
+									firstName: isProviderViewer ? provider?.name ?? null : customer.name,
+									lastName: null,
+									avatarUrl: isProviderViewer ? provider?.avatarUrl ?? null : customer.avatarUrl,
+								},
+							}])
+						}
+					/>
 				</div>
 			</div>
 		</div>
