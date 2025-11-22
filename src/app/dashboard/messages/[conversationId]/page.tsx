@@ -27,6 +27,9 @@ interface ConversationContext {
 		totalInCents: number;
 		includesGst: boolean;
 		status: BookingStatus;
+		serviceAreaSuburb: string | null;
+		serviceAreaRegion: string | null;
+		serviceAreaRadiusKm: number | null;
 	} | null;
 	provider: {
 		id: string;
@@ -118,6 +121,9 @@ export default function ConversationPage() {
 						amountInCents={booking?.totalInCents ?? null}
 						includesGst={booking?.includesGst ?? null}
 						status={booking?.status ?? null}
+						serviceAreaSuburb={booking?.serviceAreaSuburb ?? null}
+						serviceAreaRegion={booking?.serviceAreaRegion ?? null}
+						serviceAreaRadiusKm={booking?.serviceAreaRadiusKm ?? null}
 						rating={provider?.rating}
 						jobsCompleted={provider?.jobsCompleted}
 						isVerified={provider?.isVerified ?? false}

@@ -15,7 +15,15 @@ interface CustomerBooking {
   createdAt: string;
   priceAtBooking: number;
   service: { title: string; slug: string };
-  provider: { id: string; businessName: string; handle: string; stripeConnectId: string };
+  provider: {
+    id: string;
+    businessName: string;
+    handle: string;
+    stripeConnectId: string;
+    baseSuburb: string | null;
+    baseRegion: string | null;
+    serviceRadiusKm: number | null;
+  };
   review: { id: string } | null;
 }
 
@@ -154,6 +162,17 @@ export default function CustomerBookingsPage() {
                 <span className="text-sm font-medium text-muted-foreground">Price</span>
                 <p className="font-semibold">{formatPrice(booking.priceAtBooking)}</p>
               </div>
+              {booking.provider.serviceRadiusKm &&
+                (booking.provider.baseSuburb || booking.provider.baseRegion) && (
+                  <div className="col-span-2">
+                    <span className="text-xs font-medium text-muted-foreground">Service area</span>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      {booking.provider.baseSuburb
+                        ? `Up to ${booking.provider.serviceRadiusKm} km from ${booking.provider.baseSuburb}`
+                        : `Up to ${booking.provider.serviceRadiusKm} km in ${booking.provider.baseRegion}`}
+                    </p>
+                  </div>
+                )}
             </CardContent>
             <CardFooter className="flex gap-2">
               {booking.status === 'pending' && (

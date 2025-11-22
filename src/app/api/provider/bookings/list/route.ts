@@ -28,6 +28,14 @@ export async function GET() {
       with: {
         service: { columns: { title: true } },
         user: { columns: { firstName: true, lastName: true, email: true } },
+        provider: {
+          columns: {
+            id: true,
+            baseSuburb: true,
+            baseRegion: true,
+            serviceRadiusKm: true,
+          },
+        },
       },
       orderBy: [desc(bookings.createdAt)],
     });

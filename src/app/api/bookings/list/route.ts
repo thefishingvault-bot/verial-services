@@ -21,7 +21,15 @@ export async function GET() {
           columns: { title: true, slug: true },
         },
         provider: {
-          columns: { id: true, businessName: true, handle: true, stripeConnectId: true },
+          columns: {
+            id: true,
+            businessName: true,
+            handle: true,
+            stripeConnectId: true,
+            baseSuburb: true,
+            baseRegion: true,
+            serviceRadiusKm: true,
+          },
         },
         review: {
           columns: { id: true }, // Just need to know if it exists

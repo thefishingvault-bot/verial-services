@@ -30,6 +30,10 @@ interface ConversationHeaderProps {
   includesGst?: boolean | null;
   status?: BookingStatus | null;
 
+  serviceAreaSuburb?: string | null;
+  serviceAreaRegion?: string | null;
+  serviceAreaRadiusKm?: number | null;
+
   rating?: number;
   jobsCompleted?: number;
   isVerified?: boolean;
@@ -53,6 +57,9 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
   rating,
   jobsCompleted,
   isVerified,
+  serviceAreaSuburb,
+  serviceAreaRegion,
+  serviceAreaRadiusKm,
   bookingUrl,
   profileUrl,
 }) => {
@@ -159,6 +166,15 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
             <p className="truncate text-xs text-muted-foreground md:text-sm">
               {serviceTitle}
             </p>
+
+            {serviceAreaRadiusKm && (serviceAreaSuburb || serviceAreaRegion) && (
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground md:text-xs">
+                Service area: up to {serviceAreaRadiusKm} km{" "}
+                {serviceAreaSuburb
+                  ? `from ${serviceAreaSuburb}`
+                  : `in ${serviceAreaRegion}`}
+              </p>
+            )}
 
             {rating !== undefined && jobsCompleted !== undefined && (
               <p className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground md:text-xs">

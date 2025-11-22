@@ -131,6 +131,13 @@ export async function GET(
                   title: true,
                 },
               },
+              provider: {
+                columns: {
+                  baseSuburb: true,
+                  baseRegion: true,
+                  serviceRadiusKm: true,
+                },
+              },
             },
           })
         : null;
@@ -146,6 +153,9 @@ export async function GET(
             totalInCents: booking.priceAtBooking,
             includesGst: true,
             status: booking.status,
+            serviceAreaSuburb: booking.provider?.baseSuburb ?? null,
+            serviceAreaRegion: booking.provider?.baseRegion ?? null,
+            serviceAreaRadiusKm: booking.provider?.serviceRadiusKm ?? null,
           }
         : null,
       provider,
