@@ -24,17 +24,17 @@ interface ConversationHeaderProps {
   counterpartRole: "provider" | "customer";
 
   serviceTitle: string;
-  bookingRef: string;
-  scheduledAt: string;
-  amountInCents: number;
-  includesGst: boolean;
-  status: BookingStatus;
+  bookingRef?: string | null;
+  scheduledAt?: string | null;
+  amountInCents?: number | null;
+  includesGst?: boolean | null;
+  status?: BookingStatus | null;
 
   rating?: number;
   jobsCompleted?: number;
   isVerified?: boolean;
 
-  bookingUrl: string;
+  bookingUrl?: string | null;
   profileUrl: string;
 }
 
@@ -56,7 +56,12 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
   bookingUrl,
   profileUrl,
 }) => {
+  const hasBooking = Boolean(bookingRef);
+
   const formattedWhen = useMemo(() => {
+    if (!scheduledAt) {
+      return null;
+    }
     try {
       return new Intl.DateTimeFormat("en-NZ", {
         weekday: "short",
@@ -66,11 +71,14 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
         minute: "2-digit",
       }).format(new Date(scheduledAt));
     } catch {
-      return "Date TBC";
+      return null;
     }
   }, [scheduledAt]);
 
   const formattedAmount = useMemo(() => {
+    if (amountInCents == null) {
+      return null;
+    }
     return new Intl.NumberFormat("en-NZ", {
       style: "currency",
       currency: "NZD",
@@ -163,54 +171,69 @@ export const ConversationHeader: FC<ConversationHeaderProps> = ({
       </div>
 
       <div className="ml-4 flex shrink-0 flex-col items-end gap-1 text-right">
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <div className="flex items-center gap-1 text-xs text-muted-foreground md:text-sm">
-            <CalendarDays className="h-3 w-3 md:h-4 md:w-4" />
-            <span>{formattedWhen}</span>
-          </div>
+        {hasBooking && (
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {formattedWhen && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground md:text-sm">
+                <CalendarDays className="h-3 w-3 md:h-4 md:w-4" />
+                <span>{formattedWhen}</span>
+              </div>
+            )}
 
-          <div className="flex items-center gap-1 text-xs font-medium md:text-sm">
-            <DollarSign className="h-3 w-3 md:h-4 md:w-4" />
-            <span>
-              {formattedAmount}
-              {includesGst && (
-                <span className="ml-1 text-[11px] font-normal text-muted-foreground">
-                  incl. GST
+            {formattedAmount && (
+              <div className="flex items-center gap-1 text-xs font-medium md:text-sm">
+                <DollarSign className="h-3 w-3 md:h-4 md:w-4" />
+                <span>
+                  {formattedAmount}
+                  {includesGst && (
+                    <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                      incl. GST
+                    </span>
+                  )}
                 </span>
-              )}
-            </span>
-          </div>
+              </div>
+            )}
 
-          <span
-            className={[
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium md:text-xs",
-              statusColour[status],
-            ].join(" ")}
-          >
-            {statusLabel[status]}
-          </span>
-        </div>
+            {status && (
+              <span
+                className={[
+                  "inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium md:text-xs",
+                  statusColour[status],
+                ].join(" ")}
+              >
+                {statusLabel[status]}
+              </span>
+            )}
+          </div>
+        )}
 
         <div className="flex items-center gap-2">
-          <Link href={bookingUrl}>
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs md:text-sm"
-            >
-              View booking
-            </Button>
-          </Link>
+          {hasBooking && bookingUrl && (
+            <Link href={bookingUrl}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-8 text-xs md:text-sm"
+              >
+                View booking
+              </Button>
+            </Link>
+          )}
           <Link href={profileUrl}>
             <Button size="sm" className="h-8 text-xs md:text-sm">
               View profile
             </Button>
           </Link>
         </div>
-
-        <p className="hidden text-[11px] text-muted-foreground md:block">
-          Booking #{bookingRef}
-        </p>
+        {hasBooking ? (
+          <p className="hidden text-[11px] text-muted-foreground md:block">
+            Booking #{bookingRef}
+          </p>
+        ) : (
+          <p className="hidden text-[11px] text-muted-foreground md:block">
+            No booking linked yet
+          </p>
+        )}
       </div>
     </header>
   );
