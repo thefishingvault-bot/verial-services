@@ -13,14 +13,11 @@ export async function GET(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    const userNotifications = await db.query.notifications.findMany({
-      where: and(
-        eq(notifications.userId, userId),
-        eq(notifications.isRead, false),
-      ),
-      orderBy: [desc(notifications.createdAt)],
-      limit: 10,
-    });
+      const userNotifications = await db.query.notifications.findMany({
+        where: eq(notifications.userId, userId),
+        orderBy: [desc(notifications.createdAt)],
+        limit: 20,
+      });
 
     return NextResponse.json(userNotifications);
   } catch (error) {

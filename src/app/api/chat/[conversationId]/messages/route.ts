@@ -23,8 +23,14 @@ export async function GET(
         or(eq(conversations.user1Id, userId), eq(conversations.user2Id, userId))
       ),
       with: {
-        user1: { columns: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true } },
-        user2: { columns: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true } },
+        user1: {
+          columns: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true },
+          with: { provider: { columns: { businessName: true, handle: true } } },
+        },
+        user2: {
+          columns: { id: true, firstName: true, lastName: true, avatarUrl: true, email: true },
+          with: { provider: { columns: { businessName: true, handle: true } } },
+        },
         messages: {
           orderBy: [asc(messages.createdAt)],
           with: {
@@ -39,9 +45,13 @@ export async function GET(
     }
 
     const otherUser = conversation.user1Id === userId ? conversation.user2 : conversation.user1;
-    const name = (otherUser.firstName && otherUser.lastName)
+    let name = (otherUser.firstName && otherUser.lastName)
       ? `${otherUser.firstName} ${otherUser.lastName}`
       : (otherUser.firstName || otherUser.email);
+
+    if (otherUser.provider?.businessName) {
+      name = otherUser.provider.businessName;
+    }
 
     return NextResponse.json({
       messages: conversation.messages,
@@ -49,6 +59,7 @@ export async function GET(
         id: otherUser.id,
         name,
         avatarUrl: otherUser.avatarUrl,
+        handle: otherUser.provider?.handle,
       }
     });
 

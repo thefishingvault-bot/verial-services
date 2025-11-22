@@ -28,7 +28,7 @@ interface ChatData {
   otherUser: {
     id: string;
     name: string;
-    avatarUrl: string | null;
+    avatarUrl: string | null; handle?: string;
   };
 }
 
@@ -139,6 +139,9 @@ export default function ChatWindowPage() {
           </Avatar>
           <div>
             <CardTitle className="text-base">{data.otherUser.name}</CardTitle>
+            {data.otherUser.handle && (
+              <p className="text-xs text-primary">@{data.otherUser.handle}</p>
+            )}
             <p className="text-xs text-muted-foreground">Ref: {conversationId.split('_')[1]}</p>
           </div>
         </CardHeader>

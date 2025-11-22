@@ -1,122 +1,152 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Button } from "@/components/ui/button";
-import { Bell, Package } from "lucide-react";
 import { useAuth } from "@clerk/nextjs";
+import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 interface Notification {
   id: string;
   message: string;
   href: string;
+  isRead: boolean;
   createdAt: string;
 }
 
 export function NotificationBell() {
   const { isSignedIn } = useAuth();
   const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
 
+  const fetchNotifications = () => {
+    setIsLoading(true);
+    fetch("/api/notifications/list")
+      .then((res) => res.json())
+      .then((data: Notification[]) => {
+        setNotifications(data);
+        setIsLoading(false);
+      })
+      .catch(() => setIsLoading(false));
+  };
+
   useEffect(() => {
-    if (!isSignedIn || !isOpen) return;
-
-    const timeoutId = window.setTimeout(() => {
-      setIsLoading(true);
-
-      void fetch("/api/notifications/list")
-        .then((res) => {
-          if (!res.ok) return [] as Notification[];
-          return res.json() as Promise<Notification[]>;
-        })
-        .then((data) => {
-          setNotifications(data);
-          setIsLoading(false);
-        })
-        .catch((error) => {
-          console.error("[NotificationBell] Failed to load notifications", error);
-          setIsLoading(false);
-        });
-    }, 0);
-
-    return () => {
-      window.clearTimeout(timeoutId);
-    };
+    if (isSignedIn && isOpen) {
+      fetchNotifications();
+    }
+    if (isSignedIn && !isOpen && notifications.length === 0) {
+      fetchNotifications();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, isOpen]);
 
-  const markAsRead = async (): Promise<void> => {
-    if (notifications.length === 0) return;
+  const markAsRead = async (ids: string[]) => {
+    setNotifications((prev) =>
+      prev.map((n) => (ids.includes(n.id) ? { ...n, isRead: true } : n)),
+    );
 
-    const idsToMark = notifications.map((n) => n.id);
-    setNotifications([]); // Optimistically clear
+    await fetch("/api/notifications/mark-read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ notificationIds: ids }),
+    });
+  };
 
-    try {
-      await fetch("/api/notifications/mark-read", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ notificationIds: idsToMark }),
-      });
-    } catch (error) {
-      console.error("[NotificationBell] Failed to mark notifications as read", error);
+  const handleNotificationClick = async (notification: Notification) => {
+    setIsOpen(false);
+    if (!notification.isRead) {
+      await markAsRead([notification.id]);
+    }
+    if (notification.href) {
+      window.location.href = notification.href;
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
+    if (unreadIds.length > 0) {
+      await markAsRead(unreadIds);
     }
   };
 
   if (!isSignedIn) return null;
 
-  const unreadCount = notifications.length;
+  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
       <PopoverTrigger asChild>
-        <Button variant="outline" size="icon" className="relative">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative"
+          aria-label={
+            unreadCount > 0
+              ? `You have ${unreadCount} unread notifications`
+              : "No new notifications"
+          }
+        >
           {unreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-xs font-bold text-destructive-foreground">
-              {unreadCount > 9 ? "9+" : unreadCount}
-            </span>
+            <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-background" />
           )}
           <Bell className="h-5 w-5" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-80" align="end">
-        <div className="mb-4 flex items-center justify-between">
-          <h4 className="text-sm font-medium">Notifications</h4>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="flex items-center justify-between border-b bg-gray-50/50 px-4 py-3">
+          <h4 className="text-sm font-semibold">Notifications</h4>
           {unreadCount > 0 && (
             <Button
-              variant="link"
+              variant="ghost"
               size="sm"
-              className="h-auto p-0"
-              onClick={markAsRead}
+              className="h-auto p-0 text-xs text-muted-foreground hover:text-primary"
+              onClick={handleMarkAllRead}
             >
-              Mark all as read
+              Mark all read
             </Button>
           )}
         </div>
-        <div className="space-y-4">
+        <div className="max-h-[300px] overflow-y-auto">
           {isLoading && (
-            <p className="text-center text-sm text-muted-foreground">Loading...</p>
+            <p className="py-4 text-center text-xs text-muted-foreground">Loading...</p>
           )}
-          {!isLoading && unreadCount === 0 && (
-            <div className="flex flex-col items-center justify-center p-4 text-center">
-              <Package className="mb-2 h-12 w-12 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">No new notifications</p>
+          {!isLoading && notifications.length === 0 && (
+            <div className="flex flex-col items-center justify-center px-4 py-8 text-center">
+              <Package className="mb-2 h-10 w-10 text-muted-foreground/30" />
+              <p className="text-sm text-muted-foreground">No notifications yet</p>
             </div>
           )}
-          {!isLoading && unreadCount > 0 &&
+          {!isLoading &&
             notifications.map((notif) => (
-              <Link
+              <div
                 key={notif.id}
-                href={notif.href}
-                className="block rounded-md p-2 hover:bg-accent"
-                onClick={() => setIsOpen(false)}
+                onClick={() => handleNotificationClick(notif)}
+                className={cn(
+                  "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
+                  notif.isRead ? "bg-white hover:bg-gray-50" : "bg-blue-50/50 hover:bg-blue-50",
+                )}
               >
-                <p className="text-sm font-medium">{notif.message}</p>
+                <div className="flex items-start justify-between gap-2">
+                  <p
+                    className={cn(
+                      "leading-tight",
+                      !notif.isRead && "font-medium text-foreground",
+                    )}
+                  >
+                    {notif.message}
+                  </p>
+                  {!notif.isRead && (
+                    <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>
-              </Link>
+              </div>
             ))}
         </div>
       </PopoverContent>
