@@ -1,20 +1,21 @@
-'use client';
+"use client";
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useUser } from '@clerk/nextjs';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { CheckCircle, Loader2 } from 'lucide-react';
-import { formatPrice, getTrustBadge } from '@/lib/utils';
-import { Calendar } from '@/components/ui/calendar';
-import { Label } from '@/components/ui/label';
-import { format } from 'date-fns';
-import { ContactButton } from '@/components/common/contact-button';
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import Image from "next/image";
+import { useUser } from "@clerk/nextjs";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { CheckCircle, Loader2 } from "lucide-react";
+import { formatPrice, getTrustBadge } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import { Label } from "@/components/ui/label";
+import { format } from "date-fns";
+import { ContactButton } from "@/components/common/contact-button";
+import { FavoriteButton } from "@/components/favorites/favorite-button";
 
 interface ServiceDetails {
   id: string;
@@ -58,6 +59,7 @@ export default function ServiceDetailPage() {
   const [isBooking, setIsBooking] = useState(false);
   const [blockedDays, setBlockedDays] = useState<{ from: Date; to: Date }[]>([]);
   const [customerRegion, setCustomerRegion] = useState<string>("");
+  const [initialIsFavorite, setInitialIsFavorite] = useState<boolean>(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -71,8 +73,23 @@ export default function ServiceDetailPage() {
         if (!res.ok) throw new Error('Failed to fetch service details.');
         return res.json();
       })
-      .then((data: ServiceDetails) => {
+      .then(async (data: ServiceDetails) => {
         setService(data);
+
+        try {
+          const favoritesRes = await fetch("/api/favorites/providers");
+          if (favoritesRes.ok) {
+            const favoritesData = (await favoritesRes.json()) as {
+              favorites: { providerId: string }[];
+            };
+            const isFav = favoritesData.favorites.some(
+              (f) => f.providerId === data.providerId,
+            );
+            setInitialIsFavorite(isFav);
+          }
+        } catch (favErr) {
+          console.warn("[SERVICE_FAVORITES_LOAD_ERROR]", favErr);
+        }
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -233,7 +250,15 @@ export default function ServiceDetailPage() {
                   <CardDescription>@{service.provider.handle}</CardDescription>
                 </Link>
               </div>
-        <ContactButton providerUserId={service.provider.userId} />
+              <div className="flex items-center gap-2">
+                <ContactButton providerUserId={service.provider.userId} />
+                {isSignedIn && (
+                  <FavoriteButton
+                    providerId={service.providerId}
+                    initialIsFavorite={initialIsFavorite}
+                  />
+                )}
+              </div>
             </CardHeader>
             <CardContent>
               <div className="flex flex-col space-y-2">

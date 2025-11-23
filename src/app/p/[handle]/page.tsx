@@ -1,15 +1,17 @@
-import { db } from '@/lib/db';
-import { providers, services, reviews, bookings } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
-import { notFound } from 'next/navigation';
-import Image from 'next/image';
-import Link from 'next/link';
-import type { Metadata } from 'next';
-import { Card, CardContent, CardFooter, CardHeader, CardDescription } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { CheckCircle, Star, Briefcase } from 'lucide-react';
-import { formatPrice, getTrustBadge } from '@/lib/utils';
-import { ContactButton } from '@/components/common/contact-button';
+import { db } from "@/lib/db";
+import { providers, services, reviews, bookings } from "@/db/schema";
+import { eq, desc, and } from "drizzle-orm";
+import { notFound } from "next/navigation";
+import Image from "next/image";
+import Link from "next/link";
+import type { Metadata } from "next";
+import { Card, CardContent, CardFooter, CardHeader, CardDescription } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { CheckCircle, Star, Briefcase } from "lucide-react";
+import { formatPrice, getTrustBadge } from "@/lib/utils";
+import { ContactButton } from "@/components/common/contact-button";
+import { FavoriteButton } from "@/components/favorites/favorite-button";
+import { auth } from "@clerk/nextjs/server";
 
 // This is a Server Component
 
@@ -39,7 +41,7 @@ export async function generateMetadata({
 }
 
 // --- Data Fetching Function ---
-async function getProviderData(handle: string) {
+async function getProviderData(handle: string, currentUserId: string | null) {
   const provider = await db.query.providers.findFirst({
     where: eq(providers.handle, handle),
     with: {
@@ -70,7 +72,7 @@ async function getProviderData(handle: string) {
     },
   });
 
-  if (!provider || provider.status !== 'approved') {
+  if (!provider || provider.status !== "approved") {
     notFound();
   }
 
@@ -80,7 +82,17 @@ async function getProviderData(handle: string) {
     averageRating = total / provider.reviews.length;
   }
 
-  return { provider, averageRating, bookingCount: provider.bookings.length };
+  let initialIsFavorite = false;
+  if (currentUserId) {
+    const fav = await db.query.favoriteProviders.findFirst({
+      where: (fp, { and, eq }) =>
+        and(eq(fp.userId, currentUserId), eq(fp.providerId, provider.id)),
+      columns: { id: true },
+    });
+    initialIsFavorite = Boolean(fav);
+  }
+
+  return { provider, averageRating, bookingCount: provider.bookings.length, initialIsFavorite };
 }
 
 // --- Helper Components ---
@@ -93,10 +105,14 @@ function ProviderHeader({
   provider,
   averageRating,
   bookingCount,
+  initialIsFavorite,
+  hasUser,
 }: {
   provider: Provider;
   averageRating: number;
   bookingCount: number;
+  initialIsFavorite: boolean;
+  hasUser: boolean;
 }) {
   const { Icon, color } = getTrustBadge(provider.trustLevel);
   const memberSinceYear = new Date(provider.user.createdAt).getFullYear();
@@ -123,7 +139,15 @@ function ProviderHeader({
                 @{provider.handle}
               </Link>
             </div>
-				<ContactButton providerUserId={provider.user.id} />
+				<div className="flex items-center gap-2">
+					<ContactButton providerUserId={provider.user.id} />
+					{hasUser && (
+						<FavoriteButton
+							providerId={provider.id}
+							initialIsFavorite={initialIsFavorite}
+						/>
+					)}
+				</div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">
@@ -220,11 +244,21 @@ export default async function ProviderProfilePage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = await params;
-  const { provider, averageRating, bookingCount } = await getProviderData(handle);
+  const { userId } = await auth();
+  const { provider, averageRating, bookingCount, initialIsFavorite } = await getProviderData(
+    handle,
+    userId,
+  );
 
   return (
     <div className="container mx-auto max-w-6xl space-y-12 p-4 md:p-8">
-      <ProviderHeader provider={provider} averageRating={averageRating} bookingCount={bookingCount} />
+      <ProviderHeader
+        provider={provider}
+        averageRating={averageRating}
+        bookingCount={bookingCount}
+        initialIsFavorite={initialIsFavorite}
+        hasUser={Boolean(userId)}
+      />
 
       <section>
         <h2 className="mb-6 text-2xl font-bold">Services offered by {provider.businessName}</h2>
