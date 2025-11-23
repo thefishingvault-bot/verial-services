@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 
 type FavoriteButtonProps = {
   providerId: string;
-  initialIsFavorite: boolean;
+  initialIsFavorite?: boolean;
 };
 
 export function FavoriteButton({
@@ -19,7 +19,7 @@ export function FavoriteButton({
   const { isSignedIn } = useUser();
   const pathname = usePathname();
 
-  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+  const [isFavorite, setIsFavorite] = useState(initialIsFavorite ?? false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 

@@ -3,17 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import {
-  Search,
-  Calendar,
-  User,
-  Package,
-  Briefcase,
-  CreditCard,
-  Settings,
-  Clock,
-} from "lucide-react";
-import { FavoriteProvidersCard } from "@/components/favorites/favorite-providers-card";
+import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock } from "lucide-react";
 import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-analytics-card.client";
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
@@ -221,7 +211,6 @@ export default function DashboardPage() {
             </CardHeader>
           </Card>
         </Link>
-        <FavoriteProvidersCard />
       </div>
     </div>
   );
