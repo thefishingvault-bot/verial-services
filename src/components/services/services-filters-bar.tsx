@@ -41,6 +41,7 @@ export function ServicesFiltersBar({
   const minPrice = searchParams.get("minPrice") ?? initialMinPrice ?? "";
   const maxPrice = searchParams.get("maxPrice") ?? initialMaxPrice ?? "";
   const sort = searchParams.get("sort") ?? initialSort ?? "relevance";
+  const favorites = searchParams.get("favorites");
 
   const updateQuery = (updates: Record<string, string | undefined>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -89,6 +90,11 @@ export function ServicesFiltersBar({
     startTransition(() => {
       router.push(pathname);
     });
+  };
+
+  const handleFavoritesToggle = () => {
+    const nextValue = favorites === "1" ? undefined : "1";
+    updateQuery({ favorites: nextValue });
   };
 
   return (
@@ -177,6 +183,15 @@ export function ServicesFiltersBar({
           </Select>
         </div>
         <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant={favorites === "1" ? "default" : "outline"}
+            size="sm"
+            onClick={handleFavoritesToggle}
+            disabled={isPending}
+          >
+            Favourites only
+          </Button>
           <Button
             type="button"
             variant="outline"

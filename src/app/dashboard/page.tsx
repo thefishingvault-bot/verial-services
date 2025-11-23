@@ -13,6 +13,7 @@ import {
   Settings,
   Clock,
 } from "lucide-react";
+import { FavoriteProvidersCard } from "@/components/favorites/favorite-providers-card";
 
 export default function DashboardPage() {
   const { user } = useUser();
@@ -210,6 +211,7 @@ export default function DashboardPage() {
             </CardHeader>
           </Card>
         </Link>
+        <FavoriteProvidersCard />
       </div>
     </div>
   );

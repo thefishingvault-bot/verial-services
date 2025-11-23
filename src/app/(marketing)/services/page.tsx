@@ -38,6 +38,7 @@ interface BrowseServicesPageProps {
     maxPrice?: string;
     sort?: string;
     page?: string;
+    favorites?: string;
   }>;
 }
 
@@ -49,6 +50,8 @@ export default async function BrowseServicesPage({ searchParams }: BrowseService
   const maxPrice = resolvedParams?.maxPrice;
   const sort = resolvedParams?.sort;
   const page = resolvedParams?.page ?? "1";
+   const favoritesParam = resolvedParams?.favorites;
+   const favoritesOnly = favoritesParam === "1";
 
   const search = new URLSearchParams();
   if (category) search.set("category", category);
@@ -75,13 +78,38 @@ export default async function BrowseServicesPage({ searchParams }: BrowseService
     hasMore: boolean;
   };
 
-  const servicesList = data.services;
+  let servicesList = data.services;
   const currentPage = data.page;
   const hasMore = data.hasMore;
+
+  if (favoritesOnly) {
+    try {
+      const favoritesRes = await fetch("/api/favorites/providers", {
+        cache: "no-store",
+      });
+
+      if (favoritesRes.ok) {
+        const favoritesData = (await favoritesRes.json()) as {
+          favorites: { providerId: string }[];
+        };
+        const favoriteProviderIds = new Set(
+          favoritesData.favorites.map((f) => f.providerId),
+        );
+        servicesList = servicesList.filter((service) =>
+          favoriteProviderIds.has(service.provider.id),
+        );
+      } else {
+        servicesList = [];
+      }
+    } catch {
+      servicesList = [];
+    }
+  }
 
   let title = "Browse All Services";
   if (category) title = `Services in "${category}"`;
   if (region) title = `${title} near ${region}`;
+  if (favoritesOnly) title = `Services from your favourite providers`;
 
   return (
     <div className="container mx-auto py-12">
@@ -101,7 +129,9 @@ export default async function BrowseServicesPage({ searchParams }: BrowseService
           <Package className="h-16 w-16 text-muted-foreground mb-4" />
           <h3 className="text-xl font-semibold">No services found</h3>
           <p className="text-muted-foreground">
-            No services match your filters. Try widening your search.
+            {favoritesOnly
+              ? "No services from your favourite providers match these filters. Try clearing some filters."
+              : "No services match your filters. Try widening your search."}
           </p>
         </div>
       ) : (
@@ -181,6 +211,7 @@ export default async function BrowseServicesPage({ searchParams }: BrowseService
             minPrice,
             maxPrice,
             sort,
+            favorites: favoritesOnly ? "1" : undefined,
           }}
         />
       </div>
