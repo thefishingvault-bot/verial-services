@@ -193,6 +193,17 @@ export const providerTimeOffs = pgTable("provider_time_offs", {
 });
 
 /**
+ * Favorite Providers
+ * Many-to-many between users (customers) and providers.
+ */
+export const favoriteProviders = pgTable("favorite_providers", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., fav_...
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
  * Conversations Table
  * Links two users (customer and provider) in a chat thread.
  */
@@ -230,6 +241,7 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   bookings: many(bookings),
   reviews: many(reviews), // A user can write many reviews
   notifications: many(notifications), // A user can have many notifications
+  favoriteProviders: many(favoriteProviders),
 }));
 
 export const providersRelations = relations(providers, ({ one, many }) => ({
@@ -242,6 +254,18 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   reviews: many(reviews), // A provider can have many reviews
   availabilities: many(providerAvailabilities),
   timeOffs: many(providerTimeOffs),
+  favoriteProviders: many(favoriteProviders),
+}));
+
+export const favoriteProvidersRelations = relations(favoriteProviders, ({ one }) => ({
+  user: one(users, {
+    fields: [favoriteProviders.userId],
+    references: [users.id],
+  }),
+  provider: one(providers, {
+    fields: [favoriteProviders.providerId],
+    references: [providers.id],
+  }),
 }));
 
 export const servicesRelations = relations(services, ({ one, many }) => ({
