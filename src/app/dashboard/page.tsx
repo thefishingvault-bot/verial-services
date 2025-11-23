@@ -16,6 +16,7 @@ import {
 import { FavoriteProvidersCard } from "@/components/favorites/favorite-providers-card";
 import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-analytics-card.client";
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
+import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
 
 export default function DashboardPage() {
   const { user } = useUser();
@@ -67,6 +68,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <ProviderAnalyticsCardClient />
           <ProviderThisWeekCardClient />
+          <ProviderReviewsCardClient />
           <Link href="/dashboard/bookings/provider">
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader className="flex flex-row items-center justify-between">
