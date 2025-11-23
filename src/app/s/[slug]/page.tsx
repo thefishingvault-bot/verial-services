@@ -250,7 +250,7 @@ export default function ServiceDetailPage() {
                   <CardDescription>@{service.provider.handle}</CardDescription>
                 </Link>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col items-end gap-2">
                 <ContactButton providerUserId={service.provider.userId} />
                 {isSignedIn && (
                   <FavoriteButton

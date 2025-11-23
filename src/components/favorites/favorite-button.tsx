@@ -1,59 +1,68 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { usePathname } from "next/navigation";
-import { Heart } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { useUser } from "@clerk/nextjs";
+import { usePathname } from "next/navigation";
+import { useState, useTransition } from "react";
+import { Heart } from "lucide-react";
 
-interface FavoriteButtonProps {
+import { Button } from "@/components/ui/button";
+
+type FavoriteButtonProps = {
   providerId: string;
   initialIsFavorite: boolean;
-}
+};
 
-export function FavoriteButton({ providerId, initialIsFavorite }: FavoriteButtonProps) {
+export function FavoriteButton({
+  providerId,
+  initialIsFavorite,
+}: FavoriteButtonProps) {
   const { isSignedIn } = useUser();
   const pathname = usePathname();
 
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
-  const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
 
   const handleClick = () => {
+    // Not signed in → send to sign-in, come back here after
     if (!isSignedIn) {
-      const redirectUrl = `${window.location.origin}${pathname}`;
-      window.location.href = `/sign-in?redirect_url=${encodeURIComponent(redirectUrl)}`;
+      if (typeof window !== "undefined") {
+        const redirectUrl = `${window.location.origin}${pathname}`;
+        window.location.href = `/sign-in?redirect_url=${encodeURIComponent(
+          redirectUrl,
+        )}`;
+      }
       return;
     }
 
-    setError(null);
-    const nextIsFavorite = !isFavorite;
-    const previousIsFavorite = isFavorite;
-    setIsFavorite(nextIsFavorite);
-
-    const action = nextIsFavorite ? "favorite" : "unfavorite";
-
     startTransition(async () => {
+      setError(null);
+
+      const next = !isFavorite;
+      setIsFavorite(next);
+
+      const action = next ? "favorite" : "unfavorite";
+
       try {
-        const res = await fetch("/api/favorites/providers/toggle", {
+        const res = await fetch("/api/favorites/providers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ providerId, action }),
         });
 
         if (!res.ok) {
-          throw new Error("Failed to update favorites");
+          throw new Error("Request failed");
         }
 
-        const data = (await res.json()) as { success: boolean; isFavorite: boolean };
-        if (!data.success) {
-          throw new Error("Failed to update favorites");
-        }
+        const data = (await res.json()) as { isFavorite?: boolean };
 
-        setIsFavorite(data.isFavorite);
+        if (typeof data.isFavorite === "boolean") {
+          setIsFavorite(data.isFavorite);
+        }
       } catch (err) {
-        console.warn("[FAVORITE_TOGGLE_ERROR]", err);
-        setIsFavorite(previousIsFavorite);
+        console.error("[FAVORITE_TOGGLE_ERROR]", err);
+        // revert optimistic update
+        setIsFavorite(!next);
         setError("Could not update favourites. Please try again.");
       }
     });
@@ -69,9 +78,9 @@ export function FavoriteButton({ providerId, initialIsFavorite }: FavoriteButton
         size="icon"
         aria-pressed={isFavorite}
         aria-label={label}
-        onClick={handleClick}
         disabled={isPending}
-        className="rounded-full h-9 w-9"
+        onClick={handleClick}
+        className="h-9 w-9 rounded-full"
       >
         <Heart
           className={`h-4 w-4 transition-colors ${
@@ -79,7 +88,12 @@ export function FavoriteButton({ providerId, initialIsFavorite }: FavoriteButton
           }`}
         />
       </Button>
-      {error && <p className="text-xs text-red-500">{error}</p>}
+
+      {error && (
+        <p className="max-w-[180px] text-right text-xs text-destructive">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

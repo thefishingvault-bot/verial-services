@@ -139,15 +139,15 @@ function ProviderHeader({
                 @{provider.handle}
               </Link>
             </div>
-				<div className="flex items-center gap-2">
-					<ContactButton providerUserId={provider.user.id} />
-					{hasUser && (
-						<FavoriteButton
-							providerId={provider.id}
-							initialIsFavorite={initialIsFavorite}
-						/>
-					)}
-				</div>
+        <div className="flex flex-col items-end gap-2">
+          <ContactButton providerUserId={provider.user.id} />
+          {hasUser && (
+            <FavoriteButton
+              providerId={provider.id}
+              initialIsFavorite={initialIsFavorite}
+            />
+          )}
+        </div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">
