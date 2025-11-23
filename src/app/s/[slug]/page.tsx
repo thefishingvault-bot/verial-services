@@ -59,7 +59,6 @@ export default function ServiceDetailPage() {
   const [isBooking, setIsBooking] = useState(false);
   const [blockedDays, setBlockedDays] = useState<{ from: Date; to: Date }[]>([]);
   const [customerRegion, setCustomerRegion] = useState<string>("");
-  const [initialIsFavorite, setInitialIsFavorite] = useState<boolean>(false);
 
   useEffect(() => {
     if (!slug) return;
@@ -73,23 +72,8 @@ export default function ServiceDetailPage() {
         if (!res.ok) throw new Error('Failed to fetch service details.');
         return res.json();
       })
-      .then(async (data: ServiceDetails) => {
+      .then((data: ServiceDetails) => {
         setService(data);
-
-        try {
-          const favoritesRes = await fetch("/api/favorites/providers");
-          if (favoritesRes.ok) {
-            const favoritesData = (await favoritesRes.json()) as {
-              favorites: { providerId: string }[];
-            };
-            const isFav = favoritesData.favorites.some(
-              (f) => f.providerId === data.providerId,
-            );
-            setInitialIsFavorite(isFav);
-          }
-        } catch (favErr) {
-          console.warn("[SERVICE_FAVORITES_LOAD_ERROR]", favErr);
-        }
         setIsLoading(false);
       })
       .catch((err: unknown) => {
@@ -253,10 +237,7 @@ export default function ServiceDetailPage() {
               <div className="flex flex-col items-end gap-2">
                 <ContactButton providerUserId={service.provider.userId} />
                 {isSignedIn && (
-                  <FavoriteButton
-                    providerId={service.providerId}
-                    initialIsFavorite={initialIsFavorite}
-                  />
+                  <FavoriteButton providerId={service.providerId} />
                 )}
               </div>
             </CardHeader>
