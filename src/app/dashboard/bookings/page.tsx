@@ -174,7 +174,8 @@ export default function CustomerBookingsPage() {
                   </div>
                 )}
             </CardContent>
-            <CardFooter className="flex gap-2">
+            <CardFooter className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-wrap gap-2">
               {booking.status === 'pending' && (
                 <Button
                   variant="destructive"
@@ -205,6 +206,17 @@ export default function CustomerBookingsPage() {
               {booking.status === 'completed' && booking.review && (
                 <Button variant="outline" disabled className="w-full sm:w-auto">
                   Review Submitted
+                </Button>
+              )}
+              </div>
+              {booking.status === 'completed' && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => handlePayNow(booking)}
+                  className="w-full sm:w-auto"
+                >
+                  Book Again
                 </Button>
               )}
             </CardFooter>
