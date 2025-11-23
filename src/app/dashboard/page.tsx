@@ -18,6 +18,7 @@ import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-ana
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
 import { ProviderServicePerformanceCardClient } from "@/components/dashboard/provider-service-performance-card.client";
+import { ProviderPayoutsSummaryCardClient } from "@/components/dashboard/provider-payouts-summary-card.client";
 
 export default function DashboardPage() {
   const { user } = useUser();
@@ -71,6 +72,7 @@ export default function DashboardPage() {
           <ProviderThisWeekCardClient />
           <ProviderReviewsCardClient />
           <ProviderServicePerformanceCardClient />
+          <ProviderPayoutsSummaryCardClient />
           <Link href="/dashboard/bookings/provider">
             <Card className="hover:shadow-lg transition-shadow h-full">
               <CardHeader className="flex flex-row items-center justify-between">
