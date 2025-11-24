@@ -29,3 +29,6 @@ Sentry.init({
   ],
 });
 
+// Enable client-side navigation tracing for the App Router
+export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
+
