@@ -1,11 +1,25 @@
 import { NextResponse } from 'next/server';
+import { db } from '@/lib/db';
+import { sql } from 'drizzle-orm';
 
-export const runtime = 'edge';
+export const runtime = 'nodejs';
 
 export async function GET() {
-  return NextResponse.json({
-    status: 'ok',
-    uptime: process.uptime(),
-    timestamp: new Date().toISOString(),
-  });
+  try {
+    // Simple query to verify database connectivity
+    await db.execute(sql`SELECT 1`);
+
+    return NextResponse.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      uptime: process.uptime(),
+      database: 'connected',
+    });
+  } catch (error) {
+    console.error('[HEALTH_CHECK_FAILED]', error);
+    return NextResponse.json(
+      { status: 'error', database: 'disconnected' },
+      { status: 500 },
+    );
+  }
 }
