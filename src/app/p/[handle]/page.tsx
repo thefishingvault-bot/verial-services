@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { providers, services, reviews, bookings } from "@/db/schema";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";

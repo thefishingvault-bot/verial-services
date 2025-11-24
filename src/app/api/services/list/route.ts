@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { services, providers, reviews, serviceCategoryEnum } from "@/db/schema";
-import { and, asc, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 
 export const runtime = "nodejs";

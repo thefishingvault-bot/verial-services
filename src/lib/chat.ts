@@ -1,14 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
-import { and, desc, eq, or } from "drizzle-orm";
+import { desc, eq, or } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import {
-	bookings,
-	conversations,
-	messages,
-	providers,
-	users,
-} from "@/db/schema";
+import { bookings, conversations, messages, providers, users } from "@/db/schema";
 
 export interface ConversationSummary {
 	id: string;
