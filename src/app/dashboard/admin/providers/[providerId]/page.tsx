@@ -12,15 +12,16 @@ const formatCurrency = (cents: number) =>
 const formatDate = (date: Date | null) =>
   date ? new Intl.DateTimeFormat('en-NZ', { dateStyle: 'medium' }).format(date) : '—';
 
-interface AdminProviderDetailPageProps {
-  params: { providerId: string };
-}
-
 export const runtime = 'nodejs';
 
-export default async function AdminProviderDetailPage({ params }: AdminProviderDetailPageProps) {
+export default async function AdminProviderDetailPage({
+  params,
+}: {
+  params: Promise<{ providerId: string }>;
+}) {
+  const { providerId } = await params;
   const provider = await db.query.providers.findFirst({
-    where: eq(providers.id, params.providerId),
+    where: eq(providers.id, providerId),
   });
 
   if (!provider) {
@@ -28,7 +29,7 @@ export default async function AdminProviderDetailPage({ params }: AdminProviderD
       <div className="space-y-4">
         <h2 className="text-2xl font-semibold">Provider not found</h2>
         <p className="text-muted-foreground">
-          No provider exists with ID <code className="font-mono text-sm">{params.providerId}</code>.
+          No provider exists with ID <code className="font-mono text-sm">{providerId}</code>.
         </p>
         <Button asChild>
           <Link href="/dashboard/admin/verifications">Back to verifications</Link>
