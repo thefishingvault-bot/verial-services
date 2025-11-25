@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Table,
@@ -248,11 +249,17 @@ export default function AdminVerificationsPage() {
             {pendingProviders.map((p) => (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="font-medium">{p.businessName}</div>
+                  <div className="font-medium">
+                    <Link href={`/dashboard/admin/providers/${p.id}`} className="hover:underline">
+                      {p.businessName}
+                    </Link>
+                  </div>
                   <div className="text-sm text-muted-foreground">{p.userId}</div>
                 </TableCell>
                 <TableCell>
-                  <code className="text-sm">@{p.handle}</code>
+                  <Link href={`/dashboard/admin/providers/${p.id}`} className="hover:underline">
+                    <code className="text-sm">@{p.handle}</code>
+                  </Link>
                 </TableCell>
                 <TableCell className="text-sm text-muted-foreground">
                   {p.serviceRadiusKm && (p.baseSuburb || p.baseRegion)
@@ -313,11 +320,17 @@ export default function AdminVerificationsPage() {
             {otherProviders.map((p) => (
               <TableRow key={p.id}>
                 <TableCell>
-                  <div className="font-medium">{p.businessName}</div>
+                  <div className="font-medium">
+                    <Link href={`/dashboard/admin/providers/${p.id}`} className="hover:underline">
+                      {p.businessName}
+                    </Link>
+                  </div>
                   <div className="text-sm text-muted-foreground">{p.userId}</div>
                 </TableCell>
                 <TableCell>
-                  <code className="text-sm">@{p.handle}</code>
+                  <Link href={`/dashboard/admin/providers/${p.id}`} className="hover:underline">
+                    <code className="text-sm">@{p.handle}</code>
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <Badge variant={p.status === 'approved' ? 'default' : 'destructive'}>
