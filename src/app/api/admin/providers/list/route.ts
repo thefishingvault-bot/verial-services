@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { providers } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { and, desc, eq, ilike } from 'drizzle-orm';
+import { and, desc, eq, ilike, or } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -28,19 +28,21 @@ export async function GET(request: Request) {
     const charges = searchParams.get('charges');
     const payouts = searchParams.get('payouts');
 
-    const whereClauses = [] as any[];
+    const whereClauses: ReturnType<typeof and | typeof eq | typeof or>[] = [];
 
     if (q) {
       const like = `%${q}%`;
       whereClauses.push(
-        ilike(providers.handle, like),
-        ilike(providers.businessName, like),
-        ilike(providers.userId, like),
+        or(
+          ilike(providers.handle, like),
+          ilike(providers.businessName, like),
+          ilike(providers.userId, like),
+        ),
       );
     }
 
     if (status && ['pending', 'approved', 'rejected'].includes(status)) {
-      whereClauses.push(eq(providers.status, status as any));
+      whereClauses.push(eq(providers.status, status as 'pending' | 'approved' | 'rejected'));
     }
 
     if (region && region !== 'all') {
