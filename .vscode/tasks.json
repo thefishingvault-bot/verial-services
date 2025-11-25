@@ -44,6 +44,326 @@
 				"$tsc"
 			],
 			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-verifications",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-admin-verifications",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-admin-verifications",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-search-fix",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-admin-search-fix",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-search-fix-2",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-admin-search-fix-2",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-search-fix-3",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-admin-search-fix-3",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-provider-detail",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-admin-provider-detail",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-admin-provider-detail",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "lint-fix-admin-provider-detail",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"lint",
+				"--max-warnings=0"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$eslint-stylish"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-fix-admin-provider-detail",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-provider-pageprops",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-admin-provider-pageprops",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-clean",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-clean",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "typecheck-admin-provider-params-fix",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"tsc",
+				"--noEmit"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
+		},
+		{
+			"label": "build-admin-provider-params-fix",
+			"type": "shell",
+			"command": "pwsh",
+			"args": [
+				"-Command",
+				"pnpm",
+				"run",
+				"build"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$tsc"
+			],
+			"group": "build"
 		}
 	]
 }
