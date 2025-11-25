@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import {
   Table,
   TableBody,
@@ -12,6 +13,9 @@ import {
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 // Define the type for the provider data
@@ -34,9 +38,30 @@ export default function AdminVerificationsPage() {
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+
+  const q = searchParams.get('q') ?? '';
+  const status = searchParams.get('status') ?? 'all';
+  const region = searchParams.get('region') ?? 'all';
+  const charges = searchParams.get('charges') === '1';
+  const payouts = searchParams.get('payouts') === '1';
+
+  const [searchInput, setSearchInput] = useState(q);
+
   const fetchProviders = useCallback(() => {
     setIsLoading(true);
-    fetch('/api/admin/providers/list')
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (status !== 'all') params.set('status', status);
+    if (region !== 'all') params.set('region', region);
+    if (charges) params.set('charges', '1');
+    if (payouts) params.set('payouts', '1');
+
+    const queryString = params.toString();
+
+    fetch(`/api/admin/providers/list${queryString ? `?${queryString}` : ''}`)
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch providers.');
         return res.json();
@@ -49,11 +74,69 @@ export default function AdminVerificationsPage() {
         setError(err.message);
         setIsLoading(false);
       });
-  }, []);
+  }, [q, status, region, charges, payouts]);
 
   useEffect(() => {
     fetchProviders();
   }, [fetchProviders]);
+
+  useEffect(() => {
+    setSearchInput(q);
+  }, [q]);
+
+  const regions = useMemo(() => {
+    const regionSet = new Set<string>();
+    providers.forEach((p) => {
+      if (p.baseRegion) {
+        regionSet.add(p.baseRegion);
+      }
+    });
+    return Array.from(regionSet).sort((a, b) => a.localeCompare(b));
+  }, [providers]);
+
+  const updateSearchParams = (updates: Record<string, string | null>) => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    Object.entries(updates).forEach(([key, value]) => {
+      if (value === null || value === '' || value === 'all') {
+        params.delete(key);
+      } else {
+        params.set(key, value);
+      }
+    });
+
+    params.delete('page');
+
+    const query = params.toString();
+    router.push(`${pathname}${query ? `?${query}` : ''}`);
+  };
+
+  const handleSearchSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    updateSearchParams({ q: searchInput || null });
+  };
+
+  const handleStatusChange = (value: string) => {
+    updateSearchParams({ status: value === 'all' ? null : value });
+  };
+
+  const handleRegionChange = (value: string) => {
+    updateSearchParams({ region: value === 'all' ? null : value });
+  };
+
+  const handleChargesChange = (checked: boolean | 'indeterminate') => {
+    const isChecked = checked === true;
+    updateSearchParams({ charges: isChecked ? '1' : null });
+  };
+
+  const handlePayoutsChange = (checked: boolean | 'indeterminate') => {
+    const isChecked = checked === true;
+    updateSearchParams({ payouts: isChecked ? '1' : null });
+  };
+
+  const handleResetFilters = () => {
+    router.push(pathname);
+  };
 
   const handleUpdateStatus = async (providerId: string, newStatus: ProviderData['status']) => {
     setActionLoading(providerId);
@@ -87,6 +170,63 @@ export default function AdminVerificationsPage() {
 
   return (
     <div>
+      <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <form onSubmit={handleSearchSubmit} className="flex flex-1 flex-col gap-2 sm:flex-row sm:items-center">
+          <Input
+            placeholder="Search providers (handle, business, user ID)"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+          />
+          <Button type="submit" className="sm:ml-2">
+            Search
+          </Button>
+        </form>
+        <div className="flex flex-wrap items-center gap-3">
+          <Select value={status} onValueChange={handleStatusChange}>
+            <SelectTrigger className="w-[160px]">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All statuses</SelectItem>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="rejected">Rejected</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select value={region} onValueChange={handleRegionChange}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Region" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All regions</SelectItem>
+              {regions.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-2">
+            <Checkbox id="charges" checked={charges} onCheckedChange={handleChargesChange} />
+            <label htmlFor="charges" className="text-sm">
+              Charges enabled only
+            </label>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Checkbox id="payouts" checked={payouts} onCheckedChange={handlePayoutsChange} />
+            <label htmlFor="payouts" className="text-sm">
+              Payouts enabled only
+            </label>
+          </div>
+
+          <Button variant="outline" size="sm" onClick={handleResetFilters}>
+            Reset filters
+          </Button>
+        </div>
+      </div>
       <h2 className="text-2xl font-semibold mb-4">Pending Verifications ({pendingProviders.length})</h2>
       <Card>
         <Table>

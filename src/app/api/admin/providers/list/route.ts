@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { providers } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { desc } from 'drizzle-orm';
+import { and, desc, eq, ilike } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -13,15 +13,52 @@ const isAdmin = async (userId: string): Promise<boolean> => {
   return user.publicMetadata.role === 'admin';
 };
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     if (!userId || !(await isAdmin(userId))) {
       return new NextResponse('Forbidden: Requires admin role', { status: 403 });
     }
 
-    // Fetch all providers
+    const { searchParams } = new URL(request.url);
+
+    const q = searchParams.get('q')?.trim() || '';
+    const status = searchParams.get('status');
+    const region = searchParams.get('region');
+    const charges = searchParams.get('charges');
+    const payouts = searchParams.get('payouts');
+
+    const whereClauses = [] as any[];
+
+    if (q) {
+      const like = `%${q}%`;
+      whereClauses.push(
+        ilike(providers.handle, like),
+        ilike(providers.businessName, like),
+        ilike(providers.userId, like),
+      );
+    }
+
+    if (status && ['pending', 'approved', 'rejected'].includes(status)) {
+      whereClauses.push(eq(providers.status, status as any));
+    }
+
+    if (region && region !== 'all') {
+      whereClauses.push(eq(providers.baseRegion, region));
+    }
+
+    if (charges === '1') {
+      whereClauses.push(eq(providers.chargesEnabled, true));
+    }
+
+    if (payouts === '1') {
+      whereClauses.push(eq(providers.payoutsEnabled, true));
+    }
+
     const allProviders = await db.query.providers.findMany({
+      where: whereClauses.length
+        ? and(...whereClauses)
+        : undefined,
       orderBy: [desc(providers.createdAt)],
     });
 
