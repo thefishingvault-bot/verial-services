@@ -5,6 +5,13 @@ import { pgTable, text, varchar, timestamp, boolean, pgEnum, integer, time } fro
 export const userRoleEnum = pgEnum("user_role", ["user", "provider", "admin"]);
 export const providerStatusEnum = pgEnum("provider_status", ["pending", "approved", "rejected"]);
 export const trustLevelEnum = pgEnum("trust_level", ["bronze", "silver", "gold", "platinum"]);
+export const kycStatusEnum = pgEnum("kyc_status", [
+  "not_started",
+  "in_progress",
+  "pending_review",
+  "verified",
+  "rejected"
+]);
 
 // --- TABLES ---
 
@@ -55,6 +62,13 @@ export const providers = pgTable("providers", {
   chargesEnabled: boolean("charges_enabled").default(false).notNull(),
   payoutsEnabled: boolean("payouts_enabled").default(false).notNull(),
   chargesGst: boolean("charges_gst").default(true).notNull(), // Default to inclusive
+
+  // KYC / Identity
+  kycStatus: kycStatusEnum("kyc_status").default("not_started").notNull(),
+  identityDocumentUrl: text("identity_document_url"),
+  businessDocumentUrl: text("business_document_url"),
+  kycSubmittedAt: timestamp("kyc_submitted_at"),
+  kycVerifiedAt: timestamp("kyc_verified_at"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
