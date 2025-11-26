@@ -1,21 +1,16 @@
-'use client';
-
-import { useState, useEffect } from 'react';
-import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Loader2, AlertTriangle, Download } from 'lucide-react';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
 
-// Define the type for the report data
+type SearchParams = Promise<{
+  range?: string;
+  from?: string;
+  to?: string;
+}>;
+
 interface FeeReportRow {
   bookingId: string;
   status: string;
@@ -27,138 +22,270 @@ interface FeeReportRow {
   platformFee: number;
 }
 
-// Helper to format currency
-const formatPrice = (priceInCents: number) => {
-  return new Intl.NumberFormat('en-NZ', {
-    style: 'currency',
-    currency: 'NZD',
-  }).format(priceInCents / 100);
-};
+interface DailyBucket {
+  date: string;
+  gross: number;
+  fees: number;
+  netToVerial: number;
+}
 
-// Helper to generate and download CSV
-const downloadCSV = (data: FeeReportRow[]) => {
-  const headers = ['Booking ID', 'Status', 'Paid At', 'Service', 'Provider', 'Customer Email', 'Total Amount (Cents)', 'Platform Fee (Cents)'];
-  const csvRows = [
-    headers.join(','),
-    ...data.map(row =>
-      [
-        row.bookingId,
-        row.status,
-        row.paidAt,
-        `"${row.serviceTitle}"`, // Enclose in quotes
-        `"${row.providerName}"`, // Enclose in quotes
-        row.customerEmail,
-        row.totalAmount,
-        row.platformFee,
-      ].join(',')
-    ),
-  ];
+interface ProviderBucket {
+  providerName: string;
+  totalGross: number;
+  totalFees: number;
+  totalNetToVerial: number;
+}
 
-  const csvContent = 'data:text/csv;charset=utf-8,' + csvRows.join('\n');
-  const encodedUri = encodeURI(csvContent);
-  const link = document.createElement('a');
-  link.setAttribute('href', encodedUri);
-  link.setAttribute('download', `verial_fees_report_${new Date().toISOString().split('T')[0]}.csv`);
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-};
+const formatCurrency = (cents: number) =>
+  new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
 
-export default function AdminFeesPage() {
-  const [reportData, setReportData] = useState<FeeReportRow[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default async function AdminFeesPage({
+  searchParams,
+}: {
+  searchParams: SearchParams;
+}) {
+  const { userId, sessionClaims } = await auth();
+  const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
 
-  useEffect(() => {
-    fetch('/api/admin/fees/report')
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch fees report.');
-        return res.json();
-      })
-      .then((data) => {
-        setReportData(data);
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        setError(err.message);
-        setIsLoading(false);
-      });
-  }, []);
-
-  if (isLoading) {
-    return <div className="flex items-center"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading fees report...</div>;
+  if (!userId || role !== 'admin') {
+    redirect('/dashboard');
   }
 
-  if (error) {
-    return <div className="flex items-center text-destructive"><AlertTriangle className="mr-2 h-4 w-4" />{error}</div>;
+  const params = await searchParams;
+
+  const range = params.range ?? '30d';
+  const fromParam = params.from;
+  const toParam = params.to;
+
+  const today = new Date();
+  const endDate = toParam ? new Date(toParam) : today;
+  let startDate: Date;
+
+  switch (range) {
+    case '7d':
+      startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 6);
+      break;
+    case '30d':
+      startDate = new Date(endDate);
+      startDate.setDate(startDate.getDate() - 29);
+      break;
+    case 'month': {
+      startDate = new Date(endDate.getFullYear(), endDate.getMonth(), 1);
+      break;
+    }
+    case 'ytd':
+      startDate = new Date(endDate.getFullYear(), 0, 1);
+      break;
+    case 'all':
+      startDate = new Date(2023, 0, 1);
+      break;
+    default:
+      startDate = fromParam ? new Date(fromParam) : new Date(endDate);
   }
 
-  const totalRevenue = reportData.reduce((sum, row) => sum + row.totalAmount, 0);
+  if (fromParam && toParam) {
+    startDate = new Date(fromParam);
+  }
+
+  const fromIso = startDate.toISOString().split('T')[0];
+  const toIso = endDate.toISOString().split('T')[0];
+
+  const url = new URL('/api/admin/fees/report', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
+  url.searchParams.set('from', fromIso);
+  url.searchParams.set('to', toIso);
+
+  const res = await fetch(url.toString(), { cache: 'no-store' });
+
+  if (!res.ok) {
+    return (
+      <div className="text-sm text-destructive">
+        We couldn&rsquo;t load fee data right now. Please try again later.
+      </div>
+    );
+  }
+
+  const reportData = (await res.json()) as FeeReportRow[];
+
+  const totalGross = reportData.reduce((sum, row) => sum + row.totalAmount, 0);
   const totalFees = reportData.reduce((sum, row) => sum + row.platformFee, 0);
+  const netToProviders = totalGross - totalFees;
+  const netToVerial = totalFees;
+  const averageFeeRate = totalGross > 0 ? totalFees / totalGross : 0;
+
+  const dailyMap = new Map<string, DailyBucket>();
+  const providerMap = new Map<string, ProviderBucket>();
+
+  for (const row of reportData) {
+    const dateKey = row.paidAt.split('T')[0];
+    const gross = row.totalAmount;
+    const fees = row.platformFee;
+    const net = fees;
+
+    const existingDay = dailyMap.get(dateKey) ?? {
+      date: dateKey,
+      gross: 0,
+      fees: 0,
+      netToVerial: 0,
+    };
+    existingDay.gross += gross;
+    existingDay.fees += fees;
+    existingDay.netToVerial += net;
+    dailyMap.set(dateKey, existingDay);
+
+    const providerKey = row.providerName;
+    const existingProvider = providerMap.get(providerKey) ?? {
+      providerName: providerKey,
+      totalGross: 0,
+      totalFees: 0,
+      totalNetToVerial: 0,
+    };
+    existingProvider.totalGross += gross;
+    existingProvider.totalFees += fees;
+    existingProvider.totalNetToVerial += net;
+    providerMap.set(providerKey, existingProvider);
+  }
+
+  const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
+  const providerFilter = (params as { provider?: string }).provider?.toLowerCase() ?? '';
+
+  const providers = Array.from(providerMap.values())
+    .filter((p) =>
+      providerFilter
+        ? p.providerName.toLowerCase().includes(providerFilter)
+        : true,
+    )
+    .sort((a, b) => b.totalGross - a.totalGross);
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <h2 className="text-2xl font-semibold">Fees & Revenue Report</h2>
-        <Button onClick={() => downloadCSV(reportData)} disabled={reportData.length === 0}>
-          <Download className="mr-2 h-4 w-4" />
-          Export as CSV
-        </Button>
-      </div>
+    <div className="space-y-6">
+      <h1 className="text-2xl font-bold">Admin · Fees &amp; Revenue</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+      <Suspense>
+        <AdminFeesFiltersBar />
+      </Suspense>
+
+      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
           <CardHeader>
-            <CardTitle>Total Platform Fees</CardTitle>
-            <CardDescription>10% of all paid bookings.</CardDescription>
+            <CardTitle>Gross volume</CardTitle>
+            <CardDescription>Gross booking volume in selected period</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{formatPrice(totalFees)}</p>
+            <div className="text-2xl font-bold">{formatCurrency(totalGross)}</div>
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <CardTitle>Total Gross Volume</CardTitle>
-            <CardDescription>Total value of all paid bookings (GMV).</CardDescription>
+            <CardTitle>Platform fees</CardTitle>
+            <CardDescription>Fees collected in selected period</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold">{formatPrice(totalRevenue)}</p>
+            <div className="text-2xl font-bold">{formatCurrency(totalFees)}</div>
           </CardContent>
         </Card>
-      </div>
+        <Card>
+          <CardHeader>
+            <CardTitle>Net to providers</CardTitle>
+            <CardDescription>Net paid / owed to providers</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(netToProviders)}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Net to Verial</CardTitle>
+            <CardDescription>Platform share after payouts</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{formatCurrency(netToVerial)}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              Avg fee rate: {(averageFeeRate * 100).toFixed(1)}%
+            </div>
+          </CardContent>
+        </Card>
+      </section>
 
-      <Card>
-        <Table>
-          <TableCaption>A list of all paid and completed bookings.</TableCaption>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Booking ID</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Provider</TableHead>
-              <TableHead>Customer</TableHead>
-              <TableHead className="text-right">Total</TableHead>
-              <TableHead className="text-right">Platform Fee</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {reportData.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={6} className="text-center text-muted-foreground">No paid bookings yet.</TableCell>
-              </TableRow>
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">Revenue over time</h2>
+          <p className="text-sm text-muted-foreground">
+            Daily breakdown of gross volume and platform fees.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="pt-4">
+            {daily.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No fee activity in this period. Try broadening the date range.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Platform fees</TableHead>
+                    <TableHead className="text-right">Net to Verial</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {daily.map((d) => (
+                    <TableRow key={d.date}>
+                      <TableCell>{d.date}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(d.gross)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(d.fees)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(d.netToVerial)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             )}
-            {reportData.map((row) => (
-              <TableRow key={row.bookingId}>
-                <TableCell className="font-mono text-xs">{row.bookingId.split('_')[1]}</TableCell>
-                <TableCell><Badge variant={row.status === 'completed' ? 'secondary' : 'default'}>{row.status.toUpperCase()}</Badge></TableCell>
-                <TableCell>{row.providerName}</TableCell>
-                <TableCell>{row.customerEmail}</TableCell>
-                <TableCell className="text-right">{formatPrice(row.totalAmount)}</TableCell>
-                <TableCell className="text-right font-medium">{formatPrice(row.platformFee)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </Card>
+          </CardContent>
+        </Card>
+      </section>
+
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-lg font-semibold">Per-provider breakdown</h2>
+          <p className="text-sm text-muted-foreground">
+            Performance by provider for the selected period.
+          </p>
+        </div>
+        <Card>
+          <CardContent className="pt-4">
+            {providers.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No fee activity in this period.
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Provider</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Platform fees</TableHead>
+                    <TableHead className="text-right">Net to Verial</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {providers.map((p) => (
+                    <TableRow key={p.providerName}>
+                      <TableCell>
+                        <div className="font-medium">{p.providerName}</div>
+                      </TableCell>
+                      <TableCell className="text-right">{formatCurrency(p.totalGross)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(p.totalFees)}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(p.totalNetToVerial)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+      </section>
     </div>
   );
 }
