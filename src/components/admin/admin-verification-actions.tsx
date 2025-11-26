@@ -34,12 +34,10 @@ export function AdminVerificationActions({ providerId, status }: AdminVerificati
         body: JSON.stringify({ providerId, newStatus }),
       });
       if (!res.ok) {
-        // eslint-disable-next-line no-console
         console.error('Failed to update provider status', await res.text());
       }
       router.refresh();
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('Error updating provider status', error);
     } finally {
       setIsSubmitting(false);

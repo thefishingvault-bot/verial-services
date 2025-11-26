@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { providers, users } from '@/db/schema';
-import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, eq, ilike, or, sql } from 'drizzle-orm';
 import { auth } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -12,7 +12,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminProvidersFiltersBar } from '@/components/admin/admin-providers-filters-bar';

@@ -1,11 +1,13 @@
 import { db } from '@/lib/db';
 import { bookings, providers, reviews, services, users } from '@/db/schema';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { auth } from '@clerk/nextjs/server';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
+import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-trust-button';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -18,6 +20,13 @@ export default async function AdminProviderDetailPage({
 }: {
   params: Promise<{ providerId: string }>;
 }) {
+  const { userId, sessionClaims } = await auth();
+  const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
+
+  if (!userId || role !== 'admin') {
+    redirect('/dashboard');
+  }
+
   const { providerId } = await params;
 
   const provider = await db.query.providers.findFirst({
@@ -47,6 +56,16 @@ export default async function AdminProviderDetailPage({
     })
     .from(bookings)
     .where(eq(bookings.providerId, provider.id));
+
+  const ninetyDaysAgo = new Date();
+  ninetyDaysAgo.setDate(ninetyDaysAgo.getDate() - 90);
+
+  const [recentCompletedStats] = await db
+    .select({
+      completedLast90Days: sql<number>`sum(case when ${bookings.status} = 'completed' then 1 else 0 end)`,
+    })
+    .from(bookings)
+    .where(and(eq(bookings.providerId, provider.id), gte(bookings.createdAt, ninetyDaysAgo)));
 
   const [reviewStats] = await db
     .select({
@@ -104,6 +123,7 @@ export default async function AdminProviderDetailPage({
 
   const avgRating = reviewStats?.avgRating ?? 0;
   const totalReviews = reviewStats?.total ?? 0;
+  const completedLast90Days = recentCompletedStats?.completedLast90Days ?? 0;
 
   const displayName = provider.businessName || `@${provider.handle}`;
 
@@ -133,84 +153,144 @@ export default async function AdminProviderDetailPage({
         </div>
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <div className="flex items-start gap-4">
-            {owner?.avatarUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={owner.avatarUrl}
-                alt={displayName}
-                className="h-12 w-12 rounded-full object-cover"
-              />
-            ) : (
-              <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
-                {displayName.slice(0, 2).toUpperCase()}
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+        <Card className="md:col-span-1 lg:col-span-2">
+          <CardHeader className="flex flex-row items-start justify-between gap-4">
+            <div className="flex items-start gap-4">
+              {owner?.avatarUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={owner.avatarUrl}
+                  alt={displayName}
+                  className="h-12 w-12 rounded-full object-cover"
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center text-sm font-medium">
+                  {displayName.slice(0, 2).toUpperCase()}
+                </div>
+              )}
+              <div>
+                <CardTitle className="text-2xl font-bold">{displayName}</CardTitle>
+                <CardDescription className="space-x-1">
+                  <span>@{provider.handle}</span>
+                  <span>•</span>
+                  <span>
+                    Provider since{' '}
+                    {providerSinceDate
+                      ? new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' }).format(
+                          providerSinceDate,
+                        )
+                      : 'Unknown'}
+                  </span>
+                </CardDescription>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  <Badge
+                    variant={
+                      provider.status === 'approved'
+                        ? 'default'
+                        : provider.status === 'pending'
+                        ? 'secondary'
+                        : 'destructive'
+                    }
+                  >
+                    {provider.status}
+                  </Badge>
+                  <Badge variant="outline">
+                    {provider.isVerified ? 'Verified' : 'Not verified'}
+                  </Badge>
+                  <Badge variant="outline">
+                    Trust: {provider.trustLevel} ({provider.trustScore})
+                  </Badge>
+                </div>
               </div>
-            )}
+            </div>
+            <div className="flex flex-col items-end gap-2 text-xs">
+              <div>{locationLine}</div>
+              <div className="flex flex-wrap gap-2 justify-end">
+                <Badge variant={provider.chargesEnabled ? 'default' : 'outline'}>
+                  Charges {provider.chargesEnabled ? 'enabled' : 'disabled'}
+                </Badge>
+                <Badge variant={provider.payoutsEnabled ? 'default' : 'outline'}>
+                  Payouts {provider.payoutsEnabled ? 'enabled' : 'disabled'}
+                </Badge>
+                <Badge variant="outline">GST {provider.chargesGst ? 'on' : 'off'}</Badge>
+              </div>
+            </div>
+          </CardHeader>
+          <CardFooter className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
+            <div className="flex flex-wrap gap-4">
+              <span>
+                Provider ID: <code className="font-mono text-[11px]">{provider.id}</code>
+              </span>
+              <span>
+                User ID: <code className="font-mono text-[11px]">{provider.userId}</code>
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-4">
+              <span>Created: {formatDate(provider.createdAt)}</span>
+              <span>Last updated: {formatDate(provider.updatedAt)}</span>
+            </div>
+          </CardFooter>
+        </Card>
+
+        <Card className="md:col-span-1 lg:col-span-1">
+          <CardHeader className="flex flex-row items-start justify-between gap-2">
             <div>
-              <CardTitle className="text-2xl font-bold">{displayName}</CardTitle>
-              <CardDescription className="space-x-1">
-                <span>@{provider.handle}</span>
-                <span>•</span>
-                <span>
-                  Provider since{' '}
-                  {providerSinceDate
-                    ? new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' }).format(
-                        providerSinceDate,
-                      )
-                    : 'Unknown'}
-                </span>
-              </CardDescription>
-              <div className="mt-2 flex flex-wrap gap-2 text-xs">
-                <Badge
-                  variant={
-                    provider.status === 'approved'
-                      ? 'default'
-                      : provider.status === 'pending'
-                      ? 'secondary'
-                      : 'destructive'
-                  }
-                >
-                  {provider.status}
-                </Badge>
-                <Badge variant="outline">
-                  {provider.isVerified ? 'Verified' : 'Not verified'}
-                </Badge>
-                <Badge variant="outline">
-                  Trust: {provider.trustLevel} ({provider.trustScore})
-                </Badge>
+              <CardTitle>Trust & Risk</CardTitle>
+              <CardDescription>Signals and controls for this provider.</CardDescription>
+            </div>
+            <AdminRecomputeTrustButton providerId={provider.id} />
+          </CardHeader>
+          <CardContent className="space-y-3 text-xs">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="text-muted-foreground">Trust level</div>
+                <div className="font-medium capitalize">{provider.trustLevel ?? 'Not available'}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Verified provider</div>
+                <div className="font-medium">{provider.isVerified ? 'Yes' : 'No'}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Trust score</div>
+                <div className="font-medium">{provider.trustScore ?? 'Not available'}</div>
+              </div>
+              <div>
+                <div className="text-muted-foreground">Account email</div>
+                <div className="font-medium break-all">{owner?.email ?? 'Not available'}</div>
               </div>
             </div>
-          </div>
-          <div className="flex flex-col items-end gap-2 text-xs">
-            <div>{locationLine}</div>
-            <div className="flex flex-wrap gap-2 justify-end">
-              <Badge variant={provider.chargesEnabled ? 'default' : 'outline'}>
-                Charges {provider.chargesEnabled ? 'enabled' : 'disabled'}
-              </Badge>
-              <Badge variant={provider.payoutsEnabled ? 'default' : 'outline'}>
-                Payouts {provider.payoutsEnabled ? 'enabled' : 'disabled'}
-              </Badge>
-              <Badge variant="outline">GST {provider.chargesGst ? 'on' : 'off'}</Badge>
+
+            <div className="border-t pt-3 space-y-2">
+              <div className="text-xs font-semibold">Behavioural signals</div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-muted-foreground">Completed bookings (all time)</div>
+                  <div className="font-medium">{bookingStats?.completed ?? 0}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Completed bookings (90 days)</div>
+                  <div className="font-medium">{completedLast90Days}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Cancellations (all time)</div>
+                  <div className="font-medium">{bookingStats?.canceled ?? 0}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Average rating</div>
+                  <div className="font-medium">
+                    {totalReviews === 0
+                      ? 'Not available'
+                      : `${avgRating.toFixed(1)} / 5 from ${totalReviews} review${
+                          totalReviews === 1 ? '' : 's'
+                        }`}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardFooter className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
-          <div className="flex flex-wrap gap-4">
-            <span>
-              Provider ID: <code className="font-mono text-[11px]">{provider.id}</code>
-            </span>
-            <span>
-              User ID: <code className="font-mono text-[11px]">{provider.userId}</code>
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-4">
-            <span>Created: {formatDate(provider.createdAt)}</span>
-            <span>Last updated: {formatDate(provider.updatedAt)}</span>
-          </div>
-        </CardFooter>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
 
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         <Card className="md:col-span-1 lg:col-span-1">
