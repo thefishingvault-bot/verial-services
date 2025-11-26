@@ -40,6 +40,13 @@ export default async function AdminVerificationsPage({
 
   const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
 
+   // Temporary log to help debug admin access in staging
+   console.log('[ADMIN_VERIFICATIONS_GUARD]', {
+     userId,
+     role,
+     publicMetadata: sessionClaims?.publicMetadata,
+   });
+
   if (!userId || role !== 'admin') {
     redirect('/dashboard');
   }
