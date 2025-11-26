@@ -4,7 +4,7 @@ import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-trust-button';
@@ -20,10 +20,16 @@ export default async function AdminProviderDetailPage({
 }: {
   params: Promise<{ providerId: string }>;
 }) {
-  const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
+  const { userId } = await auth();
+  if (!userId) {
+    redirect('/dashboard');
+  }
 
-  if (!userId || role !== 'admin') {
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  const role = user.publicMetadata.role;
+
+  if (role !== 'admin') {
     redirect('/dashboard');
   }
 

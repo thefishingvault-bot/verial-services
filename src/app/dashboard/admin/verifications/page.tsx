@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { providers, users } from '@/db/schema';
 import { and, eq, ilike, or, sql } from 'drizzle-orm';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -36,18 +36,16 @@ export default async function AdminVerificationsPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { userId, sessionClaims } = await auth();
+  const { userId } = await auth();
+  if (!userId) {
+    redirect('/dashboard');
+  }
 
-  const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  const role = user.publicMetadata.role;
 
-   // Temporary log to help debug admin access in staging
-   console.log('[ADMIN_VERIFICATIONS_GUARD]', {
-     userId,
-     role,
-     publicMetadata: sessionClaims?.publicMetadata,
-   });
-
-  if (!userId || role !== 'admin') {
+  if (role !== 'admin') {
     redirect('/dashboard');
   }
 

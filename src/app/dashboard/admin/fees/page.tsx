@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -44,10 +44,16 @@ export default async function AdminFeesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims?.publicMetadata as { role?: string } | undefined)?.role;
+  const { userId } = await auth();
+  if (!userId) {
+    redirect('/dashboard');
+  }
 
-  if (!userId || role !== 'admin') {
+  const client = await clerkClient();
+  const user = await client.users.getUser(userId);
+  const role = user.publicMetadata.role;
+
+  if (role !== 'admin') {
     redirect('/dashboard');
   }
 
