@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { bookings, providers, reviews, services, users } from '@/db/schema';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
