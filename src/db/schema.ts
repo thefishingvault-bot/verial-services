@@ -295,9 +295,42 @@ export const providerSuspensions = pgTable("provider_suspensions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Trust Incidents Log
+ * Records incidents that affect provider trust scores (complaints, violations, etc.)
+ */
+export const trustIncidents = pgTable("trust_incidents", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., tincident_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  incidentType: varchar("incident_type", { length: 100 }).notNull(), // 'complaint', 'violation', 'review_abuse', etc.
+  severity: varchar("severity", { length: 20 }).notNull(), // 'low', 'medium', 'high', 'critical'
+  description: text("description").notNull(),
+  reportedBy: varchar("reported_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }), // nullable for system reports
+  bookingId: varchar("booking_id", { length: 255 }).references(() => bookings.id, { onDelete: "set null" }), // optional link to booking
+  trustScoreImpact: integer("trust_score_impact").default(0).notNull(), // points to deduct/add
+  resolved: boolean("resolved").default(false).notNull(),
+  resolvedBy: varchar("resolved_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 
-
-// --- RELATIONS ---
+/**
+ * Risk Rules Configuration
+ * Configurable rules that determine how incidents affect trust scores and trigger actions
+ */
+export const riskRules = pgTable("risk_rules", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., rrule_...
+  name: varchar("name", { length: 255 }).notNull(),
+  incidentType: varchar("incident_type", { length: 100 }).notNull(),
+  severity: varchar("severity", { length: 20 }).notNull(),
+  trustScorePenalty: integer("trust_score_penalty").default(0).notNull(),
+  autoSuspend: boolean("auto_suspend").default(false).notNull(),
+  suspendDurationDays: integer("suspend_duration_days"), // null for indefinite
+  enabled: boolean("enabled").default(true).notNull(),
+  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 // Define the relationships for our ORM
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -406,6 +439,34 @@ export const providerSuspensionsRelations = relations(providerSuspensions, ({ on
   }),
   performer: one(users, {
     fields: [providerSuspensions.performedBy],
+    references: [users.id],
+  }),
+}));
+
+export const trustIncidentsRelations = relations(trustIncidents, ({ one }) => ({
+  provider: one(providers, {
+    fields: [trustIncidents.providerId],
+    references: [providers.id],
+  }),
+  reporter: one(users, {
+    fields: [trustIncidents.reportedBy],
+    references: [users.id],
+    relationName: "reporter",
+  }),
+  resolver: one(users, {
+    fields: [trustIncidents.resolvedBy],
+    references: [users.id],
+    relationName: "resolver",
+  }),
+  booking: one(bookings, {
+    fields: [trustIncidents.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
+export const riskRulesRelations = relations(riskRules, ({ one }) => ({
+  creator: one(users, {
+    fields: [riskRules.createdBy],
     references: [users.id],
   }),
 }));

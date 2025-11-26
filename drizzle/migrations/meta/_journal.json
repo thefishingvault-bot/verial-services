@@ -64,6 +64,13 @@
       "when": 1764153480910,
       "tag": "0008_lame_the_leader",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1764153786399,
+      "tag": "0009_brief_infant_terrible",
+      "breakpoints": true
     }
   ]
 }
