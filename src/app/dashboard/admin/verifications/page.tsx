@@ -1,3 +1,4 @@
+
 import { db } from '@/lib/db';
 import { providers, users } from '@/db/schema';
 import { and, eq, ilike, or, sql } from 'drizzle-orm';
@@ -52,7 +53,7 @@ export default async function AdminVerificationsPage({
   const params = await searchParams;
 
   const q = (params.q ?? '').trim();
-  const statusFilter = params.status ?? 'pending';
+  const statusFilter = params.status ?? 'all';
   const regionFilter = params.region ?? 'all';
 
   const baseWhere = [
