@@ -50,6 +50,20 @@
       "when": 1763770181215,
       "tag": "0006_abandoned_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1764150605939,
+      "tag": "0007_majestic_spacker_dave",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1764153480910,
+      "tag": "0008_lame_the_leader",
+      "breakpoints": true
     }
   ]
 }

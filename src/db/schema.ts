@@ -69,6 +69,11 @@ export const providers = pgTable("providers", {
   businessDocumentUrl: text("business_document_url"),
   kycSubmittedAt: timestamp("kyc_submitted_at"),
   kycVerifiedAt: timestamp("kyc_verified_at"),
+  // Suspension / Limited Mode
+  isSuspended: boolean("is_suspended").default(false).notNull(),
+  suspensionReason: text("suspension_reason"),
+  suspensionStartDate: timestamp("suspension_start_date"),
+  suspensionEndDate: timestamp("suspension_end_date"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -275,6 +280,21 @@ export const providerChanges = pgTable("provider_changes", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+/**
+ * Provider Suspension Audit Log
+ * Tracks suspension and unsuspension actions for audit purposes.
+ */
+export const providerSuspensions = pgTable("provider_suspensions", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., psusp_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  action: varchar("action", { length: 50 }).notNull(), // 'suspend' or 'unsuspend'
+  reason: text("reason"),
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  performedBy: varchar("performed_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 
 
 // --- RELATIONS ---
@@ -376,6 +396,17 @@ export const providerChangesRelations = relations(providerChanges, ({ one }) => 
     fields: [providerChanges.reviewedBy],
     references: [users.id],
     relationName: "reviewer",
+  }),
+}));
+
+export const providerSuspensionsRelations = relations(providerSuspensions, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerSuspensions.providerId],
+    references: [providers.id],
+  }),
+  performer: one(users, {
+    fields: [providerSuspensions.performedBy],
+    references: [users.id],
   }),
 }));
 
