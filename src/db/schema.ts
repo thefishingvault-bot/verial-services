@@ -163,6 +163,21 @@ export const dayOfWeekEnum = pgEnum("day_of_week", [
   "sunday",
 ]);
 
+export const providerChangeStatusEnum = pgEnum("provider_change_status", [
+  "pending",
+  "approved",
+  "rejected",
+  "flagged"
+]);
+
+export const providerChangeFieldEnum = pgEnum("provider_change_field", [
+  "bio",
+  "businessName",
+  "baseSuburb",
+  "baseRegion",
+  "serviceRadiusKm"
+]);
+
 // --- NEW TABLES ---
 
 /**
@@ -226,6 +241,24 @@ export const messages = pgTable("messages", {
   content: text("content").notNull(),
   isRead: boolean("is_read").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
+ * Provider Changes Table
+ * Tracks pending changes to provider profiles for admin review.
+ */
+export const providerChanges = pgTable("provider_changes", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., pchg_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  fieldName: providerChangeFieldEnum("field_name").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value").notNull(),
+  status: providerChangeStatusEnum("status").default("pending").notNull(),
+  requestedBy: varchar("requested_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  reviewedBy: varchar("reviewed_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+  reviewNote: text("review_note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 
@@ -312,6 +345,23 @@ export const messagesRelations = relations(messages, ({ one }) => ({
   sender: one(users, {
     fields: [messages.senderId],
     references: [users.id],
+  }),
+}));
+
+export const providerChangesRelations = relations(providerChanges, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerChanges.providerId],
+    references: [providers.id],
+  }),
+  requester: one(users, {
+    fields: [providerChanges.requestedBy],
+    references: [users.id],
+    relationName: "requester",
+  }),
+  reviewer: one(users, {
+    fields: [providerChanges.reviewedBy],
+    references: [users.id],
+    relationName: "reviewer",
   }),
 }));
 
