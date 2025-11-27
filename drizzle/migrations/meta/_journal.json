@@ -71,6 +71,13 @@
       "when": 1764153786399,
       "tag": "0009_brief_infant_terrible",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1764226446838,
+      "tag": "0010_orange_joystick",
+      "breakpoints": true
     }
   ]
 }

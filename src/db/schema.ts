@@ -331,6 +331,29 @@ export const riskRules = pgTable("risk_rules", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Booking Disputes
+ * Records disputes between customers and providers about completed bookings
+ */
+export const disputes = pgTable("disputes", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., dispute_...
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  initiatorId: varchar("initiator_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // who filed the dispute
+  initiatorType: varchar("initiator_type", { length: 20 }).notNull(), // 'customer' or 'provider'
+  reason: varchar("reason", { length: 100 }).notNull(), // 'service_not_provided', 'poor_quality', 'late_cancellation', etc.
+  description: text("description").notNull(),
+  evidenceUrls: text("evidence_urls").array(), // array of file URLs
+  amountDisputed: integer("amount_disputed"), // amount in cents the initiator wants refunded
+  status: varchar("status", { length: 20 }).default("open").notNull(), // 'open', 'under_review', 'resolved', 'closed'
+  adminDecision: varchar("admin_decision", { length: 50 }), // 'refund_customer', 'no_refund', 'partial_refund', 'service_redo'
+  adminNotes: text("admin_notes"),
+  refundAmount: integer("refund_amount"), // actual amount refunded in cents
+  resolvedBy: varchar("resolved_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 // Define the relationships for our ORM
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -471,6 +494,21 @@ export const riskRulesRelations = relations(riskRules, ({ one }) => ({
   }),
 }));
 
+export const disputesRelations = relations(disputes, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [disputes.bookingId],
+    references: [bookings.id],
+  }),
+  initiator: one(users, {
+    fields: [disputes.initiatorId],
+    references: [users.id],
+  }),
+  resolver: one(users, {
+    fields: [disputes.resolvedBy],
+    references: [users.id],
+  }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
@@ -494,7 +532,7 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
 }));
 
 
-export const bookingsRelations = relations(bookings, ({ one }) => ({
+export const bookingsRelations = relations(bookings, ({ one, many }) => ({
   user: one(users, {
     fields: [bookings.userId],
     references: [users.id],
@@ -507,6 +545,10 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
     fields: [bookings.providerId],
     references: [providers.id],
   }),
-  review: one(reviews), // A booking can have one review
+  review: one(reviews, {
+    fields: [bookings.id],
+    references: [reviews.bookingId],
+  }), // A booking can have one review
+  disputes: many(disputes), // A booking can have multiple disputes
 }));
 
