@@ -3,7 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock } from "lucide-react";
+import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock, Shield, AlertTriangle, BarChart3, Users, FileText, Gavel } from "lucide-react";
 import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-analytics-card.client";
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
@@ -18,9 +18,14 @@ export default function DashboardPage() {
   // --- Admin Dashboard ---
   if (isAdmin) {
     return (
-      <div className="container max-w-5xl mx-auto p-4 md:p-8">
-        <h1 className="text-3xl font-bold mb-6">Welcome, Admin!</h1>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="container max-w-6xl mx-auto p-4 md:p-8">
+        <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
+        <p className="text-muted-foreground mb-8">
+          Manage providers, monitor platform health, and handle disputes.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {/* Provider Management */}
           <Link href="/dashboard/admin/verifications">
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between">
@@ -28,15 +33,116 @@ export default function DashboardPage() {
                   <CardTitle>Provider Verifications</CardTitle>
                   <CardDescription>Approve or reject new providers.</CardDescription>
                 </div>
+                <Shield className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/providers/health">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Provider Health</CardTitle>
+                  <CardDescription>Monitor provider performance and risks.</CardDescription>
+                </div>
+                <BarChart3 className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/providers/changes">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Profile Changes</CardTitle>
+                  <CardDescription>Review and approve provider updates.</CardDescription>
+                </div>
+                <FileText className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/providers/kyc">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>KYC Status</CardTitle>
+                  <CardDescription>Manage identity verification.</CardDescription>
+                </div>
                 <User className="h-8 w-8 text-muted-foreground" />
               </CardHeader>
             </Card>
           </Link>
+
+          <Link href="/dashboard/admin/providers/suspension">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Suspensions</CardTitle>
+                  <CardDescription>Manage provider suspensions and limits.</CardDescription>
+                </div>
+                <AlertTriangle className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          {/* Trust & Risk */}
+          <Link href="/dashboard/admin/trust">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Trust & Risk</CardTitle>
+                  <CardDescription>Monitor incidents and trust scores.</CardDescription>
+                </div>
+                <Shield className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          <Link href="/dashboard/admin/trust/rules">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Risk Rules</CardTitle>
+                  <CardDescription>Configure trust scoring parameters.</CardDescription>
+                </div>
+                <Settings className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          {/* Disputes */}
+          <Link href="/dashboard/admin/disputes">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Dispute Triage</CardTitle>
+                  <CardDescription>Review and resolve booking disputes.</CardDescription>
+                </div>
+                <Gavel className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          {/* Bookings & Operations */}
+          <Link href="/dashboard/admin/bookings">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Booking Management</CardTitle>
+                  <CardDescription>Search and manage all bookings.</CardDescription>
+                </div>
+                <Calendar className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
+          {/* Finance */}
           <Link href="/dashboard/admin/fees">
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between">
                 <div className="space-y-1">
-                  <CardTitle>Fees Report</CardTitle>
+                  <CardTitle>Fees & Revenue</CardTitle>
                   <CardDescription>View platform revenue and export CSVs.</CardDescription>
                 </div>
                 <CreditCard className="h-8 w-8 text-muted-foreground" />
