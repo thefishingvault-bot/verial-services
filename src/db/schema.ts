@@ -333,6 +333,19 @@ export const riskRules = pgTable("risk_rules", {
 });
 
 /**
+ * Provider Notes Table
+ * Internal admin notes for providers (non-customer-facing)
+ */
+export const providerNotes = pgTable("provider_notes", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., pnote_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  note: text("note").notNull(),
+  isInternal: boolean("is_internal").default(true).notNull(), // Always true for admin notes
+  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // Admin who created the note
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+/**
  * Booking Disputes
  * Records disputes between customers and providers about completed bookings
  */
@@ -378,6 +391,7 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   availabilities: many(providerAvailabilities),
   timeOffs: many(providerTimeOffs),
   favoriteProviders: many(favoriteProviders),
+  notes: many(providerNotes), // A provider can have many internal notes
 }));
 
 export const favoriteProvidersRelations = relations(favoriteProviders, ({ one }) => ({
@@ -462,6 +476,17 @@ export const providerSuspensionsRelations = relations(providerSuspensions, ({ on
   }),
   performer: one(users, {
     fields: [providerSuspensions.performedBy],
+    references: [users.id],
+  }),
+}));
+
+export const providerNotesRelations = relations(providerNotes, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerNotes.providerId],
+    references: [providers.id],
+  }),
+  author: one(users, {
+    fields: [providerNotes.createdBy],
     references: [users.id],
   }),
 }));

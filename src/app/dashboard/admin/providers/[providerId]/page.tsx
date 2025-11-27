@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { bookings, providers, reviews, services, users } from '@/db/schema';
+import { bookings, providers, reviews, services, users, providerNotes } from '@/db/schema';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-trust-button';
+import { AddProviderNote } from '@/components/admin/add-provider-note';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -126,6 +127,20 @@ export default async function AdminProviderDetailPage({
     .where(eq(services.providerId, provider.id));
 
   const totalServices = servicesCountRow?.total ?? 0;
+
+  const providerNotesList = await db
+    .select({
+      id: providerNotes.id,
+      note: providerNotes.note,
+      createdAt: providerNotes.createdAt,
+      authorFirstName: users.firstName,
+      authorLastName: users.lastName,
+    })
+    .from(providerNotes)
+    .innerJoin(users, eq(providerNotes.createdBy, users.id))
+    .where(eq(providerNotes.providerId, provider.id))
+    .orderBy(desc(providerNotes.createdAt))
+    .limit(10);
 
   const avgRating = reviewStats?.avgRating ?? 0;
   const totalReviews = reviewStats?.total ?? 0;
@@ -458,6 +473,34 @@ export default async function AdminProviderDetailPage({
               These controls are placeholders and will be wired to admin APIs in a later
               task.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-1 lg:col-span-1">
+          <CardHeader>
+            <CardTitle>Internal Notes</CardTitle>
+            <CardDescription>Admin-only notes about this provider.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {providerNotesList.length === 0 ? (
+              <div className="text-sm text-muted-foreground">
+                No internal notes yet.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto">
+                {providerNotesList.map((note) => (
+                  <div key={note.id} className="border-l-2 border-muted pl-3 py-1">
+                    <div className="text-xs text-muted-foreground mb-1">
+                      {note.authorFirstName || note.authorLastName
+                        ? `${note.authorFirstName ?? ''} ${note.authorLastName ?? ''}`.trim()
+                        : 'Unknown admin'} • {formatDate(note.createdAt)}
+                    </div>
+                    <div className="text-sm whitespace-pre-wrap break-words">{note.note}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            <AddProviderNote providerId={provider.id} />
           </CardContent>
         </Card>
       </div>
