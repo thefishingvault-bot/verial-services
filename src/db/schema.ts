@@ -346,6 +346,26 @@ export const providerNotes = pgTable("provider_notes", {
 });
 
 /**
+ * Refunds Table
+ * Tracks refund transactions processed by admins
+ */
+export const refunds = pgTable("refunds", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., refund_...
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  stripeRefundId: varchar("stripe_refund_id", { length: 255 }).unique(), // Stripe refund ID
+  amount: integer("amount").notNull(), // Amount refunded in cents
+  reason: varchar("reason", { length: 100 }).notNull(), // 'customer_request', 'service_issue', 'dispute_resolution', 'admin_adjustment', etc.
+  description: text("description"), // Optional detailed description
+  platformFeeRefunded: integer("platform_fee_refunded").default(0).notNull(), // Platform fee portion refunded
+  providerAmountRefunded: integer("provider_amount_refunded").default(0).notNull(), // Provider portion refunded
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // 'pending', 'processing', 'completed', 'failed'
+  processedBy: varchar("processed_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // Admin who processed the refund
+  processedAt: timestamp("processed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
  * Booking Disputes
  * Records disputes between customers and providers about completed bookings
  */
@@ -534,6 +554,17 @@ export const disputesRelations = relations(disputes, ({ one }) => ({
   }),
 }));
 
+export const refundsRelations = relations(refunds, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [refunds.bookingId],
+    references: [bookings.id],
+  }),
+  processor: one(users, {
+    fields: [refunds.processedBy],
+    references: [users.id],
+  }),
+}));
+
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
@@ -575,5 +606,6 @@ export const bookingsRelations = relations(bookings, ({ one, many }) => ({
     references: [reviews.bookingId],
   }), // A booking can have one review
   disputes: many(disputes), // A booking can have multiple disputes
+  refunds: many(refunds), // A booking can have multiple refunds
 }));
 

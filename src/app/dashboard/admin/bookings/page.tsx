@@ -4,6 +4,9 @@ import { bookings } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import AdminBookingsFiltersBar from "@/components/admin/admin-bookings-filters-bar";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { Eye } from "lucide-react";
 
 // TODO: Replace with actual role check utility if needed
 type ClerkUser = { publicMetadata?: { role?: string } };
@@ -64,8 +67,12 @@ export default async function Page({ searchParams }: { searchParams: Promise<Rec
               <td>{booking.status}</td>
               <td>{booking.scheduledDate ? booking.scheduledDate.toString() : "-"}</td>
               <td>
-                {/* Drilldown link (to be implemented) */}
-                <a href={`/dashboard/admin/bookings/${booking.id}`}>View</a>
+                <Link href={`/dashboard/admin/bookings/${booking.id}`}>
+                  <Button variant="outline" size="sm">
+                    <Eye className="h-4 w-4 mr-1" />
+                    View
+                  </Button>
+                </Link>
               </td>
             </tr>
           ))}
