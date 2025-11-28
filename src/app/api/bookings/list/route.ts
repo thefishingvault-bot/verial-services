@@ -31,9 +31,6 @@ export async function GET() {
             serviceRadiusKm: true,
           },
         },
-        review: {
-          columns: { id: true }, // Just need to know if it exists
-        },
       },
       orderBy: [desc(bookings.createdAt)],
     });

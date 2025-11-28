@@ -387,6 +387,58 @@ export const disputes = pgTable("disputes", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Provider Communications Table
+ * Tracks all communications sent to providers (emails, notifications, SMS)
+ */
+export const providerCommunications = pgTable("provider_communications", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., pcomm_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(), // 'email', 'notification', 'sms'
+  subject: varchar("subject", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  status: varchar("status", { length: 20 }).default("sent").notNull(), // 'sent', 'delivered', 'failed', 'read'
+  sentBy: varchar("sent_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  error: text("error"), // Error message if sending failed
+  response: text("response"), // Provider response if any
+  responseAt: timestamp("response_at"),
+});
+
+/**
+ * Message Templates Table
+ * Pre-defined templates for common communication scenarios
+ */
+export const messageTemplates = pgTable("message_templates", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., mtmpl_...
+  name: varchar("name", { length: 255 }).notNull(),
+  subject: varchar("subject", { length: 255 }).notNull(),
+  body: text("body").notNull(),
+  category: varchar("category", { length: 50 }).notNull(), // 'general', 'risk', 'compliance', 'promotion', 'support'
+  variables: text("variables").array(), // Array of variable names like ['provider_name', 'risk_level']
+  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Scheduled Communications Table
+ * Communications scheduled to be sent at a future date
+ */
+export const scheduledCommunications = pgTable("scheduled_communications", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., scomm_...
+  subject: varchar("subject", { length: 255 }).notNull(),
+  message: text("message").notNull(),
+  type: varchar("type", { length: 20 }).notNull(), // 'email', 'notification', 'sms'
+  providerIds: text("provider_ids").array().notNull(), // Array of provider IDs
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  templateId: varchar("template_id", { length: 255 }).references(() => messageTemplates.id, { onDelete: "set null" }),
+  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  sentAt: timestamp("sent_at"),
+  status: varchar("status", { length: 20 }).default("scheduled").notNull(), // 'scheduled', 'sent', 'failed'
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
 // Define the relationships for our ORM
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -539,21 +591,6 @@ export const riskRulesRelations = relations(riskRules, ({ one }) => ({
   }),
 }));
 
-export const disputesRelations = relations(disputes, ({ one }) => ({
-  booking: one(bookings, {
-    fields: [disputes.bookingId],
-    references: [bookings.id],
-  }),
-  initiator: one(users, {
-    fields: [disputes.initiatorId],
-    references: [users.id],
-  }),
-  resolver: one(users, {
-    fields: [disputes.resolvedBy],
-    references: [users.id],
-  }),
-}));
-
 export const refundsRelations = relations(refunds, ({ one }) => ({
   booking: one(bookings, {
     fields: [refunds.bookingId],
@@ -565,10 +602,63 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
   }),
 }));
 
-export const notificationsRelations = relations(notifications, ({ one }) => ({
-  user: one(users, {
-    fields: [notifications.userId],
+export const providerCommunicationsRelations = relations(providerCommunications, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerCommunications.providerId],
+    references: [providers.id],
+  }),
+  sender: one(users, {
+    fields: [providerCommunications.sentBy],
     references: [users.id],
+  }),
+}));
+
+export const messageTemplatesRelations = relations(messageTemplates, ({ one, many }) => ({
+  creator: one(users, {
+    fields: [messageTemplates.createdBy],
+    references: [users.id],
+  }),
+  scheduledCommunications: many(scheduledCommunications),
+}));
+
+export const scheduledCommunicationsRelations = relations(scheduledCommunications, ({ one }) => ({
+  template: one(messageTemplates, {
+    fields: [scheduledCommunications.templateId],
+    references: [messageTemplates.id],
+  }),
+  creator: one(users, {
+    fields: [scheduledCommunications.createdBy],
+    references: [users.id],
+  }),
+}));
+
+export const disputesRelations = relations(disputes, ({ one }) => ({
+  // booking: one(bookings, {
+  //   fields: [disputes.bookingId],
+  //   references: [bookings.id],
+  // }),
+  initiator: one(users, {
+    fields: [disputes.initiatorId],
+    references: [users.id],
+  }),
+  resolver: one(users, {
+    fields: [disputes.resolvedBy],
+    references: [users.id],
+  }),
+}));
+
+export const bookingsRelations = relations(bookings, ({ one }) => ({
+  user: one(users, {
+    fields: [bookings.userId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [bookings.serviceId],
+    references: [services.id],
+  }),
+  provider: one(providers, {
+    fields: [bookings.providerId],
+    references: [providers.id],
   }),
 }));
 
@@ -585,27 +675,5 @@ export const reviewsRelations = relations(reviews, ({ one }) => ({
     fields: [reviews.bookingId],
     references: [bookings.id],
   }),
-}));
-
-
-export const bookingsRelations = relations(bookings, ({ one, many }) => ({
-  user: one(users, {
-    fields: [bookings.userId],
-    references: [users.id],
-  }),
-  service: one(services, {
-    fields: [bookings.serviceId],
-    references: [services.id],
-  }),
-  provider: one(providers, {
-    fields: [bookings.providerId],
-    references: [providers.id],
-  }),
-  review: one(reviews, {
-    fields: [bookings.id],
-    references: [reviews.bookingId],
-  }), // A booking can have one review
-  disputes: many(disputes), // A booking can have multiple disputes
-  refunds: many(refunds), // A booking can have multiple refunds
 }));
 

@@ -1,8 +1,8 @@
 import { db } from '@/lib/db';
-import { bookings } from '@/db/schema';
+import { bookings, services, providers, users } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { desc, inArray } from 'drizzle-orm';
+import { desc, inArray, eq } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -20,16 +20,23 @@ export async function GET() {
       return new NextResponse('Forbidden: Requires admin role', { status: 403 });
     }
 
-    // Fetch all bookings that have been paid or completed
-    const paidBookings = await db.query.bookings.findMany({
-      where: inArray(bookings.status, ['paid', 'completed']),
-      with: {
-        service: { columns: { title: true } },
-        provider: { columns: { businessName: true } },
-        user: { columns: { email: true } },
-      },
-      orderBy: [desc(bookings.updatedAt)],
-    });
+    // Fetch all bookings that have been paid or completed with manual joins
+    const paidBookings = await db
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        updatedAt: bookings.updatedAt,
+        priceAtBooking: bookings.priceAtBooking,
+        serviceTitle: services.title,
+        providerName: providers.businessName,
+        customerEmail: users.email,
+      })
+      .from(bookings)
+      .innerJoin(services, eq(bookings.serviceId, services.id))
+      .innerJoin(providers, eq(bookings.providerId, providers.id))
+      .innerJoin(users, eq(bookings.userId, users.id))
+      .where(inArray(bookings.status, ['paid', 'completed']))
+      .orderBy(desc(bookings.updatedAt));
 
     // Calculate fees (as per spec: 10% = PLATFORM_FEE_BPS=1000)
     const feeBps = parseInt(process.env.PLATFORM_FEE_BPS || '1000');
@@ -40,9 +47,9 @@ export async function GET() {
         bookingId: b.id,
         status: b.status,
         paidAt: b.updatedAt, // Assumes updatedAt is set on 'paid' status change
-        serviceTitle: b.service.title,
-        providerName: b.provider.businessName,
-        customerEmail: b.user.email,
+        serviceTitle: b.serviceTitle,
+        providerName: b.providerName,
+        customerEmail: b.customerEmail,
         totalAmount: b.priceAtBooking,
         platformFee: platformFee,
       };

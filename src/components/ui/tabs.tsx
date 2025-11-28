@@ -19,14 +19,24 @@ function useTabsContext() {
 }
 
 interface TabsProps extends React.HTMLAttributes<HTMLDivElement> {
-  defaultValue: string;
+  defaultValue?: string;
+  value?: string;
+  onValueChange?: (value: string) => void;
 }
 
-export function Tabs({ defaultValue, className, children, ...props }: TabsProps) {
-  const [value, setValue] = React.useState(defaultValue);
+export function Tabs({ defaultValue, value, onValueChange, className, children, ...props }: TabsProps) {
+  const [internalValue, setInternalValue] = React.useState(defaultValue || "");
+
+  const currentValue = value !== undefined ? value : internalValue;
+  const setCurrentValue = (newValue: string) => {
+    if (value === undefined) {
+      setInternalValue(newValue);
+    }
+    onValueChange?.(newValue);
+  };
 
   return (
-    <TabsContext.Provider value={{ value, setValue }}>
+    <TabsContext.Provider value={{ value: currentValue, setValue: setCurrentValue }}>
       <div className={cn("w-full", className)} {...props}>
         {children}
       </div>

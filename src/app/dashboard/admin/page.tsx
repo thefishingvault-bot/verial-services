@@ -318,19 +318,19 @@ export default async function AdminDashboardPage() {
           </Card>
         </Link>
 
-        <Link href="/dashboard/admin/broadcast">
+        <Link href="/dashboard/admin/provider-communications">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
               <div className="flex items-center space-x-2">
-                <MessageSquare className="h-5 w-5 text-blue-600" />
-                <CardTitle className="text-lg">Broadcast Messaging</CardTitle>
+                <MessageSquare className="h-5 w-5 text-teal-600" />
+                <CardTitle className="text-lg">Provider Communications</CardTitle>
               </div>
               <CardDescription>
-                Send platform-wide announcements.
+                Send bulk messages and manage provider communications.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Badge variant="outline">Compose Message</Badge>
+              <Badge variant="outline">Communication Tools</Badge>
             </CardContent>
           </Card>
         </Link>
