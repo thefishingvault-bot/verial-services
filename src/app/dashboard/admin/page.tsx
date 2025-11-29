@@ -57,7 +57,7 @@ export default async function AdminDashboardPage() {
           <div>
             <h2 className="text-2xl font-bold text-gray-900">Admin Dashboard</h2>
             <p className="text-gray-600 mt-1">
-              Monitor and manage your platform's operations, users, and financial performance.
+              Monitor and manage your platform&apos;s operations, users, and financial performance.
             </p>
           </div>
           <div className="flex items-center space-x-2">

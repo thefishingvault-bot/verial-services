@@ -83,6 +83,21 @@ export function useRealTimeUpdates(
     }
   }, [finalConfig.enabled, finalConfig.updateInterval, onUpdate, isConnected]);
 
+  const handleRetry = useCallback(() => {
+    if (retryCountRef.current >= finalConfig.maxRetries) {
+      setError('Max retries exceeded. Real-time updates disabled.');
+      return;
+    }
+
+    setIsRetrying(true);
+    retryCountRef.current += 1;
+
+    retryTimeoutRef.current = setTimeout(() => {
+      setIsRetrying(false);
+      connectWebSocket();
+    }, finalConfig.retryDelay);
+  }, [finalConfig.maxRetries, finalConfig.retryDelay, connectWebSocket]);
+
   const disconnect = useCallback(() => {
     setIsConnected(false);
     if (wsRef.current) {
@@ -98,21 +113,6 @@ export function useRealTimeUpdates(
       retryTimeoutRef.current = null;
     }
   }, []);
-
-  const handleRetry = useCallback(() => {
-    if (retryCountRef.current >= finalConfig.maxRetries) {
-      setError('Max retries exceeded. Real-time updates disabled.');
-      return;
-    }
-
-    setIsRetrying(true);
-    retryCountRef.current += 1;
-
-    retryTimeoutRef.current = setTimeout(() => {
-      setIsRetrying(false);
-      connectWebSocket();
-    }, finalConfig.retryDelay);
-  }, [finalConfig.maxRetries, finalConfig.retryDelay, connectWebSocket]);
 
   const sendMessage = useCallback((message: any) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {

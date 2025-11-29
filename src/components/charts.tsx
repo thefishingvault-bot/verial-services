@@ -164,49 +164,53 @@ export function PieChart({ data, width = 300, height = 300 }: PieChartProps) {
   const centerX = width / 2;
   const centerY = height / 2;
 
-  let currentAngle = -Math.PI / 2; // Start from top
-
   const colors = [
     "#3B82F6", "#EF4444", "#F59E0B", "#10B981", "#8B5CF6",
     "#F97316", "#06B6D4", "#84CC16", "#EC4899", "#6B7280"
   ];
 
+  // Build pie segments with accumulated angles
+  const segments = data.reduce((acc, item, index) => {
+    const percentage = item.value / total;
+    const angle = percentage * 2 * Math.PI;
+    const startAngle = acc.currentAngle;
+    const endAngle = startAngle + angle;
+
+    const x1 = centerX + radius * Math.cos(startAngle);
+    const y1 = centerY + radius * Math.sin(startAngle);
+    const x2 = centerX + radius * Math.cos(endAngle);
+    const y2 = centerY + radius * Math.sin(endAngle);
+
+    const largeArcFlag = angle > Math.PI ? 1 : 0;
+
+    const pathData = [
+      `M ${centerX} ${centerY}`,
+      `L ${x1} ${y1}`,
+      `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
+      'Z'
+    ].join(' ');
+
+    acc.segments.push({
+      pathData,
+      color: item.color || colors[index % colors.length],
+      index
+    });
+
+    acc.currentAngle = endAngle;
+    return acc;
+  }, { segments: [] as Array<{ pathData: string; color: string; index: number }>, currentAngle: -Math.PI / 2 });
+
   return (
     <div className="bg-white p-4 rounded-lg border">
       <svg width={width} height={height}>
-        {data.map((item, index) => {
-          const percentage = item.value / total;
-          const angle = percentage * 2 * Math.PI;
-          const startAngle = currentAngle;
-          const endAngle = currentAngle + angle;
-
-          const x1 = centerX + radius * Math.cos(startAngle);
-          const y1 = centerY + radius * Math.sin(startAngle);
-          const x2 = centerX + radius * Math.cos(endAngle);
-          const y2 = centerY + radius * Math.sin(endAngle);
-
-          const largeArcFlag = angle > Math.PI ? 1 : 0;
-
-          const pathData = [
-            `M ${centerX} ${centerY}`,
-            `L ${x1} ${y1}`,
-            `A ${radius} ${radius} 0 ${largeArcFlag} 1 ${x2} ${y2}`,
-            'Z'
-          ].join(' ');
-
-          currentAngle = endAngle;
-
-          const color = item.color || colors[index % colors.length];
-
-          return (
-            <path
-              key={index}
-              d={pathData}
-              fill={color}
-              className="hover:opacity-80 transition-opacity cursor-pointer"
-            />
-          );
-        })}
+        {segments.segments.map((segment) => (
+          <path
+            key={segment.index}
+            d={segment.pathData}
+            fill={segment.color}
+            className="hover:opacity-80 transition-opacity cursor-pointer"
+          />
+        ))}
 
         {/* Center circle for donut effect */}
         <circle

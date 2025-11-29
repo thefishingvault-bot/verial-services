@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Bell, X, AlertTriangle, Info, CheckCircle, XCircle } from 'lucide-react';
 
 export interface NotificationItem {
@@ -35,10 +35,13 @@ export function RealTimeNotifications({
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  const lastShownToastRef = useRef<string | null>(null);
+
   // Show toast for new notifications
   useEffect(() => {
     const latestUnread = notifications.find(n => !n.read);
-    if (latestUnread && !showToast) {
+    if (latestUnread && !showToast && lastShownToastRef.current !== latestUnread.id) {
+      lastShownToastRef.current = latestUnread.id;
       setCurrentToast(latestUnread);
       setShowToast(true);
 
@@ -50,7 +53,7 @@ export function RealTimeNotifications({
 
       return () => clearTimeout(timer);
     }
-  }, [notifications, showToast]);
+  }, [notifications]);
 
   const getIcon = (type: NotificationItem['type']) => {
     switch (type) {
