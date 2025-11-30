@@ -1,9 +1,23 @@
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
+import { requireAdmin } from '@/lib/admin';
+import {
+  DollarSign,
+  TrendingUp,
+  Calendar,
+  Users,
+  Download,
+  BarChart3,
+  PieChart,
+  ArrowUpDown,
+  Filter
+} from 'lucide-react';
 
 type SearchParams = Promise<{
   range?: string;
@@ -44,16 +58,14 @@ export default async function AdminFeesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await currentUser();
+  if (!user?.id) {
     redirect('/dashboard');
   }
 
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const role = user.publicMetadata.role;
-
-  if (role !== 'admin') {
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect('/dashboard');
   }
 
@@ -164,134 +176,229 @@ export default async function AdminFeesPage({
     .sort((a, b) => b.totalGross - a.totalGross);
 
   return (
-    <div className="space-y-6">
-      <h1 className="text-2xl font-bold">Admin · Fees &amp; Revenue</h1>
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Revenue Analytics</h1>
+            <p className="text-muted-foreground mt-2">
+              Monitor platform fees, revenue trends, and provider performance.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <Download className="mr-2 h-4 w-4" />
+            Export Report
+          </Button>
+          <Button variant="outline">
+            <BarChart3 className="mr-2 h-4 w-4" />
+            Advanced Analytics
+          </Button>
+        </div>
+      </div>
 
+      {/* Filters */}
       <Suspense>
         <AdminFeesFiltersBar />
       </Suspense>
 
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card>
-          <CardHeader>
-            <CardTitle>Gross volume</CardTitle>
-            <CardDescription>Gross booking volume in selected period</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Gross Volume</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalGross)}</div>
+            <p className="text-xs text-muted-foreground">
+              Total booking value
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
-            <CardTitle>Platform fees</CardTitle>
-            <CardDescription>Fees collected in selected period</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Platform Fees</CardTitle>
+            <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalFees)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalFees)}</div>
+            <p className="text-xs text-muted-foreground">
+              Revenue collected
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
-            <CardTitle>Net to providers</CardTitle>
-            <CardDescription>Net paid / owed to providers</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net to Providers</CardTitle>
+            <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(netToProviders)}</div>
+            <div className="text-2xl font-bold text-blue-600">{formatCurrency(netToProviders)}</div>
+            <p className="text-xs text-muted-foreground">
+              Paid to providers
+            </p>
           </CardContent>
         </Card>
+
         <Card>
-          <CardHeader>
-            <CardTitle>Net to Verial</CardTitle>
-            <CardDescription>Platform share after payouts</CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net to Verial</CardTitle>
+            <PieChart className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(netToVerial)}</div>
-            <div className="text-xs text-muted-foreground mt-1">
-              Avg fee rate: {(averageFeeRate * 100).toFixed(1)}%
+            <div className="text-2xl font-bold text-purple-600">{formatCurrency(netToVerial)}</div>
+            <p className="text-xs text-muted-foreground">
+              Platform margin: {(averageFeeRate * 100).toFixed(1)}%
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Revenue Over Time */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Calendar className="h-5 w-5" />
+            Revenue Over Time
+          </CardTitle>
+          <CardDescription>
+            Daily breakdown of gross volume and platform fees for the selected period.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {daily.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No fee activity in this period.</p>
+              <p className="text-sm">Try broadening the date range to see more data.</p>
             </div>
-          </CardContent>
-        </Card>
-      </section>
-
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">Revenue over time</h2>
-          <p className="text-sm text-muted-foreground">
-            Daily breakdown of gross volume and platform fees.
-          </p>
-        </div>
-        <Card>
-          <CardContent className="pt-4">
-            {daily.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No fee activity in this period. Try broadening the date range.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Date</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">Platform fees</TableHead>
-                    <TableHead className="text-right">Net to Verial</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {daily.map((d) => (
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <div className="flex items-center gap-2">
+                      Date
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right">Gross Volume</TableHead>
+                  <TableHead className="text-right">Platform Fees</TableHead>
+                  <TableHead className="text-right">Net Revenue</TableHead>
+                  <TableHead className="text-right">Fee Rate</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {daily.map((d) => {
+                  const feeRate = d.gross > 0 ? (d.fees / d.gross) * 100 : 0;
+                  return (
                     <TableRow key={d.date}>
-                      <TableCell>{d.date}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(d.gross)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(d.fees)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(d.netToVerial)}</TableCell>
+                      <TableCell className="font-medium">
+                        {new Date(d.date).toLocaleDateString('en-NZ', {
+                          weekday: 'short',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(d.gross)}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600">
+                        {formatCurrency(d.fees)}
+                      </TableCell>
+                      <TableCell className="text-right text-purple-600 font-medium">
+                        {formatCurrency(d.netToVerial)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="text-xs">
+                          {feeRate.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
 
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-lg font-semibold">Per-provider breakdown</h2>
-          <p className="text-sm text-muted-foreground">
-            Performance by provider for the selected period.
-          </p>
-        </div>
-        <Card>
-          <CardContent className="pt-4">
-            {providers.length === 0 ? (
-              <div className="text-sm text-muted-foreground">
-                No fee activity in this period.
-              </div>
-            ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Provider</TableHead>
-                    <TableHead className="text-right">Gross</TableHead>
-                    <TableHead className="text-right">Platform fees</TableHead>
-                    <TableHead className="text-right">Net to Verial</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {providers.map((p) => (
+      {/* Per-Provider Breakdown */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Users className="h-5 w-5" />
+            Provider Performance
+          </CardTitle>
+          <CardDescription>
+            Revenue breakdown by provider for the selected period.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {providers.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">
+              <Users className="h-12 w-12 mx-auto mb-4 opacity-50" />
+              <p>No provider activity in this period.</p>
+              <p className="text-sm">Try broadening the date range or adjusting filters.</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>
+                    <div className="flex items-center gap-2">
+                      Provider
+                      <ArrowUpDown className="h-4 w-4" />
+                    </div>
+                  </TableHead>
+                  <TableHead className="text-right">Gross Volume</TableHead>
+                  <TableHead className="text-right">Platform Fees</TableHead>
+                  <TableHead className="text-right">Net Revenue</TableHead>
+                  <TableHead className="text-right">Fee Rate</TableHead>
+                  <TableHead className="text-right">Contribution</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {providers.map((p) => {
+                  const feeRate = p.totalGross > 0 ? (p.totalFees / p.totalGross) * 100 : 0;
+                  const contributionPercent = totalFees > 0 ? (p.totalFees / totalFees) * 100 : 0;
+                  return (
                     <TableRow key={p.providerName}>
                       <TableCell>
                         <div className="font-medium">{p.providerName}</div>
                       </TableCell>
-                      <TableCell className="text-right">{formatCurrency(p.totalGross)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(p.totalFees)}</TableCell>
-                      <TableCell className="text-right">{formatCurrency(p.totalNetToVerial)}</TableCell>
+                      <TableCell className="text-right font-medium">
+                        {formatCurrency(p.totalGross)}
+                      </TableCell>
+                      <TableCell className="text-right text-green-600">
+                        {formatCurrency(p.totalFees)}
+                      </TableCell>
+                      <TableCell className="text-right text-purple-600 font-medium">
+                        {formatCurrency(p.totalNetToVerial)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="outline" className="text-xs">
+                          {feeRate.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Badge variant="secondary" className="text-xs">
+                          {contributionPercent.toFixed(1)}%
+                        </Badge>
+                      </TableCell>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            )}
-          </CardContent>
-        </Card>
-      </section>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
