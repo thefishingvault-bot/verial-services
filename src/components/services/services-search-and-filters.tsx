@@ -61,13 +61,13 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
   const searchParams = useSearchParams();
 
   const [searchQuery, setSearchQuery] = useState(initialParams.q || '');
-  const [selectedCategory, setSelectedCategory] = useState(initialParams.category || '');
+  const [selectedCategory, setSelectedCategory] = useState(initialParams.category || 'all');
   const [location, setLocation] = useState(initialParams.location || '');
   const [priceRange, setPriceRange] = useState([
     parseInt(initialParams.minPrice || '0'),
     parseInt(initialParams.maxPrice || '500')
   ]);
-  const [minRating, setMinRating] = useState(initialParams.rating || '');
+  const [minRating, setMinRating] = useState(initialParams.rating || 'any-rating');
   const [sortBy, setSortBy] = useState(initialParams.sort || 'relevance');
   const [viewMode, setViewMode] = useState<'grid' | 'map'>(initialParams.view || 'grid');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
@@ -76,8 +76,10 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
     const params = new URLSearchParams(searchParams.toString());
 
     Object.entries(updates).forEach(([key, value]) => {
-      if (value && value !== '' && value !== '0') {
-        params.set(key, value);
+      // Convert sentinel values back to undefined for URL params
+      const processedValue = value === 'all' || value === 'any-rating' ? undefined : value;
+      if (processedValue && processedValue !== '' && processedValue !== '0') {
+        params.set(key, processedValue);
       } else {
         params.delete(key);
       }
@@ -102,19 +104,19 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
 
   const clearFilters = () => {
     setSearchQuery('');
-    setSelectedCategory('');
+    setSelectedCategory('all');
     setLocation('');
     setPriceRange([0, 500]);
-    setMinRating('');
+    setMinRating('any-rating');
     setSortBy('relevance');
     router.push('/services');
   };
 
   const activeFiltersCount = [
     searchQuery,
-    selectedCategory,
+    selectedCategory !== 'all' ? selectedCategory : '',
     location,
-    minRating,
+    minRating !== 'any-rating' ? minRating : '',
     priceRange[0] > 0 || priceRange[1] < 500 ? 'price' : '',
   ].filter(Boolean).length;
 
@@ -150,7 +152,7 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               <SelectValue placeholder="Category" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="">All Categories</SelectItem>
+              <SelectItem value="all">All Categories</SelectItem>
               {categories.map((category) => (
                 <SelectItem key={category.value} value={category.value}>
                   {category.label}
@@ -229,7 +231,7 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
                       <SelectValue placeholder="Any rating" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any rating</SelectItem>
+                      <SelectItem value="any-rating">Any rating</SelectItem>
                       <SelectItem value="4.5">4.5+ stars</SelectItem>
                       <SelectItem value="4">4+ stars</SelectItem>
                       <SelectItem value="3">3+ stars</SelectItem>
@@ -286,14 +288,14 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               />
             </Badge>
           )}
-          {selectedCategory && (
+          {selectedCategory && selectedCategory !== 'all' && (
             <Badge variant="secondary" className="flex items-center gap-1">
               {categories.find(c => c.value === selectedCategory)?.label}
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => {
-                  setSelectedCategory('');
-                  updateSearchParams({ category: '' });
+                  setSelectedCategory('all');
+                  updateSearchParams({ category: 'all' });
                 }}
               />
             </Badge>
@@ -311,14 +313,14 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               />
             </Badge>
           )}
-          {minRating && (
+          {minRating && minRating !== 'any-rating' && (
             <Badge variant="secondary" className="flex items-center gap-1">
               <span className="text-yellow-500">★</span> {minRating}+ stars
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() => {
-                  setMinRating('');
-                  updateSearchParams({ rating: '' });
+                  setMinRating('any-rating');
+                  updateSearchParams({ rating: 'any-rating' });
                 }}
               />
             </Badge>
