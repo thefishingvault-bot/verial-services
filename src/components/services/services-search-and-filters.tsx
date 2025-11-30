@@ -122,8 +122,95 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
 
   return (
     <div className="space-y-4">
-      {/* Main Search Bar */}
-      <form onSubmit={handleSearch} className="flex flex-col lg:flex-row gap-4">
+      {/* Mobile Layout - Stacked */}
+      <div className="block lg:hidden space-y-4">
+        {/* Search Input - Full Width */}
+        <form onSubmit={handleSearch} className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+            <Input
+              type="search"
+              placeholder="What service do you need?"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 h-12 text-base w-full"
+            />
+          </div>
+
+          {/* Controls Row */}
+          <div className="flex gap-2">
+            <div className="relative flex-1">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                type="text"
+                placeholder="Location"
+                value={location}
+                onChange={(e) => setLocation(e.target.value)}
+                className="pl-9 h-12 w-full"
+              />
+            </div>
+
+            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+              <SelectTrigger className="h-12 w-32">
+                <SelectValue placeholder="Category" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button type="submit" size="lg" className="h-12 px-6">
+              Search
+            </Button>
+          </div>
+        </form>
+
+        {/* Sort and View Toggle Row */}
+        <div className="flex items-center justify-between gap-2">
+          <Select value={sortBy} onValueChange={setSortBy}>
+            <SelectTrigger className="h-10 flex-1">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              {sortOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          {/* View Toggle */}
+          <div className="flex border rounded-md">
+            <Button
+              type="button"
+              variant={viewMode === 'grid' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('grid')}
+              className="rounded-r-none h-10 px-3"
+            >
+              <Grid3X3 className="h-4 w-4" />
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === 'map' ? 'default' : 'ghost'}
+              size="sm"
+              onClick={() => setViewMode('map')}
+              className="rounded-l-none h-10 px-3"
+            >
+              <Map className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop Layout */}
+      <form onSubmit={handleSearch} className="hidden lg:flex lg:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <Input

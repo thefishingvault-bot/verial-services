@@ -51,26 +51,26 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <div className="bg-gradient-to-br from-blue-50 to-indigo-100 border-b">
-        <div className="container mx-auto px-4 py-8 md:py-12">
+        <div className="container mx-auto px-4 py-6 md:py-12">
           <div className="text-center max-w-4xl mx-auto">
-            <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-gray-900 mb-3 md:mb-4">
               Find Trusted Local Services
             </h1>
-            <p className="text-xl text-gray-600 mb-6 leading-relaxed">
+            <p className="text-lg md:text-xl text-gray-600 mb-4 md:mb-6 leading-relaxed px-2">
               Connect with verified professionals in your area. From home cleaning to IT support,
               discover services you can trust with our comprehensive marketplace.
             </p>
-            <div className="flex flex-wrap justify-center gap-4 text-sm text-gray-500">
+            <div className="flex flex-wrap justify-center gap-3 md:gap-4 text-sm text-gray-500 px-2">
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                 <span>Verified Providers</span>
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                 <span>Secure Payments</span>
               </div>
               <div className="flex items-center gap-2">
-                <CheckCircle className="h-4 w-4 text-green-500" />
+                <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
                 <span>Quality Guarantee</span>
               </div>
             </div>
@@ -88,8 +88,8 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
       {/* Main Content */}
       <div className="container mx-auto px-4 py-8">
         {/* Quick Stats */}
-        <div className="mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+        <div className="mb-6 md:mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 md:gap-4">
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
               <div className="text-2xl font-bold text-blue-600">{stats.totalServices}+</div>
               <div className="text-sm text-gray-600">Active Services</div>

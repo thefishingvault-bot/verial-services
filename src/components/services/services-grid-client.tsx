@@ -89,7 +89,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
           </h2>
           {searchParams.q && (
             <p className="text-sm text-gray-600 mt-1">
-              Results for "{searchParams.q}"
+              Results for &quot;{searchParams.q}&quot;
             </p>
           )}
         </div>

@@ -12,6 +12,9 @@ export interface SearchParams {
   maxPrice?: string;
   rating?: string;
   availability?: string;
+  trustLevel?: string;
+  verifiedOnly?: string;
+  distance?: string;
   sort?: string;
   view?: 'grid' | 'map';
   page?: string;
@@ -49,6 +52,13 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
   services: ServiceWithProvider[];
   hasMore: boolean;
   totalCount: number;
+  filterCounts: {
+    categories: Array<{ category: string; count: number }>;
+    trustLevels: Array<{ trustLevel: string; count: number }>;
+    verified: number;
+    availability: Array<{ value: string; count: number }>;
+    distance: Array<{ value: number; count: number }>;
+  };
 }> {
 
   // Build the query based on search parameters
@@ -90,7 +100,15 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
 
   // Trust level filter
   if (searchParams.trustLevel) {
-    whereConditions.push(eq(providers.trustLevel, searchParams.trustLevel));
+    const validTrustLevels = ["bronze", "silver", "gold", "platinum"] as const;
+    if (validTrustLevels.includes(searchParams.trustLevel as any)) {
+      whereConditions.push(
+        eq(
+          providers.trustLevel,
+          searchParams.trustLevel as (typeof validTrustLevels)[number]
+        )
+      );
+    }
   }
 
   // Verification filter
@@ -225,6 +243,9 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
   // ...existing code for review stats...
 
   // Transform data with real ratings and review counts
+  // Placeholder for providerStats and responseTimes
+  const providerStats: Record<string, { avgRating: number; reviewCount: number }> = {};
+  const responseTimes: Record<string, string> = {};
   let servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => {
     const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
     return {
