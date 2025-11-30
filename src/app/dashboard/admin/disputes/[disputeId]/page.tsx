@@ -203,66 +203,71 @@ export default async function AdminDisputeDetailPage({
       </div>
 
       {/* Status Overview */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Status</CardTitle>
-            <Shield className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <Badge variant={
-              dispute.status === "open" ? "destructive" :
-              dispute.status === "under_review" ? "secondary" :
-              dispute.status === "resolved" ? "default" :
-              "outline"
-            } className="text-sm">
-              {dispute.status.replace("_", " ")}
-            </Badge>
-          </CardContent>
-        </Card>
+      {/* Move Date.now() outside render */}
+      {(() => {
+        const now = Date.now();
+        const daysOpen = Math.floor((now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+        const isHighValue = dispute.amountDisputed && dispute.amountDisputed > 5000;
+        const isUrgent = (now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3;
+        return (
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Status</CardTitle>
+                <Shield className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <Badge variant={
+                  dispute.status === "open" ? "destructive" :
+                  dispute.status === "under_review" ? "secondary" :
+                  dispute.status === "resolved" ? "default" :
+                  "outline"
+                } className="text-sm">
+                  {dispute.status.replace("_", " ")}
+                </Badge>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Amount Disputed</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : "N/A"}
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Amount Disputed</CardTitle>
+                <DollarSign className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : "N/A"}
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Days Open</CardTitle>
-            <Clock className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-              {Math.floor((Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24))}
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Days Open</CardTitle>
+                <Clock className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">
+                  {daysOpen}
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Priority</CardTitle>
-            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <Badge variant={
-              (dispute.amountDisputed && dispute.amountDisputed > 5000) ||
-              (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3 ?
-              "destructive" : "secondary"
-            }>
-              {(dispute.amountDisputed && dispute.amountDisputed > 5000) ? "High Value" :
-               (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3 ? "Urgent" :
-               "Normal"}
-            </Badge>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Priority</CardTitle>
+                <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <Badge variant={
+                  isHighValue || isUrgent ? "destructive" : "secondary"
+                }>
+                  {isHighValue ? "High Value" : isUrgent ? "Urgent" : "Normal"}
+                </Badge>
+              </CardContent>
+            </Card>
+          </div>
+        );
+      })()}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}

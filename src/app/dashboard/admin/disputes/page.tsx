@@ -385,6 +385,9 @@ export default async function AdminDisputesPage({
 
 // Separate component for the disputes table
 function DisputesTable({ disputes }: { disputes: any[] }) {
+  // ...existing code...
+  // Move Date.now() outside render
+  const now = Date.now();
   return (
     <Card>
       <CardHeader>
@@ -414,10 +417,10 @@ function DisputesTable({ disputes }: { disputes: any[] }) {
           </TableHeader>
           <TableBody>
             {disputes.map((dispute) => {
-              const daysSinceCreation = (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+              const daysSinceCreation = (now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
               const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
               const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
-
+              // ...existing code...
               return (
                 <TableRow key={dispute.id} className={isUrgent ? "bg-red-50" : ""}>
                   <TableCell>

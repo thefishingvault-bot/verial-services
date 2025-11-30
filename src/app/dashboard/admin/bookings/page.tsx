@@ -293,6 +293,9 @@ export default async function AdminBookingsPage({
 
 // Separate component for the bookings table
 function BookingsTable({ bookings }: { bookings: any[] }) {
+  // ...existing code...
+  // Move Date.now() outside render
+  const now = Date.now();
   return (
     <Card>
       <CardHeader>
@@ -323,9 +326,9 @@ function BookingsTable({ bookings }: { bookings: any[] }) {
           </TableHeader>
           <TableBody>
             {bookings.map((booking) => {
-              const daysSinceCreation = (Date.now() - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+              const daysSinceCreation = (now - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
               const isRecent = daysSinceCreation < 1; // Less than 24 hours
-
+              // ...existing code...
               return (
                 <TableRow key={booking.id} className={isRecent ? "bg-blue-50" : ""}>
                   <TableCell>
