@@ -285,7 +285,7 @@ export default async function AdminTrustIncidentsPage({
         <CardHeader>
           <CardTitle>Trust Incidents</CardTitle>
           <CardDescription>
-            {incidentsWithUsers.length} incident{incidentsWithUsers.length !== 1 ? 's' : ''} found
+            {incidentsWithUsers.length} incident{incidentsWithUsers.length !== 1 ? "s" : ""} found
           </CardDescription>
         </CardHeader>
         <CardContent>

@@ -107,7 +107,7 @@ export default async function NewRiskRulePage() {
                   max="100"
                 />
                 <p className="text-sm text-muted-foreground">
-                  Points to deduct from provider's trust score
+                  Points to deduct from provider&apos;s trust score
                 </p>
               </div>
             </div>

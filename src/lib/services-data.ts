@@ -1,24 +1,33 @@
 import { db } from '@/lib/db';
 import { services, providers, users, conversations, messages, reviews } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne } from 'drizzle-orm';
+import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne, inArray } from 'drizzle-orm';
 
 export type ServiceCategory = "cleaning" | "plumbing" | "gardening" | "it_support" | "accounting" | "detailing" | "other";
 
 export interface SearchParams {
   q?: string;
-  category?: ServiceCategory;
+  category?: string;
   location?: string;
   minPrice?: string;
   maxPrice?: string;
   rating?: string;
   availability?: string;
-  trustLevel?: string;
-  verifiedOnly?: string;
-  distance?: string;
   sort?: string;
   view?: 'grid' | 'map';
   page?: string;
 }
+
+  // Deprecated: use ServicesFilterState instead
+
+export type ServicesFilterState = {
+  categories: string[];
+  minPrice?: number;
+  maxPrice?: number;
+  minRating?: number;
+  trustLevels: string[];
+  search?: string;
+  sort?: string;
+};
 
 export interface ServiceWithProvider {
   id: string;
@@ -48,7 +57,7 @@ export interface ServiceWithProvider {
   distance?: number;
 }
 
-export async function getServicesData(searchParams: SearchParams): Promise<{
+export async function getServicesData({ filters }: { filters: ServicesFilterState }): Promise<{
   services: ServiceWithProvider[];
   hasMore: boolean;
   totalCount: number;
@@ -61,90 +70,58 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
   };
 }> {
 
-  // Build the query based on search parameters
+  // Build the query based on filters
   const whereConditions = [eq(providers.status, 'approved')];
 
   // Text search
-  if (searchParams.q) {
+  if (filters.search) {
     whereConditions.push(
       or(
-        like(services.title, `%${searchParams.q}%`),
-        like(services.description, `%${searchParams.q}%`),
-        like(providers.businessName, `%${searchParams.q}%`)
+        like(services.title, `%${filters.search}%`),
+        like(services.description, `%${filters.search}%`),
+        like(providers.businessName, `%${filters.search}%`)
       )!
     );
   }
 
   // Category filter
-  if (searchParams.category) {
-    whereConditions.push(eq(services.category, searchParams.category));
-  }
-
-  // Location filter (simplified - would need geocoding in production)
-  if (searchParams.location) {
-    whereConditions.push(
-      or(
-        like(providers.baseSuburb, `%${searchParams.location}%`),
-        like(providers.baseRegion, `%${searchParams.location}%`)
-      )!
-    );
-  }
-
-  // Price range filter
-  if (searchParams.minPrice) {
-    whereConditions.push(gte(services.priceInCents, parseInt(searchParams.minPrice) * 100));
-  }
-  if (searchParams.maxPrice) {
-    whereConditions.push(lte(services.priceInCents, parseInt(searchParams.maxPrice) * 100));
-  }
-
-  // Trust level filter
-  if (searchParams.trustLevel) {
-    const validTrustLevels = ["bronze", "silver", "gold", "platinum"] as const;
-    if (validTrustLevels.includes(searchParams.trustLevel as any)) {
-      whereConditions.push(
-        eq(
-          providers.trustLevel,
-          searchParams.trustLevel as (typeof validTrustLevels)[number]
-        )
-      );
+  if (filters.categories && filters.categories.length > 0) {
+    const allowedCategories = ["cleaning", "plumbing", "gardening", "it_support", "accounting", "detailing", "other"] as const;
+    const validCategories = filters.categories.filter((cat): cat is typeof allowedCategories[number] => allowedCategories.includes(cat as any));
+    if (validCategories.length > 0) {
+      whereConditions.push(inArray(services.category, validCategories as readonly typeof allowedCategories[number][]));
     }
   }
 
-  // Verification filter
-  if (searchParams.verifiedOnly === 'true') {
-    whereConditions.push(eq(providers.isVerified, true));
+  // Price range filter
+  if (filters.minPrice != null) {
+    whereConditions.push(gte(services.priceInCents, filters.minPrice * 100));
+  }
+  if (filters.maxPrice != null) {
+    whereConditions.push(lte(services.priceInCents, filters.maxPrice * 100));
   }
 
-  // Availability filter (simplified)
-  if (searchParams.availability) {
-    // Example: 'today', 'tomorrow', 'weekend', 'next_week'
-    // This would require a join with providerAvailabilities and/or providerTimeOffs
-    // For now, just a placeholder
-    // whereConditions.push(...)
+  // Trust level filter
+  if (filters.trustLevels && filters.trustLevels.length > 0) {
+    const allowedTrustLevels = ["bronze", "silver", "gold", "platinum"] as const;
+    const validTrustLevels = filters.trustLevels.filter((tl): tl is typeof allowedTrustLevels[number] => allowedTrustLevels.includes(tl as any));
+    if (validTrustLevels.length > 0) {
+      whereConditions.push(inArray(providers.trustLevel, validTrustLevels as readonly typeof allowedTrustLevels[number][]));
+    }
   }
 
-  // Distance filter (simplified)
-  if (searchParams.distance) {
-    // Would require geolocation logic; placeholder for now
-    // whereConditions.push(...)
-  }
-
-  // Minimum rating filter
-  if (searchParams.rating) {
-    // Will filter after fetching review stats
-  }
+  // Minimum rating filter (will filter after fetching review stats)
 
   // Build order by
   let orderBy = desc(services.createdAt);
-  switch (searchParams.sort) {
-    case 'rating':
+  switch (filters.sort) {
+    case 'rating_desc':
       orderBy = desc(sql`COALESCE(avg_rating, 0)`);
       break;
-    case 'price_low':
+    case 'price_asc':
       orderBy = asc(services.priceInCents);
       break;
-    case 'price_high':
+    case 'price_desc':
       orderBy = desc(services.priceInCents);
       break;
     case 'newest':
@@ -156,9 +133,9 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
       break;
   }
 
-  const page = parseInt(searchParams.page || '1');
-  const limit = 12; // Show 12 services per page
-  const offset = (page - 1) * limit;
+  const page = 1; // TODO: wire up pagination if needed
+  const limit = 12;
+  const offset = 0;
 
   // Get total count for pagination
   const totalCountResult = await db
@@ -278,9 +255,8 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
   });
 
   // Apply minimum rating filter after stats
-  if (searchParams.rating) {
-    const minRating = parseFloat(searchParams.rating);
-    servicesWithProviders = servicesWithProviders.filter(s => s.avgRating >= minRating);
+  if (filters.minRating != null) {
+    servicesWithProviders = servicesWithProviders.filter(s => s.avgRating >= filters.minRating!);
   }
 
   return {

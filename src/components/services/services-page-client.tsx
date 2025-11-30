@@ -5,19 +5,15 @@ import { Filter, MapPin, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CheckCircle } from 'lucide-react';
-import { ServicesSearchAndFilters } from '@/components/services/services-search-and-filters';
+import ServicesSearchAndFilters from '@/components/services/services-search-and-filters';
 import { ServicesGridClient } from '@/components/services/services-grid-client';
 import { ServicesMap } from '@/components/services/services-map';
 import { ServicesLoading } from '@/components/services/services-loading';
 import { ServicesAdvancedFilters } from '@/components/services/services-advanced-filters';
-import { ServiceWithProvider, SearchParams } from '@/lib/services-data';
-
-interface SearchParamsWithPage extends SearchParams {
-  page?: string;
-}
+import type { ServiceWithProvider, ServicesFilterState } from '@/lib/services-data';
 
 interface ServicesPageClientProps {
-  initialParams: SearchParams;
+  initialFilters: ServicesFilterState;
   initialServicesData: {
     services: ServiceWithProvider[];
     hasMore: boolean;
@@ -27,10 +23,12 @@ interface ServicesPageClientProps {
     totalServices: number;
     averageRating: number;
   };
+  initialParams: Record<string, string>;
 }
 
-export function ServicesPageClient({ initialParams, initialServicesData, stats }: ServicesPageClientProps) {
-  const [viewMode, setViewMode] = useState<'grid' | 'map'>(initialParams.view || 'grid');
+const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initialParams }: ServicesPageClientProps) => {
+  const [filters, setFilters] = useState<ServicesFilterState>(initialFilters);
+  const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [servicesData, setServicesData] = useState(initialServicesData);
 
   const handleViewToggle = () => {
@@ -45,6 +43,11 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
     });
     newParams.set('view', newView);
     window.location.href = `/services?${newParams.toString()}`;
+  };
+
+  const handleFiltersChange = (next: ServicesFilterState) => {
+    setFilters(next);
+    // Optionally: fetch new data client-side or rely on server reload
   };
 
   return (
@@ -81,7 +84,7 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
       {/* Search and Filters */}
       <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <ServicesSearchAndFilters initialParams={initialParams} />
+          <ServicesSearchAndFilters filters={filters} onFiltersChange={handleFiltersChange} />
         </div>
       </div>
 
@@ -171,4 +174,6 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
       </div>
     </div>
   );
-}
+};
+
+export default ServicesPageClient;

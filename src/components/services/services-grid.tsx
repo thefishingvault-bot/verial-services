@@ -158,61 +158,18 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
   const limit = 12; // Show 12 services per page
   const offset = (page - 1) * limit;
 
-  // Fetch services with provider info
-  const servicesData = await db
-    .select({
-      id: services.id,
-      title: services.title,
-      description: services.description,
-      priceInCents: services.priceInCents,
-      category: services.category,
-      coverImageUrl: services.coverImageUrl,
-      createdAt: services.createdAt,
-      providerId: services.providerId,
-      businessName: providers.businessName,
-      handle: providers.handle,
-      baseSuburb: providers.baseSuburb,
-      baseRegion: providers.baseRegion,
-      trustScore: providers.trustScore,
-      isVerified: providers.isVerified,
-      avatarUrl: users.avatarUrl,
-      firstName: users.firstName,
-      lastName: users.lastName,
-    })
-    .from(services)
-    .innerJoin(providers, eq(services.providerId, providers.id))
-    .innerJoin(users, eq(providers.userId, users.id))
-    .where(and(...whereConditions))
-    .orderBy(orderBy)
-    .limit(limit)
-    .offset(offset);
 
-  // Transform data and add mock ratings (in production, this would come from reviews table)
-  const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => ({
-    id: service.id,
-    title: service.title,
-    description: service.description,
-    priceInCents: service.priceInCents,
-    category: service.category,
-    coverImageUrl: service.coverImageUrl,
-    createdAt: service.createdAt,
-    provider: {
-      id: service.providerId,
-      businessName: service.businessName,
-      handle: service.handle,
-      baseSuburb: service.baseSuburb,
-      baseRegion: service.baseRegion,
-      trustScore: service.trustScore,
-      isVerified: service.isVerified,
-      avatarUrl: service.avatarUrl,
-    },
-    user: {
-      firstName: service.firstName,
-      lastName: service.lastName,
-    },
-    avgRating: Math.random() * 2 + 3, // Mock rating between 3-5
-    reviewCount: Math.floor(Math.random() * 50) + 1, // Mock review count
-  }));
+  // Use getServicesData to fetch services with avgRating and reviewCount
+  const filters = {
+    categories: searchParams.category ? [searchParams.category] : [],
+    minPrice: searchParams.minPrice ? parseInt(searchParams.minPrice) : undefined,
+    maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
+    minRating: searchParams.rating ? parseFloat(searchParams.rating) : undefined,
+    trustLevels: [],
+    search: searchParams.q,
+    sort: searchParams.sort,
+  };
+  const { services: servicesWithProviders } = await import('@/lib/services-data').then(mod => mod.getServicesData({ filters }));
 
   if (servicesWithProviders.length === 0) {
     return (
@@ -241,7 +198,7 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
           </h2>
           {searchParams.q && (
             <p className="text-sm text-gray-600 mt-1">
-              Results for "{searchParams.q}"
+              Results for &quot;{searchParams.q}&quot;
             </p>
           )}
         </div>

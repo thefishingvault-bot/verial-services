@@ -203,10 +203,12 @@ export default async function AdminDisputeDetailPage({
       </div>
 
       {/* Status Overview */}
-      {/* Move Date.now() outside render */}
       {(() => {
-        const now = Date.now();
-        const daysOpen = Math.floor((now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+          const now = Date.now();
+          function getDaysOpen(createdAt: Date, now: number) {
+            return Math.floor((now - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+          }
+          const daysOpen = getDaysOpen(dispute.createdAt, now);
         const isHighValue = dispute.amountDisputed && dispute.amountDisputed > 5000;
         const isUrgent = (now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3;
         return (

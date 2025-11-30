@@ -1,7 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -17,21 +17,11 @@ import {
   X,
   SlidersHorizontal
 } from 'lucide-react';
-
-interface SearchParams {
-  q?: string;
-  category?: string;
-  location?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
-  availability?: string;
-  sort?: string;
-  view?: 'grid' | 'map';
-}
+import type { ServicesFilterState } from '@/lib/services-data';
 
 interface ServicesSearchAndFiltersProps {
-  initialParams: SearchParams;
+  filters: ServicesFilterState;
+  onFiltersChange: (next: ServicesFilterState) => void;
 }
 
 const categories = [
@@ -49,75 +39,70 @@ const categories = [
 
 const sortOptions = [
   { value: 'relevance', label: 'Most Relevant' },
-  { value: 'rating', label: 'Highest Rated' },
-  { value: 'price_low', label: 'Price: Low to High' },
-  { value: 'price_high', label: 'Price: High to Low' },
+  { value: 'rating_desc', label: 'Highest Rated' },
+  { value: 'price_asc', label: 'Price: Low to High' },
+  { value: 'price_desc', label: 'Price: High to Low' },
   { value: 'distance', label: 'Distance' },
   { value: 'newest', label: 'Recently Added' },
 ];
 
-export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFiltersProps) {
+const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAndFiltersProps) => {
   const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const [searchQuery, setSearchQuery] = useState(initialParams.q || '');
-  const [selectedCategory, setSelectedCategory] = useState(initialParams.category || 'all');
-  const [location, setLocation] = useState(initialParams.location || '');
-  const [priceRange, setPriceRange] = useState([
-    parseInt(initialParams.minPrice || '0'),
-    parseInt(initialParams.maxPrice || '500')
-  ]);
-  const [minRating, setMinRating] = useState(initialParams.rating || 'any-rating');
-  const [sortBy, setSortBy] = useState(initialParams.sort || 'relevance');
-  const [viewMode, setViewMode] = useState<'grid' | 'map'>(initialParams.view || 'grid');
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  const updateSearchParams = (updates: Partial<SearchParams>) => {
-    const params = new URLSearchParams(searchParams.toString());
+  // Debounce for search and price slider
+  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
-    Object.entries(updates).forEach(([key, value]) => {
-      // Convert sentinel values back to undefined for URL params
-      const processedValue = value === 'all' || value === 'any-rating' ? undefined : value;
-      if (processedValue && processedValue !== '' && processedValue !== '0') {
-        params.set(key, processedValue);
-      } else {
-        params.delete(key);
-      }
-    });
+  // Controlled state from filters prop
+  const searchQuery = filters.search || '';
+  const selectedCategories = filters.categories || [];
+  const priceRange = [filters.minPrice ?? 0, filters.maxPrice ?? 500];
+  const minRating = filters.minRating ?? 0;
+  const sortBy = filters.sort || 'relevance';
 
-    router.push(`/services?${params.toString()}`);
+  const applyFiltersToUrl = (next: ServicesFilterState) => {
+    const params = new URLSearchParams();
+    if (next.categories.length) params.set('categories', next.categories.join(','));
+    if (next.minPrice != null) params.set('minPrice', String(next.minPrice));
+    if (next.maxPrice != null) params.set('maxPrice', String(next.maxPrice));
+    if (next.minRating != null) params.set('minRating', String(next.minRating));
+    if (next.trustLevels.length) params.set('trustLevels', next.trustLevels.join(','));
+    if (next.search) params.set('q', next.search);
+    if (next.sort) params.set('sort', next.sort);
+    router.replace(`/services?${params.toString()}`);
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
-    updateSearchParams({
-      q: searchQuery,
-      category: selectedCategory,
-      location,
-      minPrice: priceRange[0].toString(),
-      maxPrice: priceRange[1].toString(),
-      rating: minRating,
-      sort: sortBy,
-      view: viewMode,
-    });
+  const handleFiltersChange = (next: ServicesFilterState, debounce = false) => {
+    onFiltersChange(next);
+    if (debounce) {
+      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
+      debounceTimeout.current = setTimeout(() => {
+        applyFiltersToUrl(next);
+      }, 400);
+    } else {
+      applyFiltersToUrl(next);
+    }
   };
 
   const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('all');
-    setLocation('');
-    setPriceRange([0, 500]);
-    setMinRating('any-rating');
-    setSortBy('relevance');
-    router.push('/services');
+    const cleared: ServicesFilterState = {
+      categories: [],
+      minPrice: 0,
+      maxPrice: 500,
+      minRating: 0,
+      trustLevels: [],
+      search: '',
+      sort: 'relevance',
+    };
+    handleFiltersChange(cleared);
   };
 
   const activeFiltersCount = [
     searchQuery,
-    selectedCategory !== 'all' ? selectedCategory : '',
-    location,
-    minRating !== 'any-rating' ? minRating : '',
+    selectedCategories.length ? selectedCategories.join(',') : '',
+    minRating > 0 ? minRating : '',
     priceRange[0] > 0 || priceRange[1] < 500 ? 'price' : '',
+    filters.trustLevels.length ? filters.trustLevels.join(',') : '',
   ].filter(Boolean).length;
 
   return (
@@ -125,56 +110,45 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
       {/* Mobile Layout - Stacked */}
       <div className="block lg:hidden space-y-4">
         {/* Search Input - Full Width */}
-        <form onSubmit={handleSearch} className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
-            <Input
-              type="search"
-              placeholder="What service do you need?"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 h-12 text-base w-full"
-            />
-          </div>
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+          <Input
+            type="search"
+            placeholder="What service do you need?"
+            value={searchQuery}
+            onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value }, true)}
+            className="pl-10 h-12 text-base w-full"
+          />
+        </div>
 
-          {/* Controls Row */}
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-              <Input
-                type="text"
-                placeholder="Location"
-                value={location}
-                onChange={(e) => setLocation(e.target.value)}
-                className="pl-9 h-12 w-full"
-              />
-            </div>
+        {/* Controls Row */}
+        <div className="flex gap-2">
+          <Select
+            value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+            onValueChange={(value) => {
+              const newCategories = value === 'all' ? [] : [value];
+              handleFiltersChange({ ...filters, categories: newCategories });
+            }}
+          >
+            <SelectTrigger className="h-12 flex-1">
+              <SelectValue placeholder="Category" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Categories</SelectItem>
+              {categories.map((category) => (
+                <SelectItem key={category.value} value={category.value}>
+                  {category.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
-            <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-              <SelectTrigger className="h-12 w-32">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                {categories.map((category) => (
-                  <SelectItem key={category.value} value={category.value}>
-                    {category.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button type="submit" size="lg" className="h-12 px-6">
-              Search
-            </Button>
-          </div>
-        </form>
-
-        {/* Sort and View Toggle Row */}
-        <div className="flex items-center justify-between gap-2">
-          <Select value={sortBy} onValueChange={setSortBy}>
-            <SelectTrigger className="h-10 flex-1">
-              <SelectValue placeholder="Sort by" />
+          <Select
+            value={sortBy}
+            onValueChange={(value) => handleFiltersChange({ ...filters, sort: value })}
+          >
+            <SelectTrigger className="h-12 w-32">
+              <SelectValue placeholder="Sort" />
             </SelectTrigger>
             <SelectContent>
               {sortOptions.map((option) => (
@@ -184,57 +158,30 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               ))}
             </SelectContent>
           </Select>
-
-          {/* View Toggle */}
-          <div className="flex border rounded-md">
-            <Button
-              type="button"
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className="rounded-r-none h-10 px-3"
-            >
-              <Grid3X3 className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant={viewMode === 'map' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('map')}
-              className="rounded-l-none h-10 px-3"
-            >
-              <Map className="h-4 w-4" />
-            </Button>
-          </div>
         </div>
       </div>
 
       {/* Desktop Layout */}
-      <form onSubmit={handleSearch} className="hidden lg:flex lg:flex-row gap-4">
+      <div className="hidden lg:flex lg:flex-row gap-4">
         <div className="flex-1 relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
           <Input
             type="search"
             placeholder="What service do you need? (e.g., 'window cleaning')"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value }, true)}
             className="pl-10 h-12 text-base"
           />
         </div>
 
         <div className="flex gap-2">
-          <div className="relative">
-            <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              type="text"
-              placeholder="Location"
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              className="pl-9 w-40 h-12"
-            />
-          </div>
-
-          <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+          <Select
+            value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+            onValueChange={(value) => {
+              const newCategories = value === 'all' ? [] : [value];
+              handleFiltersChange({ ...filters, categories: newCategories });
+            }}
+          >
             <SelectTrigger className="w-40 h-12">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -248,7 +195,10 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={setSortBy}>
+          <Select
+            value={sortBy}
+            onValueChange={(value) => handleFiltersChange({ ...filters, sort: value })}
+          >
             <SelectTrigger className="w-40 h-12">
               <SelectValue placeholder="Sort by" />
             </SelectTrigger>
@@ -260,28 +210,6 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               ))}
             </SelectContent>
           </Select>
-
-          {/* View Toggle */}
-          <div className="flex border rounded-md">
-            <Button
-              type="button"
-              variant={viewMode === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('grid')}
-              className="rounded-r-none h-12 px-3"
-            >
-              <Grid3X3 className="h-4 w-4" />
-            </Button>
-            <Button
-              type="button"
-              variant={viewMode === 'map' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setViewMode('map')}
-              className="rounded-l-none h-12 px-3"
-            >
-              <Map className="h-4 w-4" />
-            </Button>
-          </div>
 
           {/* Mobile Filters Toggle */}
           <Sheet open={showMobileFilters} onOpenChange={setShowMobileFilters}>
@@ -313,15 +241,18 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
                   <label className="block text-sm font-medium text-gray-700 mb-2">
                     Minimum Rating
                   </label>
-                  <Select value={minRating} onValueChange={setMinRating}>
+                  <Select
+                    value={String(minRating)}
+                    onValueChange={(value) => handleFiltersChange({ ...filters, minRating: parseFloat(value) || 0 })}
+                  >
                     <SelectTrigger>
                       <SelectValue placeholder="Any rating" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="any-rating">Any rating</SelectItem>
-                      <SelectItem value="4.5">4.5+ stars</SelectItem>
-                      <SelectItem value="4">4+ stars</SelectItem>
+                      <SelectItem value="0">Any rating</SelectItem>
                       <SelectItem value="3">3+ stars</SelectItem>
+                      <SelectItem value="4">4+ stars</SelectItem>
+                      <SelectItem value="4.5">4.5+ stars</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -333,7 +264,7 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
                   <div className="px-2">
                     <Slider
                       value={priceRange}
-                      onValueChange={setPriceRange}
+                      onValueChange={(value) => handleFiltersChange({ ...filters, minPrice: value[0], maxPrice: value[1] }, true)}
                       max={500}
                       min={0}
                       step={10}
@@ -353,11 +284,16 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
             </SheetContent>
           </Sheet>
 
-          <Button type="submit" size="lg" className="h-12 px-8">
+          <Button
+            type="button"
+            size="lg"
+            className="h-12 px-8"
+            onClick={() => applyFiltersToUrl(filters)}
+          >
             Search
           </Button>
         </div>
-      </form>
+      </div>
 
       {/* Active Filters Display */}
       {activeFiltersCount > 0 && (
@@ -368,47 +304,25 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               Search: {searchQuery}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => {
-                  setSearchQuery('');
-                  updateSearchParams({ q: '' });
-                }}
+                onClick={() => handleFiltersChange({ ...filters, search: '' })}
               />
             </Badge>
           )}
-          {selectedCategory && selectedCategory !== 'all' && (
+          {selectedCategories.length > 0 && (
             <Badge variant="secondary" className="flex items-center gap-1">
-              {categories.find(c => c.value === selectedCategory)?.label}
+              {selectedCategories.map(cat => categories.find(c => c.value === cat)?.label).join(', ')}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => {
-                  setSelectedCategory('all');
-                  updateSearchParams({ category: 'all' });
-                }}
+                onClick={() => handleFiltersChange({ ...filters, categories: [] })}
               />
             </Badge>
           )}
-          {location && (
-            <Badge variant="secondary" className="flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {location}
-              <X
-                className="h-3 w-3 cursor-pointer"
-                onClick={() => {
-                  setLocation('');
-                  updateSearchParams({ location: '' });
-                }}
-              />
-            </Badge>
-          )}
-          {minRating && minRating !== 'any-rating' && (
+          {minRating > 0 && (
             <Badge variant="secondary" className="flex items-center gap-1">
               <span className="text-yellow-500">★</span> {minRating}+ stars
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => {
-                  setMinRating('any-rating');
-                  updateSearchParams({ rating: 'any-rating' });
-                }}
+                onClick={() => handleFiltersChange({ ...filters, minRating: 0 })}
               />
             </Badge>
           )}
@@ -417,10 +331,7 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
               ${priceRange[0]} - ${priceRange[1]}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => {
-                  setPriceRange([0, 500]);
-                  updateSearchParams({ minPrice: '', maxPrice: '' });
-                }}
+                onClick={() => handleFiltersChange({ ...filters, minPrice: 0, maxPrice: 500 })}
               />
             </Badge>
           )}
@@ -436,4 +347,6 @@ export function ServicesSearchAndFilters({ initialParams }: ServicesSearchAndFil
       )}
     </div>
   );
-}
+};
+
+export default ServicesSearchAndFilters;

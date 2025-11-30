@@ -116,8 +116,8 @@ export default async function AdminBookingsPage({
     .reduce((sum, b) => sum + (b.priceAtBooking || 0), 0);
 
   // Calculate recent bookings (last 7 days)
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+  const now = Date.now();
+  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
   const recentBookings = bookingsData.filter(b => b.createdAt >= sevenDaysAgo).length;
 
   return (
@@ -293,7 +293,6 @@ export default async function AdminBookingsPage({
 
 // Separate component for the bookings table
 function BookingsTable({ bookings }: { bookings: any[] }) {
-  // ...existing code...
   // Move Date.now() outside render
   const now = Date.now();
   return (
@@ -328,7 +327,6 @@ function BookingsTable({ bookings }: { bookings: any[] }) {
             {bookings.map((booking) => {
               const daysSinceCreation = (now - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
               const isRecent = daysSinceCreation < 1; // Less than 24 hours
-              // ...existing code...
               return (
                 <TableRow key={booking.id} className={isRecent ? "bg-blue-50" : ""}>
                   <TableCell>
@@ -370,57 +368,45 @@ function BookingsTable({ bookings }: { bookings: any[] }) {
                         ${(booking.priceAtBooking / 100).toFixed(2)}
                       </div>
                       {booking.status === "paid" && (
-                        <Badge variant="outline" className="text-xs text-green-600">
-                          Paid
-                        </Badge>
+                        <div className="text-xs text-green-600">Paid</div>
                       )}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant={
-                      booking.status === "pending" ? "secondary" :
-                      booking.status === "confirmed" ? "default" :
-                      booking.status === "paid" ? "default" :
-                      booking.status === "completed" ? "default" :
-                      booking.status === "canceled" ? "destructive" :
-                      "outline"
-                    }>
+                    <Badge
+                      variant={
+                        booking.status === "confirmed"
+                          ? "default"
+                          : booking.status === "pending"
+                          ? "secondary"
+                          : booking.status === "paid"
+                          ? "default"
+                          : booking.status === "completed"
+                          ? "default"
+                          : "destructive"
+                      }
+                    >
                       {booking.status}
                     </Badge>
                   </TableCell>
                   <TableCell>
                     <div className="text-sm">
-                      {booking.scheduledDate ?
-                        booking.scheduledDate.toLocaleDateString() :
-                        "Not scheduled"}
-                    </div>
-                    {booking.scheduledDate && (
-                      <div className="text-xs text-muted-foreground">
-                        {booking.scheduledDate.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {booking.createdAt.toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {Math.floor(daysSinceCreation)}d ago
+                      {booking.scheduledDate ? new Date(booking.scheduledDate).toLocaleDateString() : "TBD"}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex gap-2">
+                    <div className="text-sm text-muted-foreground">
+                      {new Date(booking.createdAt).toLocaleDateString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
                       <Button asChild size="sm" variant="outline">
                         <Link href={`/dashboard/admin/bookings/${booking.id}`}>
                           <Eye className="h-4 w-4 mr-1" />
                           View
                         </Link>
                       </Button>
-                      {booking.status === "pending" && (
-                        <Button size="sm" variant="outline">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      )}
                     </div>
                   </TableCell>
                 </TableRow>

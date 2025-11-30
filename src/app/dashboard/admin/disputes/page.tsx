@@ -193,10 +193,14 @@ export default async function AdminDisputesPage({
     .reduce((sum, d) => sum + (d.refundAmount || 0), 0);
 
   // Calculate urgency based on time since creation
-  const urgentDisputes = disputeList.filter(d => {
-    const daysSinceCreation = (Date.now() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-    return d.status === "open" && daysSinceCreation > 3;
-  }).length;
+  function getUrgentDisputes(disputeList: any[], now: number) {
+    return disputeList.filter(d => {
+      const daysSinceCreation = (now - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+      return d.status === "open" && daysSinceCreation > 3;
+    }).length;
+  }
+  const now = Date.now();
+  const urgentDisputes = getUrgentDisputes(disputeList, now);
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -385,7 +389,6 @@ export default async function AdminDisputesPage({
 
 // Separate component for the disputes table
 function DisputesTable({ disputes }: { disputes: any[] }) {
-  // ...existing code...
   // Move Date.now() outside render
   const now = Date.now();
   return (
