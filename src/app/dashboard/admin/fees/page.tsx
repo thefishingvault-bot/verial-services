@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
 import { requireAdmin } from '@/lib/admin';
+import { getBaseUrl } from '@/lib/getBaseUrl';
 import {
   DollarSign,
   TrendingUp,
@@ -109,9 +110,12 @@ export default async function AdminFeesPage({
   const fromIso = startDate.toISOString().split('T')[0];
   const toIso = endDate.toISOString().split('T')[0];
 
-  const url = `/api/admin/fees/report?from=${fromIso}&to=${toIso}`;
+  const baseUrl = getBaseUrl();
+  const url = new URL('/api/admin/fees/report', baseUrl);
+  url.searchParams.set('from', fromIso);
+  url.searchParams.set('to', toIso);
 
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url.toString(), { cache: 'no-store' });
 
   if (!res.ok) {
     return (
