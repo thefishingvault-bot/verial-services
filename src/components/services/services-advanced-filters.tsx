@@ -32,36 +32,43 @@ interface SearchParams {
 
 interface ServicesAdvancedFiltersProps {
   searchParams: SearchParams;
+  filterCounts?: {
+    categories: { category: string; count: number }[];
+    trustLevels: { trustLevel: string; count: number }[];
+    verified: number;
+    availability: { value: string; count: number }[];
+    distance: { value: number; count: number }[];
+  };
 }
 
 const categories = [
-  { value: 'cleaning', label: 'Cleaning', count: 24 },
-  { value: 'plumbing', label: 'Plumbing', count: 18 },
-  { value: 'gardening', label: 'Gardening', count: 15 },
-  { value: 'it_support', label: 'IT Support', count: 12 },
-  { value: 'accounting', label: 'Accounting', count: 8 },
-  { value: 'detailing', label: 'Detailing', count: 6 },
-  { value: 'electrical', label: 'Electrical', count: 10 },
-  { value: 'painting', label: 'Painting', count: 9 },
-  { value: 'landscaping', label: 'Landscaping', count: 7 },
-  { value: 'handyman', label: 'Handyman', count: 14 },
+  { value: 'cleaning', label: 'Cleaning' },
+  { value: 'plumbing', label: 'Plumbing' },
+  { value: 'gardening', label: 'Gardening' },
+  { value: 'it_support', label: 'IT Support' },
+  { value: 'accounting', label: 'Accounting' },
+  { value: 'detailing', label: 'Detailing' },
+  { value: 'electrical', label: 'Electrical' },
+  { value: 'painting', label: 'Painting' },
+  { value: 'landscaping', label: 'Landscaping' },
+  { value: 'handyman', label: 'Handyman' },
 ];
 
 const trustLevels = [
-  { value: 'platinum', label: 'Platinum', color: 'bg-purple-500', count: 3 },
-  { value: 'gold', label: 'Gold', color: 'bg-yellow-500', count: 8 },
-  { value: 'silver', label: 'Silver', color: 'bg-gray-400', count: 15 },
-  { value: 'bronze', label: 'Bronze', color: 'bg-orange-500', count: 22 },
+  { value: 'platinum', label: 'Platinum', color: 'bg-purple-500' },
+  { value: 'gold', label: 'Gold', color: 'bg-yellow-500' },
+  { value: 'silver', label: 'Silver', color: 'bg-gray-400' },
+  { value: 'bronze', label: 'Bronze', color: 'bg-orange-500' },
 ];
 
 const availabilityOptions = [
-  { value: 'today', label: 'Available Today', count: 12 },
-  { value: 'tomorrow', label: 'Available Tomorrow', count: 28 },
-  { value: 'weekend', label: 'Available This Weekend', count: 35 },
-  { value: 'next_week', label: 'Available Next Week', count: 42 },
+  { value: 'today', label: 'Available Today' },
+  { value: 'tomorrow', label: 'Available Tomorrow' },
+  { value: 'weekend', label: 'Available This Weekend' },
+  { value: 'next_week', label: 'Available Next Week' },
 ];
 
-export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFiltersProps) {
+export function ServicesAdvancedFilters({ searchParams, filterCounts }: ServicesAdvancedFiltersProps) {
   const router = useRouter();
   const currentSearchParams = useSearchParams();
 
@@ -171,28 +178,31 @@ export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFilter
           <div className="space-y-3">
             <h3 className="font-medium text-gray-900">Service Categories</h3>
             <div className="space-y-2">
-              {categories.map((category) => (
-                <div key={category.value} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`category-${category.value}`}
-                    checked={selectedCategories.includes(category.value)}
-                    onCheckedChange={(checked) => {
-                      const newCategories = checked
-                        ? [...selectedCategories, category.value]
-                        : selectedCategories.filter(c => c !== category.value);
-                      setSelectedCategories(newCategories);
-                      updateFilters({ categories: newCategories });
-                    }}
-                  />
-                  <label
-                    htmlFor={`category-${category.value}`}
-                    className="text-sm text-gray-700 flex-1 cursor-pointer"
-                  >
-                    {category.label}
-                  </label>
-                  <span className="text-xs text-gray-500">({category.count})</span>
-                </div>
-              ))}
+              {categories.map((category) => {
+                const liveCount = filterCounts?.categories?.find(c => c.category === category.value)?.count ?? 0;
+                return (
+                  <div key={category.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`category-${category.value}`}
+                      checked={selectedCategories.includes(category.value)}
+                      onCheckedChange={(checked) => {
+                        const newCategories = checked
+                          ? [...selectedCategories, category.value]
+                          : selectedCategories.filter(c => c !== category.value);
+                        setSelectedCategories(newCategories);
+                        updateFilters({ categories: newCategories });
+                      }}
+                    />
+                    <label
+                      htmlFor={`category-${category.value}`}
+                      className="text-sm text-gray-700 flex-1 cursor-pointer"
+                    >
+                      {category.label}
+                    </label>
+                    <span className="text-xs text-gray-500">({liveCount})</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -255,28 +265,31 @@ export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFilter
           <div className="space-y-3">
             <h3 className="font-medium text-gray-900">Provider Trust Level</h3>
             <div className="space-y-2">
-              {trustLevels.map((level) => (
-                <div key={level.value} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`trust-${level.value}`}
-                    checked={selectedTrustLevels.includes(level.value)}
-                    onCheckedChange={(checked) => {
-                      const newLevels = checked
-                        ? [...selectedTrustLevels, level.value]
-                        : selectedTrustLevels.filter(l => l !== level.value);
-                      setSelectedTrustLevels(newLevels);
-                    }}
-                  />
-                  <label
-                    htmlFor={`trust-${level.value}`}
-                    className="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-2"
-                  >
-                    <div className={`w-3 h-3 rounded-full ${level.color}`}></div>
-                    {level.label}
-                  </label>
-                  <span className="text-xs text-gray-500">({level.count})</span>
-                </div>
-              ))}
+              {trustLevels.map((level) => {
+                const liveCount = filterCounts?.trustLevels?.find(t => t.trustLevel === level.value)?.count ?? 0;
+                return (
+                  <div key={level.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`trust-${level.value}`}
+                      checked={selectedTrustLevels.includes(level.value)}
+                      onCheckedChange={(checked) => {
+                        const newLevels = checked
+                          ? [...selectedTrustLevels, level.value]
+                          : selectedTrustLevels.filter(l => l !== level.value);
+                        setSelectedTrustLevels(newLevels);
+                      }}
+                    />
+                    <label
+                      htmlFor={`trust-${level.value}`}
+                      className="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-2"
+                    >
+                      <div className={`w-3 h-3 rounded-full ${level.color}`}></div>
+                      {level.label}
+                    </label>
+                    <span className="text-xs text-gray-500">({liveCount})</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -300,6 +313,7 @@ export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFilter
                 <CheckCircle className="h-4 w-4 text-blue-500" />
                 Verified providers only
               </label>
+              <span className="text-xs text-gray-500">({filterCounts?.verified ?? 0})</span>
             </div>
           </div>
 
@@ -309,28 +323,31 @@ export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFilter
           <div className="space-y-3">
             <h3 className="font-medium text-gray-900">Availability</h3>
             <div className="space-y-2">
-              {availabilityOptions.map((option) => (
-                <div key={option.value} className="flex items-center space-x-2">
-                  <Checkbox
-                    id={`availability-${option.value}`}
-                    checked={selectedAvailability.includes(option.value)}
-                    onCheckedChange={(checked) => {
-                      const newAvailability = checked
-                        ? [...selectedAvailability, option.value]
-                        : selectedAvailability.filter(a => a !== option.value);
-                      setSelectedAvailability(newAvailability);
-                    }}
-                  />
-                  <label
-                    htmlFor={`availability-${option.value}`}
-                    className="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-2"
-                  >
-                    <Clock className="h-4 w-4 text-gray-400" />
-                    {option.label}
-                  </label>
-                  <span className="text-xs text-gray-500">({option.count})</span>
-                </div>
-              ))}
+              {availabilityOptions.map((option) => {
+                const liveCount = filterCounts?.availability?.find(a => a.value === option.value)?.count ?? 0;
+                return (
+                  <div key={option.value} className="flex items-center space-x-2">
+                    <Checkbox
+                      id={`availability-${option.value}`}
+                      checked={selectedAvailability.includes(option.value)}
+                      onCheckedChange={(checked) => {
+                        const newAvailability = checked
+                          ? [...selectedAvailability, option.value]
+                          : selectedAvailability.filter(a => a !== option.value);
+                        setSelectedAvailability(newAvailability);
+                      }}
+                    />
+                    <label
+                      htmlFor={`availability-${option.value}`}
+                      className="text-sm text-gray-700 flex-1 cursor-pointer flex items-center gap-2"
+                    >
+                      <Clock className="h-4 w-4 text-gray-400" />
+                      {option.label}
+                    </label>
+                    <span className="text-xs text-gray-500">({liveCount})</span>
+                  </div>
+                );
+              })}
             </div>
           </div>
 
@@ -351,6 +368,7 @@ export function ServicesAdvancedFilters({ searchParams }: ServicesAdvancedFilter
               <div className="flex justify-between text-sm text-gray-500 mt-2">
                 <span>Within {distance}km</span>
                 <span>of your location</span>
+                <span className="text-xs text-gray-500">({filterCounts?.distance?.find(d => d.value === distance)?.count ?? 0})</span>
               </div>
             </div>
           </div>

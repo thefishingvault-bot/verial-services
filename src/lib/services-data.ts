@@ -2,9 +2,11 @@ import { db } from '@/lib/db';
 import { services, providers, users, conversations, messages, reviews } from '@/db/schema';
 import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne } from 'drizzle-orm';
 
+export type ServiceCategory = "cleaning" | "plumbing" | "gardening" | "it_support" | "accounting" | "detailing" | "other";
+
 export interface SearchParams {
   q?: string;
-  category?: string;
+  category?: ServiceCategory;
   location?: string;
   minPrice?: string;
   maxPrice?: string;
@@ -48,6 +50,7 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
   hasMore: boolean;
   totalCount: number;
 }> {
+
   // Build the query based on search parameters
   const whereConditions = [eq(providers.status, 'approved')];
 
@@ -64,7 +67,7 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
 
   // Category filter
   if (searchParams.category) {
-    whereConditions.push(eq(services.category, searchParams.category as any));
+    whereConditions.push(eq(services.category, searchParams.category));
   }
 
   // Location filter (simplified - would need geocoding in production)
@@ -85,11 +88,39 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     whereConditions.push(lte(services.priceInCents, parseInt(searchParams.maxPrice) * 100));
   }
 
+  // Trust level filter
+  if (searchParams.trustLevel) {
+    whereConditions.push(eq(providers.trustLevel, searchParams.trustLevel));
+  }
+
+  // Verification filter
+  if (searchParams.verifiedOnly === 'true') {
+    whereConditions.push(eq(providers.isVerified, true));
+  }
+
+  // Availability filter (simplified)
+  if (searchParams.availability) {
+    // Example: 'today', 'tomorrow', 'weekend', 'next_week'
+    // This would require a join with providerAvailabilities and/or providerTimeOffs
+    // For now, just a placeholder
+    // whereConditions.push(...)
+  }
+
+  // Distance filter (simplified)
+  if (searchParams.distance) {
+    // Would require geolocation logic; placeholder for now
+    // whereConditions.push(...)
+  }
+
+  // Minimum rating filter
+  if (searchParams.rating) {
+    // Will filter after fetching review stats
+  }
+
   // Build order by
   let orderBy = desc(services.createdAt);
   switch (searchParams.sort) {
     case 'rating':
-      // This would need a proper join with reviews table
       orderBy = desc(sql`COALESCE(avg_rating, 0)`);
       break;
     case 'price_low':
@@ -121,6 +152,44 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
 
   const totalCount = totalCountResult[0]?.count || 0;
 
+  // Aggregation queries for filter counts
+  // Category counts
+  const categoryCounts = await db
+    .select({ category: services.category, count: sql<number>`count(*)` })
+    .from(services)
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .where(eq(providers.status, 'approved'))
+    .groupBy(services.category);
+
+  // Trust level counts
+  const trustLevelCounts = await db
+    .select({ trustLevel: providers.trustLevel, count: sql<number>`count(*)` })
+    .from(providers)
+    .where(eq(providers.status, 'approved'))
+    .groupBy(providers.trustLevel);
+
+  // Verification counts
+  const verifiedCountResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(providers)
+    .where(and(eq(providers.status, 'approved'), eq(providers.isVerified, true)));
+  const verifiedCount = verifiedCountResult[0]?.count || 0;
+
+  // Availability counts (placeholder)
+  // Would require join with providerAvailabilities/providerTimeOffs
+  const availabilityCounts = [
+    { value: 'today', count: 0 },
+    { value: 'tomorrow', count: 0 },
+    { value: 'weekend', count: 0 },
+    { value: 'next_week', count: 0 },
+  ];
+
+  // Distance counts (placeholder)
+  // Would require geolocation logic
+  const distanceCounts = [
+    { value: 25, count: totalCount },
+  ];
+
   // Fetch services with provider info
   const servicesData = await db
     .select({
@@ -137,6 +206,7 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
       baseSuburb: providers.baseSuburb,
       baseRegion: providers.baseRegion,
       trustScore: providers.trustScore,
+      trustLevel: providers.trustLevel,
       isVerified: providers.isVerified,
       avatarUrl: users.avatarUrl,
       firstName: users.firstName,
@@ -150,118 +220,13 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     .limit(limit)
     .offset(offset);
 
-  // Get average response times for each provider
-  const providerIds = servicesData.map(service => service.providerId);
-  const responseTimes: Record<string, string> = {};
+  // ...existing code for response times...
 
-  if (providerIds.length > 0) {
-    // For each provider, calculate average response time
-    for (const providerId of providerIds) {
-      // Get all conversations for this provider
-      const providerConversations = await db
-        .select({
-          conversationId: conversations.id,
-          user1Id: conversations.user1Id,
-          user2Id: conversations.user2Id,
-        })
-        .from(conversations)
-        .where(or(
-          eq(conversations.user1Id, providerId),
-          eq(conversations.user2Id, providerId)
-        ));
-
-      if (providerConversations.length === 0) {
-        responseTimes[providerId] = 'under 2h'; // fallback
-        continue;
-      }
-
-      let totalResponseTime = 0;
-      let responseCount = 0;
-
-      for (const conv of providerConversations) {
-        // Find the first message in this conversation (from customer)
-        const firstMessage = await db
-          .select({ createdAt: messages.createdAt })
-          .from(messages)
-          .where(and(
-            eq(messages.conversationId, conv.conversationId),
-            ne(messages.senderId, providerId) // Not from provider
-          ))
-          .orderBy(asc(messages.createdAt))
-          .limit(1);
-
-        if (firstMessage.length === 0) continue;
-
-        // Find the first response from provider after the first message
-        const firstResponse = await db
-          .select({ createdAt: messages.createdAt })
-          .from(messages)
-          .where(and(
-            eq(messages.conversationId, conv.conversationId),
-            eq(messages.senderId, providerId), // From provider
-            gte(messages.createdAt, firstMessage[0].createdAt)
-          ))
-          .orderBy(asc(messages.createdAt))
-          .limit(1);
-
-        if (firstResponse.length > 0) {
-          const responseTime = firstResponse[0].createdAt.getTime() - firstMessage[0].createdAt.getTime();
-          if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days
-            totalResponseTime += responseTime;
-            responseCount++;
-          }
-        }
-      }
-
-      if (responseCount > 0) {
-        const avgResponseMs = totalResponseTime / responseCount;
-        const avgResponseHours = avgResponseMs / (1000 * 60 * 60);
-        
-        if (avgResponseHours < 1) {
-          const minutes = Math.round(avgResponseHours * 60);
-          responseTimes[providerId] = `under ${Math.max(1, minutes)}m`;
-        } else if (avgResponseHours < 24) {
-          const hours = Math.floor(avgResponseHours);
-          const minutes = Math.round((avgResponseHours - hours) * 60);
-          responseTimes[providerId] = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-        } else {
-          const days = Math.floor(avgResponseHours / 24);
-          responseTimes[providerId] = `${days}d`;
-        }
-      } else {
-        responseTimes[providerId] = 'under 2h'; // fallback
-      }
-    }
-  }
-
-  // Get real ratings and review counts for each provider
-  const providerStats: Record<string, { avgRating: number; reviewCount: number }> = {};
-
-  if (providerIds.length > 0) {
-    // Get review stats for each provider
-    const reviewStats = await db
-      .select({
-        providerId: reviews.providerId,
-        avgRating: avg(reviews.rating),
-        reviewCount: sql<number>`count(*)`,
-      })
-      .from(reviews)
-      .where(sql`${reviews.providerId} IN (${sql.join(providerIds, sql`, `)})`)
-      .groupBy(reviews.providerId);
-
-    // Convert to a lookup object
-    reviewStats.forEach(stat => {
-      providerStats[stat.providerId] = {
-        avgRating: Number(stat.avgRating) || 0,
-        reviewCount: stat.reviewCount,
-      };
-    });
-  }
+  // ...existing code for review stats...
 
   // Transform data with real ratings and review counts
-  const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => {
+  let servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => {
     const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
-    
     return {
       id: service.id,
       title: service.title,
@@ -277,6 +242,7 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
         baseSuburb: service.baseSuburb,
         baseRegion: service.baseRegion,
         trustScore: service.trustScore,
+        trustLevel: service.trustLevel,
         isVerified: service.isVerified,
         avatarUrl: service.avatarUrl,
         averageResponseTime: responseTimes[service.providerId] || 'under 2h', // fallback
@@ -290,10 +256,23 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     };
   });
 
+  // Apply minimum rating filter after stats
+  if (searchParams.rating) {
+    const minRating = parseFloat(searchParams.rating);
+    servicesWithProviders = servicesWithProviders.filter(s => s.avgRating >= minRating);
+  }
+
   return {
     services: servicesWithProviders,
     hasMore: servicesWithProviders.length === limit && (page * limit) < totalCount,
     totalCount,
+    filterCounts: {
+      categories: categoryCounts,
+      trustLevels: trustLevelCounts,
+      verified: verifiedCount,
+      availability: availabilityCounts,
+      distance: distanceCounts,
+    },
   };
 }
 
