@@ -16,6 +16,7 @@ import {
   DollarSign,
   Search
 } from 'lucide-react';
+import { LoadMoreButton } from './load-more-button';
 
 interface SearchParams {
   q?: string;
@@ -27,6 +28,7 @@ interface SearchParams {
   availability?: string;
   sort?: string;
   view?: 'grid' | 'map';
+  page?: string;
 }
 
 interface ServiceWithProvider {
@@ -152,6 +154,10 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
       break;
   }
 
+  const page = parseInt(searchParams.page || '1');
+  const limit = 12; // Show 12 services per page
+  const offset = (page - 1) * limit;
+
   // Fetch services with provider info
   const servicesData = await db
     .select({
@@ -178,7 +184,8 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
     .innerJoin(users, eq(providers.userId, users.id))
     .where(and(...whereConditions))
     .orderBy(orderBy)
-    .limit(50);
+    .limit(limit)
+    .offset(offset);
 
   // Transform data and add mock ratings (in production, this would come from reviews table)
   const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => ({
@@ -355,13 +362,11 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
       </div>
 
       {/* Load More Button */}
-      {servicesWithProviders.length >= 50 && (
-        <div className="text-center pt-6">
-          <Button variant="outline" size="lg">
-            Load More Services
-          </Button>
-        </div>
-      )}
+      <LoadMoreButton
+        searchParams={searchParams}
+        currentPage={page}
+        hasMore={servicesWithProviders.length === limit}
+      />
     </div>
   );
 }
