@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
+import { requireAdmin } from '@/lib/admin';
 import { trustIncidents, providers, users } from '@/db/schema';
 import { eq, desc, gte, sql, and } from 'drizzle-orm';
 
@@ -11,15 +12,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0] || user[0].role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    try {
+      await requireAdmin(userId);
+    } catch (error) {
+      if (error instanceof Error && error.message === 'Forbidden') {
+        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+      }
+      throw error;
     }
 
     const { searchParams } = new URL(request.url);
