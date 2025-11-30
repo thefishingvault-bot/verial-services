@@ -109,11 +109,9 @@ export default async function AdminFeesPage({
   const fromIso = startDate.toISOString().split('T')[0];
   const toIso = endDate.toISOString().split('T')[0];
 
-  const url = new URL('/api/admin/fees/report', process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000');
-  url.searchParams.set('from', fromIso);
-  url.searchParams.set('to', toIso);
+  const url = `/api/admin/fees/report?from=${fromIso}&to=${toIso}`;
 
-  const res = await fetch(url.toString(), { cache: 'no-store' });
+  const res = await fetch(url, { cache: 'no-store' });
 
   if (!res.ok) {
     return (
