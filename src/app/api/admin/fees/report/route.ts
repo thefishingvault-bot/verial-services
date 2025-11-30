@@ -8,6 +8,7 @@ import { requireAdmin } from '@/lib/admin';
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
+  console.log('[API_ADMIN_FEES_REPORT] Request received:', request.url);
   try {
     const user = await currentUser();
     if (!user?.id) {

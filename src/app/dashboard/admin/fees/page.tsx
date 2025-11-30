@@ -115,9 +115,22 @@ export default async function AdminFeesPage({
   url.searchParams.set('from', fromIso);
   url.searchParams.set('to', toIso);
 
-  const res = await fetch(url.toString(), { cache: 'no-store' });
+  console.log('[ADMIN_FEES] Fetching from URL:', url.toString());
+
+  let res: Response;
+  try {
+    res = await fetch(url.toString(), { cache: 'no-store' });
+  } catch (error) {
+    console.error('[ADMIN_FEES] Fetch failed:', error);
+    return (
+      <div className="text-sm text-destructive">
+        We couldn&rsquo;t load fee data right now. Please try again later.
+      </div>
+    );
+  }
 
   if (!res.ok) {
+    console.error('[ADMIN_FEES] Fetch returned status:', res.status, await res.text());
     return (
       <div className="text-sm text-destructive">
         We couldn&rsquo;t load fee data right now. Please try again later.
