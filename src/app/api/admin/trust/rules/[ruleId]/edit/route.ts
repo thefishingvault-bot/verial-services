@@ -18,23 +18,40 @@ export async function POST(
     await requireAdmin(user.id);
 
     const { ruleId } = await params;
+    const body = await request.json();
+    const { name, incidentType, severity, trustScorePenalty, autoSuspend, suspendDurationDays } = body;
 
-    // Get current rule status
-    const rule = await db
-      .select({ enabled: riskRules.enabled })
+    // Validate required fields
+    if (!name || !incidentType || !severity) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
+    }
+
+    // Validate severity
+    if (!["low", "medium", "high", "critical"].includes(severity)) {
+      return NextResponse.json({ error: "Invalid severity level" }, { status: 400 });
+    }
+
+    // Check if rule exists
+    const existingRule = await db
+      .select()
       .from(riskRules)
       .where(eq(riskRules.id, ruleId))
       .limit(1);
 
-    if (rule.length === 0) {
+    if (existingRule.length === 0) {
       return NextResponse.json({ error: "Rule not found" }, { status: 404 });
     }
 
-    // Toggle the enabled status
+    // Update the rule
     await db
       .update(riskRules)
       .set({
-        enabled: !rule[0].enabled,
+        name,
+        incidentType,
+        severity,
+        trustScorePenalty: trustScorePenalty || 0,
+        autoSuspend: autoSuspend || false,
+        suspendDurationDays: suspendDurationDays || null,
         updatedAt: new Date(),
       })
       .where(eq(riskRules.id, ruleId));
@@ -42,7 +59,7 @@ export async function POST(
     // Redirect back to the rules page
     return NextResponse.redirect(new URL("/dashboard/admin/trust/rules", request.url));
   } catch (error) {
-    console.error("Error toggling risk rule:", error);
+    console.error("Error updating risk rule:", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

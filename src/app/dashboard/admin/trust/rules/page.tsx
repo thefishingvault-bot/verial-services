@@ -70,9 +70,11 @@ export default async function AdminRiskRulesPage() {
             </p>
           </div>
         </div>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Rule
+        <Button asChild>
+          <Link href="/dashboard/admin/trust/rules/new">
+            <Plus className="mr-2 h-4 w-4" />
+            Create Rule
+          </Link>
         </Button>
       </div>
 
@@ -195,8 +197,10 @@ export default async function AdminRiskRulesPage() {
                           {rule.enabled ? "Disable" : "Enable"}
                         </Button>
                       </form>
-                      <Button variant="outline" size="sm">
-                        Edit
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/admin/trust/rules/${rule.id}/edit`}>
+                          Edit
+                        </Link>
                       </Button>
                     </div>
                   </TableCell>
