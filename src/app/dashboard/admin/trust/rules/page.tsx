@@ -1,19 +1,26 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin";
 import { riskRules, users } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Settings, Shield, CheckCircle, AlertTriangle, ArrowLeft, Plus } from "lucide-react";
 
 export default async function AdminRiskRulesPage() {
   const user = await currentUser();
-  if (!isAdmin(user)) {
+  if (!user?.id) {
+    redirect("/dashboard");
+  }
+
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect("/dashboard");
   }
 
@@ -46,190 +53,195 @@ export default async function AdminRiskRulesPage() {
   const autoSuspendRules = rules.filter(r => r.autoSuspend && r.enabled).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Admin: Risk Rules Management</h1>
-          <p className="text-gray-600">
-            Configure automated responses to trust incidents and violations.
-          </p>
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/admin/trust">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Incidents
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Risk Rules Management</h1>
+            <p className="text-muted-foreground mt-2">
+              Configure automated responses to trust incidents and violations.
+            </p>
+          </div>
         </div>
-        <div className="flex gap-2">
-          <Link
-            href="/dashboard/admin/trust"
-            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-          >
-            View Incidents
-          </Link>
-          <button
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-            onClick={() => alert("Create rule form would open here")}
-          >
-            Create Rule
-          </button>
-        </div>
+        <Button>
+          <Plus className="mr-2 h-4 w-4" />
+          Create Rule
+        </Button>
       </div>
 
       {/* Summary Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-gray-900">{totalRules}</div>
-          <div className="text-sm text-gray-600">Total Rules</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-green-600">{enabledRules}</div>
-          <div className="text-sm text-gray-600">Enabled Rules</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-red-600">{autoSuspendRules}</div>
-          <div className="text-sm text-gray-600">Auto-Suspend Rules</div>
-        </div>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Rules</CardTitle>
+            <Settings className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalRules}</div>
+            <p className="text-xs text-muted-foreground">
+              Configured rules
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Enabled Rules</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{enabledRules}</div>
+            <p className="text-xs text-muted-foreground">
+              Active rules
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Auto-Suspend Rules</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{autoSuspendRules}</div>
+            <p className="text-xs text-muted-foreground">
+              Automatic suspensions
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Rules Table */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Risk Rules
-          </h3>
-          <p className="mt-1 text-sm text-gray-600">
+      <Card>
+        <CardHeader>
+          <CardTitle>Risk Rules</CardTitle>
+          <CardDescription>
             Rules that automatically penalize trust scores and trigger suspensions based on incident types and severity.
-          </p>
-        </div>
-        <div className="border-t border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Rule Name
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Incident Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Severity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Trust Penalty
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Auto Suspend
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Duration
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Created
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Rule Name</TableHead>
+                <TableHead>Incident Type</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Trust Penalty</TableHead>
+                <TableHead>Auto Suspend</TableHead>
+                <TableHead>Duration</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Created</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div className="text-sm font-medium text-gray-900">
-                      {rule.name}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-900 capitalize">
+                <TableRow key={rule.id}>
+                  <TableCell>
+                    <div className="font-medium">{rule.name}</div>
+                  </TableCell>
+                  <TableCell>
+                    <span className="capitalize">
                       {rule.incidentType.replace("_", " ")}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      rule.severity === "critical" ? "bg-red-100 text-red-800" :
-                      rule.severity === "high" ? "bg-orange-100 text-orange-800" :
-                      rule.severity === "medium" ? "bg-yellow-100 text-yellow-800" :
-                      "bg-gray-100 text-gray-800"
-                    }`}>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      rule.severity === "critical" ? "destructive" :
+                      rule.severity === "high" ? "secondary" :
+                      rule.severity === "medium" ? "outline" :
+                      "default"
+                    }>
                       {rule.severity}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    -{rule.trustScorePenalty}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      rule.autoSuspend ? "bg-red-100 text-red-800" : "bg-gray-100 text-gray-800"
-                    }`}>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-red-600 font-medium">-{rule.trustScorePenalty}</span>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={rule.autoSuspend ? "destructive" : "secondary"}>
                       {rule.autoSuspend ? "Yes" : "No"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
                     {rule.suspendDurationDays ? `${rule.suspendDurationDays} days` : "Indefinite"}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      rule.enabled ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-                    }`}>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={rule.enabled ? "default" : "secondary"}>
                       {rule.enabled ? "Enabled" : "Disabled"}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {rule.createdAt.toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    <form action={`/api/admin/trust/rules/${rule.id}/toggle`} method="POST" className="inline">
-                      <button
-                        type="submit"
-                        className={`mr-4 ${rule.enabled ? "text-red-600 hover:text-red-900" : "text-green-600 hover:text-green-900"}`}
-                      >
-                        {rule.enabled ? "Disable" : "Enable"}
-                      </button>
-                    </form>
-                    <button
-                      className="text-blue-600 hover:text-blue-900"
-                      onClick={() => alert("Edit rule form would open here")}
-                    >
-                      Edit
-                    </button>
-                  </td>
-                </tr>
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {rule.createdAt.toLocaleDateString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <form action={`/api/admin/trust/rules/${rule.id}/toggle`} method="POST" className="inline">
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          className={rule.enabled ? "text-red-600 hover:text-red-700" : "text-green-600 hover:text-green-700"}
+                        >
+                          {rule.enabled ? "Disable" : "Enable"}
+                        </Button>
+                      </form>
+                      <Button variant="outline" size="sm">
+                        Edit
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
               {rules.length === 0 && (
-                <tr>
-                  <td colSpan={9} className="px-6 py-4 text-center text-sm text-gray-500">
+                <TableRow>
+                  <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                     No risk rules configured yet. Create your first rule to get started.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       {/* Default Rules Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h3 className="text-lg font-medium text-blue-900 mb-2">Default Risk Rules</h3>
-        <p className="text-blue-800 mb-4">
-          Consider creating these default rules to automatically handle common trust incidents:
-        </p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-          <div className="bg-white p-3 rounded border">
-            <strong>Customer Complaint (High)</strong>
-            <br />Penalty: -10 points, Auto-suspend: No
+      <Alert>
+        <Shield className="h-4 w-4" />
+        <AlertDescription>
+          <strong className="block mb-2">Recommended Default Risk Rules</strong>
+          <p className="mb-4">
+            Consider creating these default rules to automatically handle common trust incidents:
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div className="bg-muted p-3 rounded border">
+              <strong>Customer Complaint (High)</strong>
+              <br />Penalty: -10 points, Auto-suspend: No
+            </div>
+            <div className="bg-muted p-3 rounded border">
+              <strong>Service Violation (Critical)</strong>
+              <br />Penalty: -25 points, Auto-suspend: 7 days
+            </div>
+            <div className="bg-muted p-3 rounded border">
+              <strong>Review Abuse (Medium)</strong>
+              <br />Penalty: -15 points, Auto-suspend: No
+            </div>
+            <div className="bg-muted p-3 rounded border">
+              <strong>Repeated Offenses (Critical)</strong>
+              <br />Penalty: -50 points, Auto-suspend: Indefinite
+            </div>
           </div>
-          <div className="bg-white p-3 rounded border">
-            <strong>Service Violation (Critical)</strong>
-            <br />Penalty: -25 points, Auto-suspend: 7 days
-          </div>
-          <div className="bg-white p-3 rounded border">
-            <strong>Review Abuse (Medium)</strong>
-            <br />Penalty: -15 points, Auto-suspend: No
-          </div>
-          <div className="bg-white p-3 rounded border">
-            <strong>Repeated Offenses (Critical)</strong>
-            <br />Penalty: -50 points, Auto-suspend: Indefinite
-          </div>
-        </div>
-      </div>
+        </AlertDescription>
+      </Alert>
     </div>
   );
 }

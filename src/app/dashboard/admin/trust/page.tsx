@@ -1,15 +1,17 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin";
 import { trustIncidents, providers, users, bookings } from "@/db/schema";
 import { eq, desc, and, or, like } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AlertTriangle, CheckCircle, Clock, Shield, Search, Settings } from "lucide-react";
 
 interface SearchParams {
   status?: string;
@@ -24,7 +26,13 @@ export default async function AdminTrustIncidentsPage({
   searchParams: Promise<SearchParams>;
 }) {
   const user = await currentUser();
-  if (!isAdmin(user)) {
+  if (!user?.id) {
+    redirect("/dashboard");
+  }
+
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect("/dashboard");
   }
 
@@ -104,220 +112,259 @@ export default async function AdminTrustIncidentsPage({
   const criticalIncidents = incidents.filter(i => i.severity === "critical").length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
         <div>
-          <h1 className="text-2xl font-bold">Admin: Trust Incident Log</h1>
-          <p className="text-gray-600">
-            Monitor and manage trust incidents affecting provider scores.
+          <h1 className="text-3xl font-bold tracking-tight">Trust Incident Management</h1>
+          <p className="text-muted-foreground mt-2">
+            Monitor and manage trust incidents affecting provider scores and platform safety.
           </p>
         </div>
-        <Link
-          href="/dashboard/admin/trust/rules"
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-        >
-          Manage Risk Rules
-        </Link>
+        <Button asChild>
+          <Link href="/dashboard/admin/trust/rules">
+            <Settings className="mr-2 h-4 w-4" />
+            Manage Risk Rules
+          </Link>
+        </Button>
       </div>
 
       {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-gray-900">{totalIncidents}</div>
-          <div className="text-sm text-gray-600">Total Incidents</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-red-600">{unresolvedIncidents}</div>
-          <div className="text-sm text-gray-600">Unresolved</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-green-600">{resolvedIncidents}</div>
-          <div className="text-sm text-gray-600">Resolved</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-orange-600">{criticalIncidents}</div>
-          <div className="text-sm text-gray-600">Critical</div>
-        </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Incidents</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalIncidents}</div>
+            <p className="text-xs text-muted-foreground">
+              All time incidents
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Unresolved</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{unresolvedIncidents}</div>
+            <p className="text-xs text-muted-foreground">
+              Require attention
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resolved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{resolvedIncidents}</div>
+            <p className="text-xs text-muted-foreground">
+              Successfully handled
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Critical</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-orange-600">{criticalIncidents}</div>
+            <p className="text-xs text-muted-foreground">
+              High priority
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow">
-        <form className="flex flex-wrap gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Status</label>
-            <select
-              name="status"
-              defaultValue={statusFilter}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="all">All</option>
-              <option value="resolved">Resolved</option>
-              <option value="unresolved">Unresolved</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Type</label>
-            <select
-              name="type"
-              defaultValue={typeFilter}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="all">All Types</option>
-              <option value="complaint">Complaint</option>
-              <option value="violation">Violation</option>
-              <option value="review_abuse">Review Abuse</option>
-              <option value="service_quality">Service Quality</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Severity</label>
-            <select
-              name="severity"
-              defaultValue={severityFilter}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="all">All Severities</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Search</label>
-            <input
-              type="text"
-              name="search"
-              defaultValue={searchQuery}
-              placeholder="Provider name or description..."
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-            >
-              Filter
-            </button>
-          </div>
-        </form>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Filters</CardTitle>
+          <CardDescription>Filter incidents by status, type, severity, or search</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form className="flex flex-wrap gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Status</label>
+              <Select name="status" defaultValue={statusFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Status</SelectItem>
+                  <SelectItem value="resolved">Resolved</SelectItem>
+                  <SelectItem value="unresolved">Unresolved</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Type</label>
+              <Select name="type" defaultValue={typeFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="complaint">Complaint</SelectItem>
+                  <SelectItem value="violation">Violation</SelectItem>
+                  <SelectItem value="review_abuse">Review Abuse</SelectItem>
+                  <SelectItem value="service_quality">Service Quality</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Severity</label>
+              <Select name="severity" defaultValue={severityFilter}>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Severities</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="critical">Critical</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Search</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  name="search"
+                  defaultValue={searchQuery}
+                  placeholder="Provider name or description..."
+                  className="pl-9 w-64"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-end">
+              <Button type="submit">
+                <Search className="mr-2 h-4 w-4" />
+                Filter
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
 
       {/* Incidents Table */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Trust Incidents
-          </h3>
-        </div>
-        <div className="border-t border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Provider
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Severity
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Description
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Impact
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+      <Card>
+        <CardHeader>
+          <CardTitle>Trust Incidents</CardTitle>
+          <CardDescription>
+            {incidents.length} incident{incidents.length !== 1 ? 's' : ''} found
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Provider</TableHead>
+                <TableHead>Type</TableHead>
+                <TableHead>Severity</TableHead>
+                <TableHead>Description</TableHead>
+                <TableHead>Impact</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {incidents.map((incident) => (
-                <tr key={incident.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
+                <TableRow key={incident.id}>
+                  <TableCell>
                     <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {incident.provider.businessName}
-                      </div>
-                      <div className="text-sm text-gray-500">@{incident.provider.handle}</div>
+                      <div className="font-medium">{incident.provider.businessName}</div>
+                      <div className="text-sm text-muted-foreground">@{incident.provider.handle}</div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className="text-sm text-gray-900 capitalize">
+                  </TableCell>
+                  <TableCell>
+                    <span className="capitalize">
                       {incident.incidentType.replace("_", " ")}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      incident.severity === "critical" ? "bg-red-100 text-red-800" :
-                      incident.severity === "high" ? "bg-orange-100 text-orange-800" :
-                      incident.severity === "medium" ? "bg-yellow-100 text-yellow-800" :
-                      "bg-gray-100 text-gray-800"
-                    }`}>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      incident.severity === "critical" ? "destructive" :
+                      incident.severity === "high" ? "secondary" :
+                      incident.severity === "medium" ? "outline" :
+                      "default"
+                    }>
                       {incident.severity}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 max-w-xs truncate">
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="max-w-xs truncate" title={incident.description}>
                       {incident.description}
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {incident.trustScoreImpact > 0 ? "+" : ""}{incident.trustScoreImpact}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      incident.resolved ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"
-                    }`}>
-                      {incident.resolved ? "Resolved" : "Open"}
+                  </TableCell>
+                  <TableCell>
+                    <span className={incident.trustScoreImpact < 0 ? "text-red-600" : "text-green-600"}>
+                      {incident.trustScoreImpact > 0 ? "+" : ""}{incident.trustScoreImpact}
                     </span>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {incident.createdAt.toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    {!incident.resolved ? (
-                      <form action={`/api/admin/trust/incidents/${incident.id}/resolve`} method="POST" className="inline">
-                        <button
-                          type="submit"
-                          className="text-green-600 hover:text-green-900 mr-4"
-                        >
-                          Resolve
-                        </button>
-                      </form>
-                    ) : (
-                      <span className="text-gray-500">Resolved</span>
-                    )}
-                    <Link
-                      href={`/dashboard/admin/providers/${incident.provider.handle}`}
-                      className="text-blue-600 hover:text-blue-900 ml-4"
-                    >
-                      View Provider
-                    </Link>
-                  </td>
-                </tr>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={incident.resolved ? "default" : "destructive"}>
+                      {incident.resolved ? "Resolved" : "Open"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {incident.createdAt.toLocaleDateString()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {incident.createdAt.toLocaleTimeString()}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      {!incident.resolved ? (
+                        <form action={`/api/admin/trust/incidents/${incident.id}/resolve`} method="POST" className="inline">
+                          <Button type="submit" variant="outline" size="sm">
+                            <CheckCircle className="mr-1 h-3 w-3" />
+                            Resolve
+                          </Button>
+                        </form>
+                      ) : (
+                        <Badge variant="secondary" className="text-xs">
+                          <CheckCircle className="mr-1 h-3 w-3" />
+                          Resolved
+                        </Badge>
+                      )}
+                      <Button asChild variant="outline" size="sm">
+                        <Link href={`/dashboard/admin/providers/${incident.provider.handle}`}>
+                          View Provider
+                        </Link>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
               ))}
               {incidents.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-6 py-4 text-center text-sm text-gray-500">
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No trust incidents found matching the current filters.
-                  </td>
-                </tr>
+                  </TableCell>
+                </TableRow>
               )}
-            </tbody>
-          </table>
-        </div>
-      </div>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 }
