@@ -4,10 +4,11 @@ import { eq, desc } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, CreditCard } from 'lucide-react';
+import { requireAdmin } from '@/lib/admin';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -20,16 +21,14 @@ export default async function AdminBookingDetailPage({
 }: {
   params: Promise<{ bookingId: string }>;
 }) {
-  const { userId } = await auth();
-  if (!userId) {
+  const user = await currentUser();
+  if (!user?.id) {
     redirect('/dashboard');
   }
 
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const role = user.publicMetadata.role;
-
-  if (role !== 'admin') {
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect('/dashboard');
   }
 
