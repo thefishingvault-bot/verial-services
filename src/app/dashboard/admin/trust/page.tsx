@@ -2,7 +2,7 @@ import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin";
 import { trustIncidents, providers, users, bookings } from "@/db/schema";
-import { eq, desc, and, or, like } from "drizzle-orm";
+import { eq, desc, and, or, like, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -79,18 +79,11 @@ export default async function AdminTrustIncidentsPage({
       resolved: trustIncidents.resolved,
       resolvedAt: trustIncidents.resolvedAt,
       createdAt: trustIncidents.createdAt,
+      reportedBy: trustIncidents.reportedBy,
+      resolvedBy: trustIncidents.resolvedBy,
       provider: {
         businessName: providers.businessName,
         handle: providers.handle,
-      },
-      reporter: {
-        firstName: users.firstName,
-        lastName: users.lastName,
-        email: users.email,
-      },
-      resolver: {
-        firstName: users.firstName,
-        lastName: users.lastName,
       },
       booking: {
         id: bookings.id,
@@ -98,18 +91,44 @@ export default async function AdminTrustIncidentsPage({
     })
     .from(trustIncidents)
     .innerJoin(providers, eq(trustIncidents.providerId, providers.id))
-    .leftJoin(users, eq(trustIncidents.reportedBy, users.id))
-    .leftJoin(users, eq(trustIncidents.resolvedBy, users.id))
     .leftJoin(bookings, eq(trustIncidents.bookingId, bookings.id))
     .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
     .orderBy(desc(trustIncidents.createdAt))
     .limit(100);
 
+  // Get unique user IDs for reporter and resolver
+  const userIds = new Set<string>();
+  incidents.forEach(incident => {
+    if (incident.reportedBy) userIds.add(incident.reportedBy);
+    if (incident.resolvedBy) userIds.add(incident.resolvedBy);
+  });
+
+  // Fetch user details
+  const userDetails = userIds.size > 0 ? await db
+    .select({
+      id: users.id,
+      firstName: users.firstName,
+      lastName: users.lastName,
+      email: users.email,
+    })
+    .from(users)
+    .where(inArray(users.id, Array.from(userIds))) : [];
+
+  // Create a map for quick user lookup
+  const userMap = new Map(userDetails.map(user => [user.id, user]));
+
+  // Combine the data
+  const incidentsWithUsers = incidents.map(incident => ({
+    ...incident,
+    reporter: incident.reportedBy ? userMap.get(incident.reportedBy) : null,
+    resolver: incident.resolvedBy ? userMap.get(incident.resolvedBy) : null,
+  }));
+
   // Get summary stats
-  const totalIncidents = incidents.length;
-  const resolvedIncidents = incidents.filter(i => i.resolved).length;
+  const totalIncidents = incidentsWithUsers.length;
+  const resolvedIncidents = incidentsWithUsers.filter(i => i.resolved).length;
   const unresolvedIncidents = totalIncidents - resolvedIncidents;
-  const criticalIncidents = incidents.filter(i => i.severity === "critical").length;
+  const criticalIncidents = incidentsWithUsers.filter(i => i.severity === "critical").length;
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -266,7 +285,7 @@ export default async function AdminTrustIncidentsPage({
         <CardHeader>
           <CardTitle>Trust Incidents</CardTitle>
           <CardDescription>
-            {incidents.length} incident{incidents.length !== 1 ? 's' : ''} found
+            {incidentsWithUsers.length} incident{incidentsWithUsers.length !== 1 ? 's' : ''} found
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -284,7 +303,7 @@ export default async function AdminTrustIncidentsPage({
               </TableRow>
             </TableHeader>
             <TableBody>
-              {incidents.map((incident) => (
+              {incidentsWithUsers.map((incident) => (
                 <TableRow key={incident.id}>
                   <TableCell>
                     <div>
@@ -354,7 +373,7 @@ export default async function AdminTrustIncidentsPage({
                   </TableCell>
                 </TableRow>
               ))}
-              {incidents.length === 0 && (
+              {incidentsWithUsers.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No trust incidents found matching the current filters.
