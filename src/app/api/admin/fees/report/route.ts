@@ -1,23 +1,37 @@
 import { db } from '@/lib/db';
 import { bookings, services, providers, users } from '@/db/schema';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { desc, inArray, eq } from 'drizzle-orm';
+import { desc, inArray, eq, gte, lte, and } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/admin';
 
 export const runtime = 'nodejs';
 
-// Helper function to check for Admin role
-const isAdmin = async (userId: string): Promise<boolean> => {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  return user.publicMetadata.role === 'admin';
-};
-
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId || !(await isAdmin(userId))) {
-      return new NextResponse('Forbidden: Requires admin role', { status: 403 });
+    const user = await currentUser();
+    if (!user?.id) {
+      return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    await requireAdmin(user.id);
+
+    const { searchParams } = new URL(request.url);
+    const fromParam = searchParams.get('from');
+    const toParam = searchParams.get('to');
+
+    // Build base conditions
+    const baseConditions = [inArray(bookings.status, ['paid', 'completed'])];
+
+    // Add date conditions if specified
+    if (fromParam) {
+      const fromDate = new Date(fromParam);
+      baseConditions.push(gte(bookings.updatedAt, fromDate));
+    }
+    if (toParam) {
+      const toDate = new Date(toParam);
+      toDate.setHours(23, 59, 59, 999); // End of day
+      baseConditions.push(lte(bookings.updatedAt, toDate));
     }
 
     // Fetch all bookings that have been paid or completed with manual joins
@@ -35,7 +49,7 @@ export async function GET() {
       .innerJoin(services, eq(bookings.serviceId, services.id))
       .innerJoin(providers, eq(bookings.providerId, providers.id))
       .innerJoin(users, eq(bookings.userId, users.id))
-      .where(inArray(bookings.status, ['paid', 'completed']))
+      .where(and(...baseConditions))
       .orderBy(desc(bookings.updatedAt));
 
     // Calculate fees (as per spec: 10% = PLATFORM_FEE_BPS=1000)
@@ -46,7 +60,7 @@ export async function GET() {
       return {
         bookingId: b.id,
         status: b.status,
-        paidAt: b.updatedAt, // Assumes updatedAt is set on 'paid' status change
+        paidAt: b.updatedAt.toISOString(), // Assumes updatedAt is set on 'paid' status change
         serviceTitle: b.serviceTitle,
         providerName: b.providerName,
         customerEmail: b.customerEmail,
