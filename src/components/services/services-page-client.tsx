@@ -23,9 +23,14 @@ interface ServicesPageClientProps {
     hasMore: boolean;
     totalCount: number;
   };
+  stats: {
+    totalServices: number;
+    averageRating: number;
+    averageResponseTime: string;
+  };
 }
 
-export function ServicesPageClient({ initialParams, initialServicesData }: ServicesPageClientProps) {
+export function ServicesPageClient({ initialParams, initialServicesData, stats }: ServicesPageClientProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'map'>(initialParams.view || 'grid');
   const [servicesData, setServicesData] = useState(initialServicesData);
 
@@ -87,11 +92,11 @@ export function ServicesPageClient({ initialParams, initialServicesData }: Servi
         <div className="mb-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600">500+</div>
+              <div className="text-2xl font-bold text-blue-600">{stats.totalServices}+</div>
               <div className="text-sm text-gray-600">Active Services</div>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-              <div className="text-2xl font-bold text-green-600">98%</div>
+              <div className="text-2xl font-bold text-green-600">{Math.round(stats.averageRating * 10)}%</div>
               <div className="text-sm text-gray-600">Satisfaction Rate</div>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
@@ -99,7 +104,7 @@ export function ServicesPageClient({ initialParams, initialServicesData }: Servi
               <div className="text-sm text-gray-600">Support Available</div>
             </div>
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">15min</div>
+              <div className="text-2xl font-bold text-orange-600">{stats.averageResponseTime}</div>
               <div className="text-sm text-gray-600">Average Response</div>
             </div>
           </div>

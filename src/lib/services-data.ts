@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
-import { services, providers, users } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { services, providers, users, conversations, messages } from '@/db/schema';
+import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne } from 'drizzle-orm';
 
 export interface SearchParams {
   q?: string;
@@ -32,6 +32,7 @@ export interface ServiceWithProvider {
     trustScore: number;
     isVerified: boolean;
     avatarUrl: string | null;
+    averageResponseTime?: string; // e.g., "2h 15m", "under 1h"
   };
   user: {
     firstName: string | null;
@@ -149,6 +150,90 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     .limit(limit)
     .offset(offset);
 
+  // Get average response times for each provider
+  const providerIds = servicesData.map(service => service.providerId);
+  const responseTimes: Record<string, string> = {};
+
+  if (providerIds.length > 0) {
+    // For each provider, calculate average response time
+    for (const providerId of providerIds) {
+      // Get all conversations for this provider
+      const providerConversations = await db
+        .select({
+          conversationId: conversations.id,
+          user1Id: conversations.user1Id,
+          user2Id: conversations.user2Id,
+        })
+        .from(conversations)
+        .where(or(
+          eq(conversations.user1Id, providerId),
+          eq(conversations.user2Id, providerId)
+        ));
+
+      if (providerConversations.length === 0) {
+        responseTimes[providerId] = 'under 2h'; // fallback
+        continue;
+      }
+
+      let totalResponseTime = 0;
+      let responseCount = 0;
+
+      for (const conv of providerConversations) {
+        // Find the first message in this conversation (from customer)
+        const firstMessage = await db
+          .select({ createdAt: messages.createdAt })
+          .from(messages)
+          .where(and(
+            eq(messages.conversationId, conv.conversationId),
+            ne(messages.senderId, providerId) // Not from provider
+          ))
+          .orderBy(asc(messages.createdAt))
+          .limit(1);
+
+        if (firstMessage.length === 0) continue;
+
+        // Find the first response from provider after the first message
+        const firstResponse = await db
+          .select({ createdAt: messages.createdAt })
+          .from(messages)
+          .where(and(
+            eq(messages.conversationId, conv.conversationId),
+            eq(messages.senderId, providerId), // From provider
+            gte(messages.createdAt, firstMessage[0].createdAt)
+          ))
+          .orderBy(asc(messages.createdAt))
+          .limit(1);
+
+        if (firstResponse.length > 0) {
+          const responseTime = firstResponse[0].createdAt.getTime() - firstMessage[0].createdAt.getTime();
+          if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days
+            totalResponseTime += responseTime;
+            responseCount++;
+          }
+        }
+      }
+
+      if (responseCount > 0) {
+        const avgResponseMs = totalResponseTime / responseCount;
+        const avgResponseHours = avgResponseMs / (1000 * 60 * 60);
+        
+        if (avgResponseHours < 1) {
+          const minutes = Math.round(avgResponseHours * 60);
+          responseTimes[providerId] = `under ${Math.max(1, minutes)}m`;
+        } else if (avgResponseHours < 24) {
+          const hours = Math.floor(avgResponseHours);
+          const minutes = Math.round((avgResponseHours - hours) * 60);
+          responseTimes[providerId] = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+        } else {
+          const days = Math.floor(avgResponseHours / 24);
+          responseTimes[providerId] = `${days}d`;
+        }
+      } else {
+        responseTimes[providerId] = 'under 2h'; // fallback
+      }
+    }
+  }
+
   // Transform data and add mock ratings (in production, this would come from reviews table)
   const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => ({
     id: service.id,
@@ -167,6 +252,7 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
       trustScore: service.trustScore,
       isVerified: service.isVerified,
       avatarUrl: service.avatarUrl,
+      averageResponseTime: responseTimes[service.providerId] || 'under 2h', // fallback
     },
     user: {
       firstName: service.firstName,
@@ -180,5 +266,106 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     services: servicesWithProviders,
     hasMore: servicesWithProviders.length === limit && (page * limit) < totalCount,
     totalCount,
+  };
+}
+
+export async function getServicesStats(): Promise<{
+  totalServices: number;
+  averageRating: number;
+  averageResponseTime: string;
+}> {
+  // Get total approved services
+  const totalServicesResult = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(services)
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .where(eq(providers.status, 'approved'));
+
+  const totalServices = totalServicesResult[0]?.count || 0;
+
+  // Get average rating from reviews (mock for now, would need reviews table)
+  const averageRating = 4.2; // Mock data - would calculate from reviews table
+
+  // Get average response time across all providers
+  const allProviders = await db
+    .select({ id: providers.id })
+    .from(providers)
+    .where(eq(providers.status, 'approved'));
+
+  let totalResponseTime = 0;
+  let responseCount = 0;
+
+  for (const provider of allProviders) {
+    // Get conversations for this provider
+    const providerConversations = await db
+      .select({
+        conversationId: conversations.id,
+        user1Id: conversations.user1Id,
+        user2Id: conversations.user2Id,
+      })
+      .from(conversations)
+      .where(or(
+        eq(conversations.user1Id, provider.id),
+        eq(conversations.user2Id, provider.id)
+      ));
+
+    for (const conv of providerConversations) {
+      // Find first message from customer
+      const firstMessage = await db
+        .select({ createdAt: messages.createdAt })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.conversationId),
+          ne(messages.senderId, provider.id)
+        ))
+        .orderBy(asc(messages.createdAt))
+        .limit(1);
+
+      if (firstMessage.length === 0) continue;
+
+      // Find first response from provider
+      const firstResponse = await db
+        .select({ createdAt: messages.createdAt })
+        .from(messages)
+        .where(and(
+          eq(messages.conversationId, conv.conversationId),
+          eq(messages.senderId, provider.id),
+          gte(messages.createdAt, firstMessage[0].createdAt)
+        ))
+        .orderBy(asc(messages.createdAt))
+        .limit(1);
+
+      if (firstResponse.length > 0) {
+        const responseTime = firstResponse[0].createdAt.getTime() - firstMessage[0].createdAt.getTime();
+        if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days
+          totalResponseTime += responseTime;
+          responseCount++;
+        }
+      }
+    }
+  }
+
+  let averageResponseTime = 'under 2h'; // fallback
+  if (responseCount > 0) {
+    const avgResponseMs = totalResponseTime / responseCount;
+    const avgResponseHours = avgResponseMs / (1000 * 60 * 60);
+    
+    if (avgResponseHours < 1) {
+      const minutes = Math.round(avgResponseHours * 60);
+      averageResponseTime = `under ${Math.max(1, minutes)}m`;
+    } else if (avgResponseHours < 24) {
+      const hours = Math.floor(avgResponseHours);
+      const minutes = Math.round((avgResponseHours - hours) * 60);
+      averageResponseTime = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
+    } else {
+      const days = Math.floor(avgResponseHours / 24);
+      averageResponseTime = `${days}d`;
+    }
+  }
+
+  return {
+    totalServices,
+    averageRating,
+    averageResponseTime,
   };
 }

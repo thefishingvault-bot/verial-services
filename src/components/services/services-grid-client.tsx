@@ -138,7 +138,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                 </h3>
                 <div className="text-right ml-2">
                   <div className="text-lg font-bold text-gray-900">
-                    ${formatPrice(service.priceInCents / 100)}
+                    {formatPrice(service.priceInCents / 100)}
                   </div>
                   <div className="text-xs text-gray-500">per hour</div>
                 </div>
@@ -165,6 +165,15 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                     <span className={`font-medium ${getTrustScoreColor(service.provider.trustScore)}`}>
                       {getTrustScoreLabel(service.provider.trustScore)}
                     </span>
+                    {service.provider.averageResponseTime && (
+                      <>
+                        <span>•</span>
+                        <div className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          <span>{service.provider.averageResponseTime}</span>
+                        </div>
+                      </>
+                    )}
                     {service.provider.baseSuburb && (
                       <>
                         <span>•</span>
