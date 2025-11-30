@@ -4,6 +4,32 @@ import { disputes, bookings, users, providers, services } from "@/db/schema";
 import { eq, desc, and, or, like, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  DollarSign,
+  Eye,
+  Filter,
+  Search,
+  Shield,
+  Users,
+  Calendar,
+  TrendingUp,
+  MessageSquare,
+  FileText,
+  ArrowUpDown,
+  MoreHorizontal
+} from "lucide-react";
 
 // TODO: Replace with actual role check utility if needed
 type ClerkUser = { publicMetadata?: { role?: string } };
@@ -15,6 +41,7 @@ interface SearchParams {
   status?: string;
   type?: string;
   search?: string;
+  tab?: string;
 }
 
 export default async function AdminDisputesPage({
@@ -23,7 +50,13 @@ export default async function AdminDisputesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const user = await currentUser();
-  if (!isAdmin(user)) {
+  if (!user?.id) {
+    redirect("/dashboard");
+  }
+
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect("/dashboard");
   }
 
@@ -31,6 +64,7 @@ export default async function AdminDisputesPage({
   const statusFilter = params.status || "all";
   const typeFilter = params.type || "all";
   const searchQuery = params.search || "";
+  const activeTab = params.tab || "all";
 
   // Build where conditions
   const whereConditions = [];
@@ -158,224 +192,356 @@ export default async function AdminDisputesPage({
     .filter(d => d.refundAmount)
     .reduce((sum, d) => sum + (d.refundAmount || 0), 0);
 
+  // Calculate urgency based on time since creation
+  const urgentDisputes = disputeList.filter(d => {
+    const daysSinceCreation = (Date.now() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+    return d.status === "open" && daysSinceCreation > 3;
+  }).length;
+
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Admin: Dispute Triage</h1>
-          <p className="text-gray-600">
-            Review and resolve booking disputes between customers and providers.
-          </p>
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Dispute Management</h1>
+            <p className="text-muted-foreground mt-2">
+              Review and resolve booking disputes between customers and providers.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <FileText className="mr-2 h-4 w-4" />
+            Export Report
+          </Button>
+          <Button variant="outline">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Templates
+          </Button>
         </div>
       </div>
 
-      {/* Summary Stats */}
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-gray-900">{totalDisputes}</div>
-          <div className="text-sm text-gray-600">Total Disputes</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-red-600">{openDisputes}</div>
-          <div className="text-sm text-gray-600">Open</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-yellow-600">{underReviewDisputes}</div>
-          <div className="text-sm text-gray-600">Under Review</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-green-600">{resolvedDisputes}</div>
-          <div className="text-sm text-gray-600">Resolved</div>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow">
-          <div className="text-2xl font-bold text-blue-600">${(totalRefunded / 100).toFixed(2)}</div>
-          <div className="text-sm text-gray-600">Total Refunded</div>
-        </div>
+      {/* Key Metrics */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Disputes</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalDisputes}</div>
+            <p className="text-xs text-muted-foreground">
+              All time
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Open</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600">{openDisputes}</div>
+            <p className="text-xs text-muted-foreground">
+              {urgentDisputes} urgent
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Under Review</CardTitle>
+            <Clock className="h-4 w-4 text-yellow-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{underReviewDisputes}</div>
+            <p className="text-xs text-muted-foreground">
+              In progress
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resolved</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{resolvedDisputes}</div>
+            <p className="text-xs text-muted-foreground">
+              This period
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Refunded</CardTitle>
+            <DollarSign className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">${(totalRefunded / 100).toFixed(0)}</div>
+            <p className="text-xs text-muted-foreground">
+              In refunds
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Resolution Rate</CardTitle>
+            <TrendingUp className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-purple-600">
+              {totalDisputes > 0 ? Math.round((resolvedDisputes / totalDisputes) * 100) : 0}%
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Success rate
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
-      {/* Filters */}
-      <div className="bg-white p-4 rounded-lg shadow">
-        <form className="flex flex-wrap gap-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Status</label>
-            <select
-              name="status"
-              defaultValue={statusFilter}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="all">All Statuses</option>
-              <option value="open">Open</option>
-              <option value="under_review">Under Review</option>
-              <option value="resolved">Resolved</option>
-              <option value="closed">Closed</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Initiator</label>
-            <select
-              name="type"
-              defaultValue={typeFilter}
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            >
-              <option value="all">All</option>
-              <option value="customer">Customer</option>
-              <option value="provider">Provider</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">Search</label>
-            <input
-              type="text"
-              name="search"
-              defaultValue={searchQuery}
-              placeholder="Provider name, description..."
-              className="mt-1 block w-full rounded-md border-gray-300 shadow-sm"
-            />
-          </div>
-          <div className="flex items-end">
-            <button
-              type="submit"
-              className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-            >
-              Filter
-            </button>
-          </div>
-        </form>
-      </div>
+      {/* Urgent Disputes Alert */}
+      {urgentDisputes > 0 && (
+        <Alert>
+          <AlertTriangle className="h-4 w-4" />
+          <AlertDescription>
+            <strong>{urgentDisputes} urgent dispute{urgentDisputes > 1 ? 's' : ''}</strong> require immediate attention (open for more than 3 days).
+          </AlertDescription>
+        </Alert>
+      )}
 
-      {/* Disputes Table */}
-      <div className="bg-white shadow rounded-lg overflow-hidden">
-        <div className="px-4 py-5 sm:px-6">
-          <h3 className="text-lg leading-6 font-medium text-gray-900">
-            Disputes
-          </h3>
+      {/* Main Content */}
+      <Tabs defaultValue={activeTab} className="space-y-4">
+        <div className="flex justify-between items-center">
+          <TabsList>
+            <TabsTrigger value="all">All Disputes</TabsTrigger>
+            <TabsTrigger value="open">Open ({openDisputes})</TabsTrigger>
+            <TabsTrigger value="review">Under Review ({underReviewDisputes})</TabsTrigger>
+            <TabsTrigger value="resolved">Resolved ({resolvedDisputes})</TabsTrigger>
+          </TabsList>
+
+          {/* Advanced Filters */}
+          <div className="flex gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+              <Input
+                placeholder="Search disputes..."
+                className="pl-9 w-64"
+                defaultValue={searchQuery}
+              />
+            </div>
+            <Select defaultValue={statusFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Status</SelectItem>
+                <SelectItem value="open">Open</SelectItem>
+                <SelectItem value="under_review">Under Review</SelectItem>
+                <SelectItem value="resolved">Resolved</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select defaultValue={typeFilter}>
+              <SelectTrigger className="w-32">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Types</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+                <SelectItem value="provider">Provider</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button variant="outline" size="sm">
+              <Filter className="h-4 w-4 mr-2" />
+              More Filters
+            </Button>
+          </div>
         </div>
-        <div className="border-t border-gray-200">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+
+        <TabsContent value="all" className="space-y-4">
+          <DisputesTable disputes={disputeList} />
+        </TabsContent>
+
+        <TabsContent value="open" className="space-y-4">
+          <DisputesTable disputes={disputeList.filter(d => d.status === "open")} />
+        </TabsContent>
+
+        <TabsContent value="review" className="space-y-4">
+          <DisputesTable disputes={disputeList.filter(d => d.status === "under_review")} />
+        </TabsContent>
+
+        <TabsContent value="resolved" className="space-y-4">
+          <DisputesTable disputes={disputeList.filter(d => d.status === "resolved")} />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// Separate component for the disputes table
+function DisputesTable({ disputes }: { disputes: any[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Disputes</CardTitle>
+        <CardDescription>
+          Manage and resolve customer and provider disputes
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>
+                <div className="flex items-center gap-2">
                   Booking
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Initiator
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Reason
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Amount
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Date
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {disputeList.map((dispute) => (
-                <tr key={dispute.id}>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
-                        {dispute.booking.service.name}
+                  <ArrowUpDown className="h-4 w-4" />
+                </div>
+              </TableHead>
+              <TableHead>Initiator</TableHead>
+              <TableHead>Reason</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Priority</TableHead>
+              <TableHead>Date</TableHead>
+              <TableHead>Actions</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {disputes.map((dispute) => {
+              const daysSinceCreation = (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+              const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
+              const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
+
+              return (
+                <TableRow key={dispute.id} className={isUrgent ? "bg-red-50" : ""}>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="font-medium">{dispute.booking.service.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        {dispute.provider.businessName}
                       </div>
-                      <div className="text-sm text-gray-500">
-                        {dispute.provider.businessName} (@{dispute.provider.handle})
-                      </div>
-                      <div className="text-xs text-gray-400">
-                        {dispute.booking.scheduledAt ? dispute.booking.scheduledAt.toLocaleDateString() : "Not scheduled"}
+                      <div className="text-xs text-muted-foreground">
+                        {dispute.booking.scheduledAt ?
+                          dispute.booking.scheduledAt.toLocaleDateString() :
+                          "Not scheduled"}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <div>
-                      <div className="text-sm font-medium text-gray-900">
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="font-medium">
                         {dispute.initiator.firstName} {dispute.initiator.lastName}
                       </div>
-                      <div className="text-sm text-gray-500 capitalize">
+                      <Badge variant="outline" className="text-xs">
                         {dispute.initiatorType}
+                      </Badge>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      <div className="font-medium capitalize">
+                        {dispute.reason.replace("_", " ")}
+                      </div>
+                      <div className="text-sm text-muted-foreground line-clamp-2">
+                        {dispute.description}
                       </div>
                     </div>
-                  </td>
-                  <td className="px-6 py-4">
-                    <div className="text-sm text-gray-900 capitalize">
-                      {dispute.reason.replace("_", " ")}
+                  </TableCell>
+                  <TableCell>
+                    <div className="space-y-1">
+                      {dispute.amountDisputed ? (
+                        <div className="font-medium">
+                          ${(dispute.amountDisputed / 100).toFixed(2)}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">N/A</span>
+                      )}
+                      {dispute.refundAmount && (
+                        <div className="text-sm text-green-600">
+                          Refunded: ${(dispute.refundAmount / 100).toFixed(2)}
+                        </div>
+                      )}
                     </div>
-                    <div className="text-xs text-gray-500 max-w-xs truncate">
-                      {dispute.description}
-                    </div>
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : "N/A"}
-                    {dispute.refundAmount && (
-                      <div className="text-xs text-green-600">
-                        Refunded: ${(dispute.refundAmount / 100).toFixed(2)}
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      dispute.status === "open" ? "bg-red-100 text-red-800" :
-                      dispute.status === "under_review" ? "bg-yellow-100 text-yellow-800" :
-                      dispute.status === "resolved" ? "bg-green-100 text-green-800" :
-                      "bg-gray-100 text-gray-800"
-                    }`}>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={
+                      dispute.status === "open" ? "destructive" :
+                      dispute.status === "under_review" ? "secondary" :
+                      dispute.status === "resolved" ? "default" :
+                      "outline"
+                    }>
                       {dispute.status.replace("_", " ")}
-                    </span>
+                    </Badge>
                     {dispute.adminDecision && (
-                      <div className="text-xs text-gray-500 mt-1 capitalize">
+                      <div className="text-xs text-muted-foreground mt-1 capitalize">
                         {dispute.adminDecision.replace("_", " ")}
                       </div>
                     )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                    {dispute.createdAt.toLocaleDateString()}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                    {dispute.status === "open" && (
-                      <form action={`/api/admin/disputes/${dispute.id}/review`} method="POST" className="inline">
-                        <button
-                          type="submit"
-                          className="text-blue-600 hover:text-blue-900 mr-4"
-                        >
-                          Review
-                        </button>
-                      </form>
-                    )}
-                    {dispute.status === "under_review" && (
-                      <Link
-                        href={`/dashboard/admin/disputes/${dispute.id}`}
-                        className="text-green-600 hover:text-green-900 mr-4"
-                      >
-                        Resolve
-                      </Link>
-                    )}
-                    <Link
-                      href={`/dashboard/admin/bookings?bookingId=${dispute.booking.id}`}
-                      className="text-gray-600 hover:text-gray-900"
-                    >
-                      View Booking
-                    </Link>
-                  </td>
-                </tr>
-              ))}
-              {disputeList.length === 0 && (
-                <tr>
-                  <td colSpan={7} className="px-6 py-4 text-center text-sm text-gray-500">
-                    No disputes found matching the current filters.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-1">
+                      {isUrgent && (
+                        <Badge variant="destructive" className="text-xs">
+                          Urgent
+                        </Badge>
+                      )}
+                      {isHighPriority && (
+                        <Badge variant="secondary" className="text-xs">
+                          High Value
+                        </Badge>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="text-sm">
+                      {dispute.createdAt.toLocaleDateString()}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {Math.floor(daysSinceCreation)}d ago
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      {dispute.status === "open" && (
+                        <form action={`/api/admin/disputes/${dispute.id}/review`} method="POST" className="inline">
+                          <Button type="submit" size="sm" variant="outline">
+                            Start Review
+                          </Button>
+                        </form>
+                      )}
+                      {dispute.status === "under_review" && (
+                        <Button asChild size="sm">
+                          <Link href={`/dashboard/admin/disputes/${dispute.id}`}>
+                            Resolve
+                          </Link>
+                        </Button>
+                      )}
+                      <Button asChild size="sm" variant="outline">
+                        <Link href={`/dashboard/admin/bookings?bookingId=${dispute.booking.id}`}>
+                          View Booking
+                        </Link>
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+            {disputes.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  No disputes found matching the current filters.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   );
 }

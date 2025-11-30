@@ -4,6 +4,31 @@ import { disputes, bookings, users, providers, services } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { requireAdmin } from "@/lib/admin";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Separator } from "@/components/ui/separator";
+import {
+  ArrowLeft,
+  CheckCircle,
+  Clock,
+  DollarSign,
+  FileText,
+  MessageSquare,
+  Shield,
+  User,
+  Calendar,
+  AlertTriangle,
+  Eye,
+  Phone,
+  Mail
+} from "lucide-react";
 
 // TODO: Replace with actual role check utility if needed
 type ClerkUser = { publicMetadata?: { role?: string } };
@@ -17,7 +42,13 @@ export default async function AdminDisputeDetailPage({
   params: Promise<{ disputeId: string }>;
 }) {
   const user = await currentUser();
-  if (!isAdmin(user)) {
+  if (!user?.id) {
+    redirect("/dashboard");
+  }
+
+  try {
+    await requireAdmin(user.id);
+  } catch {
     redirect("/dashboard");
   }
 
@@ -36,7 +67,7 @@ export default async function AdminDisputeDetailPage({
       adminNotes: disputes.adminNotes,
       refundAmount: disputes.refundAmount,
       createdAt: disputes.createdAt,
-      updatedAt: disputes.updatedAt,
+      resolvedAt: disputes.resolvedAt,
       initiatorType: disputes.initiatorType,
       bookingId: disputes.bookingId,
       initiatorId: disputes.initiatorId,
@@ -142,268 +173,450 @@ export default async function AdminDisputeDetailPage({
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Dispute Resolution</h1>
-          <p className="text-gray-600">
-            Review and resolve dispute #{dispute.id}
-          </p>
+    <div className="container mx-auto py-8 space-y-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
+        <div className="flex items-center gap-4">
+          <Button asChild variant="outline" size="sm">
+            <Link href="/dashboard/admin/disputes">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back to Disputes
+            </Link>
+          </Button>
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Dispute Resolution</h1>
+            <p className="text-muted-foreground mt-2">
+              Review and resolve dispute #{dispute.id}
+            </p>
+          </div>
         </div>
-        <Link
-          href="/dashboard/admin/disputes"
-          className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-        >
-          Back to Disputes
-        </Link>
+        <div className="flex gap-2">
+          <Button variant="outline">
+            <MessageSquare className="mr-2 h-4 w-4" />
+            Contact Parties
+          </Button>
+          <Button variant="outline">
+            <FileText className="mr-2 h-4 w-4" />
+            Add Note
+          </Button>
+        </div>
+      </div>
+
+      {/* Status Overview */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Status</CardTitle>
+            <Shield className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Badge variant={
+              dispute.status === "open" ? "destructive" :
+              dispute.status === "under_review" ? "secondary" :
+              dispute.status === "resolved" ? "default" :
+              "outline"
+            } className="text-sm">
+              {dispute.status.replace("_", " ")}
+            </Badge>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Amount Disputed</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : "N/A"}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Days Open</CardTitle>
+            <Clock className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {Math.floor((Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24))}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Priority</CardTitle>
+            <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <Badge variant={
+              (dispute.amountDisputed && dispute.amountDisputed > 5000) ||
+              (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3 ?
+              "destructive" : "secondary"
+            }>
+              {(dispute.amountDisputed && dispute.amountDisputed > 5000) ? "High Value" :
+               (Date.now() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3 ? "Urgent" :
+               "Normal"}
+            </Badge>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Dispute Details */}
+        {/* Main Content */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Dispute Info */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Dispute Details</h2>
-            <div className="grid grid-cols-2 gap-4">
+          {/* Dispute Details */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Dispute Details
+              </CardTitle>
+              <CardDescription>
+                Reason: <span className="font-medium capitalize">{dispute.reason.replace("_", " ")}</span>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Status</label>
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
-                  dispute.status === "open" ? "bg-red-100 text-red-800" :
-                  dispute.status === "under_review" ? "bg-yellow-100 text-yellow-800" :
-                  dispute.status === "resolved" ? "bg-green-100 text-green-800" :
-                  "bg-gray-100 text-gray-800"
-                }`}>
-                  {dispute.status.replace("_", " ")}
-                </span>
+                <Label className="text-sm font-medium">Description</Label>
+                <div className="mt-2 p-3 bg-muted rounded-md text-sm">
+                  {dispute.description}
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Reason</label>
-                <span className="text-sm text-gray-900 capitalize mt-1 block">
-                  {dispute.reason.replace("_", " ")}
-                </span>
+
+              {dispute.adminNotes && (
+                <div>
+                  <Label className="text-sm font-medium">Admin Notes</Label>
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-md text-sm">
+                    {dispute.adminNotes}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4 pt-4">
+                <div>
+                  <Label className="text-sm font-medium">Created</Label>
+                  <div className="text-sm text-muted-foreground mt-1">
+                    {dispute.createdAt.toLocaleDateString()} at {dispute.createdAt.toLocaleTimeString()}
+                  </div>
+                </div>
+                {dispute.resolvedAt && (
+                  <div>
+                    <Label className="text-sm font-medium">Resolved</Label>
+                    <div className="text-sm text-muted-foreground mt-1">
+                      {dispute.resolvedAt.toLocaleDateString()} at {dispute.resolvedAt.toLocaleTimeString()}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Amount Disputed</label>
-                <span className="text-sm text-gray-900 mt-1 block">
-                  {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : "N/A"}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Created</label>
-                <span className="text-sm text-gray-900 mt-1 block">
-                  {dispute.createdAt.toLocaleDateString()} {dispute.createdAt.toLocaleTimeString()}
-                </span>
-              </div>
-            </div>
-            <div className="mt-4">
-              <label className="block text-sm font-medium text-gray-700">Description</label>
-              <p className="text-sm text-gray-900 mt-1 bg-gray-50 p-3 rounded">
-                {dispute.description}
-              </p>
-            </div>
-            {dispute.adminNotes && (
-              <div className="mt-4">
-                <label className="block text-sm font-medium text-gray-700">Admin Notes</label>
-                <p className="text-sm text-gray-900 mt-1 bg-blue-50 p-3 rounded">
-                  {dispute.adminNotes}
-                </p>
-              </div>
-            )}
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Booking Details */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Booking Details</h2>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Service</label>
-                <span className="text-sm text-gray-900 mt-1 block">{dispute.booking.service.name}</span>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Booking Details
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium">Service</Label>
+                  <div className="text-sm mt-1">{dispute.booking.service.name}</div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Booking Status</Label>
+                  <Badge variant={
+                    dispute.booking.status === "completed" ? "default" :
+                    dispute.booking.status === "confirmed" ? "secondary" :
+                    dispute.booking.status === "canceled" ? "destructive" :
+                    "outline"
+                  } className="mt-1">
+                    {dispute.booking.status}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Scheduled Date</Label>
+                  <div className="text-sm mt-1">
+                    {dispute.booking.scheduledAt ?
+                      `${dispute.booking.scheduledAt.toLocaleDateString()} at ${dispute.booking.scheduledAt.toLocaleTimeString()}` :
+                      "Not scheduled"}
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium">Total Amount</Label>
+                  <div className="text-lg font-semibold mt-1">
+                    ${(dispute.booking.totalAmount / 100).toFixed(2)}
+                  </div>
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Booking Status</label>
-                <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full mt-1 ${
-                  dispute.booking.status === "completed" ? "bg-green-100 text-green-800" :
-                  dispute.booking.status === "confirmed" ? "bg-blue-100 text-blue-800" :
-                  dispute.booking.status === "canceled" ? "bg-red-100 text-red-800" :
-                  "bg-gray-100 text-gray-800"
-                }`}>
-                  {dispute.booking.status}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Scheduled Date</label>
-                <span className="text-sm text-gray-900 mt-1 block">
-                  {dispute.booking.scheduledAt ? 
-                    `${dispute.booking.scheduledAt.toLocaleDateString()} ${dispute.booking.scheduledAt.toLocaleTimeString()}` : 
-                    "Not scheduled"}
-                </span>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700">Total Amount</label>
-                <span className="text-sm text-gray-900 mt-1 block">
-                  ${(dispute.booking.totalAmount / 100).toFixed(2)}
-                </span>
-              </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Resolution Form */}
           {dispute.status === "under_review" && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Make Resolution Decision</h2>
-              <form action={`/api/admin/disputes/${dispute.id}/resolve`} method="POST" className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Decision</label>
-                  <select
-                    name="decision"
-                    required
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  >
-                    <option value="">Select a decision...</option>
-                    <option value="refund_customer">Full Refund to Customer</option>
-                    <option value="partial_refund">Partial Refund to Customer</option>
-                    <option value="no_refund">No Refund</option>
-                    <option value="service_redo">Service Redo</option>
-                  </select>
-                </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <CheckCircle className="h-5 w-5" />
+                  Make Resolution Decision
+                </CardTitle>
+                <CardDescription>
+                  Choose how to resolve this dispute and provide detailed reasoning.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form action={`/api/admin/disputes/${dispute.id}/resolve`} method="POST" className="space-y-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="decision">Decision *</Label>
+                      <Select name="decision" required>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a decision..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="refund_customer">Full Refund to Customer</SelectItem>
+                          <SelectItem value="partial_refund">Partial Refund to Customer</SelectItem>
+                          <SelectItem value="no_refund">No Refund</SelectItem>
+                          <SelectItem value="service_redo">Service Redo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Refund Amount (cents)</label>
-                  <input
-                    type="number"
-                    name="refundAmount"
-                    placeholder="0"
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">Leave empty for no refund</p>
-                </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="refundAmount">Refund Amount (cents)</Label>
+                      <Input
+                        id="refundAmount"
+                        name="refundAmount"
+                        type="number"
+                        placeholder="0"
+                        min="0"
+                        max={dispute.booking.totalAmount}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Leave empty for no refund. Max: ${(dispute.booking.totalAmount / 100).toFixed(2)}
+                      </p>
+                    </div>
+                  </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Admin Notes</label>
-                  <textarea
-                    name="adminNotes"
-                    rows={4}
-                    required
-                    placeholder="Explain your decision and reasoning..."
-                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
-                  />
-                </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="adminNotes">Resolution Notes *</Label>
+                    <Textarea
+                      id="adminNotes"
+                      name="adminNotes"
+                      rows={4}
+                      required
+                      placeholder="Explain your decision and reasoning..."
+                    />
+                  </div>
 
-                <div className="flex gap-4">
-                  <button
-                    type="submit"
-                    className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
-                  >
-                    Resolve Dispute
-                  </button>
-                  <Link
-                    href="/dashboard/admin/disputes"
-                    className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
-                  >
-                    Cancel
-                  </Link>
+                  <div className="flex gap-4 pt-4">
+                    <Button type="submit">
+                      <CheckCircle className="mr-2 h-4 w-4" />
+                      Resolve Dispute
+                    </Button>
+                    <Button asChild variant="outline" type="button">
+                      <Link href="/dashboard/admin/disputes">Cancel</Link>
+                    </Button>
+                  </div>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Resolution Summary */}
+          {dispute.status === "resolved" && (
+            <Card className="border-green-200 bg-green-50">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-800">
+                  <CheckCircle className="h-5 w-5" />
+                  Resolution Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-green-800">Decision</Label>
+                    <div className="text-sm mt-1 capitalize font-medium">
+                      {dispute.adminDecision?.replace("_", " ")}
+                    </div>
+                  </div>
+                  {dispute.refundAmount && (
+                    <div>
+                      <Label className="text-sm font-medium text-green-800">Refund Amount</Label>
+                      <div className="text-lg font-semibold mt-1">
+                        ${(dispute.refundAmount / 100).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </form>
-            </div>
+              </CardContent>
+            </Card>
           )}
         </div>
 
         {/* Sidebar */}
         <div className="space-y-6">
           {/* Parties Involved */}
-          <div className="bg-white shadow rounded-lg p-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Parties Involved</h2>
-
-            <div className="space-y-4">
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Initiator ({dispute.initiatorType})</h3>
-                <div className="mt-1">
-                  <p className="text-sm text-gray-900">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Parties Involved
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Initiator */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">
+                    {dispute.initiatorType}
+                  </Badge>
+                  <span className="text-sm font-medium">Initiator</span>
+                </div>
+                <div className="space-y-2">
+                  <div className="font-medium">
                     {dispute.initiator.firstName} {dispute.initiator.lastName}
-                  </p>
-                  <p className="text-sm text-gray-500">{dispute.initiator.email}</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Mail className="h-3 w-3" />
+                    {dispute.initiator.email}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      Message
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      <Phone className="h-3 w-3 mr-1" />
+                      Call
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Customer</h3>
-                <div className="mt-1">
-                  <p className="text-sm text-gray-900">
+              <Separator />
+
+              {/* Customer */}
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-xs">Customer</Badge>
+                </div>
+                <div className="space-y-2">
+                  <div className="font-medium">
                     {dispute.customer?.firstName} {dispute.customer?.lastName}
-                  </p>
-                  <p className="text-sm text-gray-500">{dispute.customer?.email}</p>
+                  </div>
+                  <div className="text-sm text-muted-foreground flex items-center gap-2">
+                    <Mail className="h-3 w-3" />
+                    {dispute.customer?.email}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline">
+                      <MessageSquare className="h-3 w-3 mr-1" />
+                      Message
+                    </Button>
+                    <Button size="sm" variant="outline">
+                      <Phone className="h-3 w-3 mr-1" />
+                      Call
+                    </Button>
+                  </div>
                 </div>
               </div>
 
-              <div>
-                <h3 className="text-sm font-medium text-gray-700">Provider</h3>
-                <div className="mt-1">
-                  {dispute.provider ? (
-                    <>
-                      <p className="text-sm text-gray-900">{dispute.provider.businessName}</p>
-                      <p className="text-sm text-gray-500">@{dispute.provider.handle}</p>
-                      <p className="text-sm text-gray-500">{dispute.provider.user.firstName} {dispute.provider.user.lastName}</p>
-                      <div className="mt-2">
-                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                          dispute.provider.trustLevel === "platinum" ? "bg-purple-100 text-purple-800" :
-                          dispute.provider.trustLevel === "gold" ? "bg-yellow-100 text-yellow-800" :
-                          dispute.provider.trustLevel === "silver" ? "bg-gray-100 text-gray-800" :
-                          "bg-gray-100 text-gray-800"
-                        }`}>
-                          {dispute.provider.trustLevel} ({dispute.provider.trustScore})
-                        </span>
-                      </div>
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-500">Provider information not available</p>
-                  )}
+              <Separator />
+
+              {/* Provider */}
+              {dispute.provider && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">Provider</Badge>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="font-medium">{dispute.provider.businessName}</div>
+                    <div className="text-sm text-muted-foreground">@{dispute.provider.handle}</div>
+                    <div className="text-sm text-muted-foreground">
+                      {dispute.provider.user.firstName} {dispute.provider.user.lastName}
+                    </div>
+                    <Badge variant={
+                      dispute.provider.trustLevel === "platinum" ? "default" :
+                      dispute.provider.trustLevel === "gold" ? "secondary" :
+                      dispute.provider.trustLevel === "silver" ? "outline" :
+                      "outline"
+                    } className="text-xs">
+                      {dispute.provider.trustLevel} ({dispute.provider.trustScore})
+                    </Badge>
+                    <div className="flex gap-2 pt-2">
+                      <Button size="sm" variant="outline">
+                        <MessageSquare className="h-3 w-3 mr-1" />
+                        Message
+                      </Button>
+                      <Button size="sm" variant="outline">
+                        <Eye className="h-3 w-3 mr-1" />
+                        Profile
+                      </Button>
+                    </div>
+                  </div>
                 </div>
-              </div>
-            </div>
-          </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Evidence */}
           {dispute.evidenceUrls && dispute.evidenceUrls.length > 0 && (
-            <div className="bg-white shadow rounded-lg p-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Evidence</h2>
-              <div className="space-y-2">
-                {dispute.evidenceUrls.map((url, index) => (
-                  <a
-                    key={index}
-                    href={url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block text-sm text-blue-600 hover:text-blue-800"
-                  >
-                    Evidence {index + 1}
-                  </a>
-                ))}
-              </div>
-            </div>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Evidence ({dispute.evidenceUrls.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {dispute.evidenceUrls.map((url, index) => (
+                    <div key={index} className="flex items-center gap-2 p-2 border rounded">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
+                      <a
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-blue-600 hover:text-blue-800 flex-1 truncate"
+                      >
+                        Evidence {index + 1}
+                      </a>
+                      <Button size="sm" variant="ghost">
+                        <Eye className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
-          {/* Resolution Summary */}
-          {dispute.status === "resolved" && (
-            <div className="bg-green-50 border border-green-200 rounded-lg p-6">
-              <h2 className="text-lg font-medium text-green-900 mb-4">Resolution Summary</h2>
-              <div className="space-y-2">
-                <div>
-                  <span className="text-sm font-medium text-green-800">Decision:</span>
-                  <span className="text-sm text-green-700 ml-2 capitalize">
-                    {dispute.adminDecision?.replace("_", " ")}
-                  </span>
-                </div>
-                {dispute.refundAmount && (
-                  <div>
-                    <span className="text-sm font-medium text-green-800">Refund Amount:</span>
-                    <span className="text-sm text-green-700 ml-2">
-                      ${(dispute.refundAmount / 100).toFixed(2)}
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+          {/* Quick Actions */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">Quick Actions</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <FileText className="h-4 w-4 mr-2" />
+                View Booking Details
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <MessageSquare className="h-4 w-4 mr-2" />
+                Send Template Message
+              </Button>
+              <Button variant="outline" size="sm" className="w-full justify-start">
+                <Shield className="h-4 w-4 mr-2" />
+                Escalate Dispute
+              </Button>
+            </CardContent>
+          </Card>
         </div>
       </div>
     </div>

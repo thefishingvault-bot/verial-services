@@ -1,14 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/admin";
 import { disputes, bookings } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
 
 export async function POST(
   request: NextRequest,
@@ -16,9 +11,11 @@ export async function POST(
 ) {
   try {
     const user = await currentUser();
-    if (!isAdmin(user)) {
+    if (!user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+
+    await requireAdmin(user.id);
 
     const { disputeId } = await params;
 
