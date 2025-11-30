@@ -6,29 +6,28 @@ import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CheckCircle } from 'lucide-react';
 import { ServicesSearchAndFilters } from '@/components/services/services-search-and-filters';
-import { ServicesGrid } from '@/components/services/services-grid';
+import { ServicesGridClient } from '@/components/services/services-grid-client';
 import { ServicesMap } from '@/components/services/services-map';
 import { ServicesLoading } from '@/components/services/services-loading';
 import { ServicesAdvancedFilters } from '@/components/services/services-advanced-filters';
+import { ServiceWithProvider, SearchParams } from '@/lib/services-data';
 
-interface SearchParams {
-  q?: string;
-  category?: string;
-  location?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
-  availability?: string;
-  sort?: string;
-  view?: 'grid' | 'map';
+interface SearchParamsWithPage extends SearchParams {
+  page?: string;
 }
 
 interface ServicesPageClientProps {
   initialParams: SearchParams;
+  initialServicesData: {
+    services: ServiceWithProvider[];
+    hasMore: boolean;
+    totalCount: number;
+  };
 }
 
-export function ServicesPageClient({ initialParams }: ServicesPageClientProps) {
+export function ServicesPageClient({ initialParams, initialServicesData }: ServicesPageClientProps) {
   const [viewMode, setViewMode] = useState<'grid' | 'map'>(initialParams.view || 'grid');
+  const [servicesData, setServicesData] = useState(initialServicesData);
 
   const handleViewToggle = () => {
     const newView = viewMode === 'map' ? 'grid' : 'map';
@@ -160,9 +159,12 @@ export function ServicesPageClient({ initialParams }: ServicesPageClientProps) {
                 </div>
               </div>
             ) : (
-              <Suspense fallback={<ServicesLoading />}>
-                <ServicesGrid searchParams={initialParams} />
-              </Suspense>
+              <ServicesGridClient
+                services={servicesData.services}
+                searchParams={initialParams}
+                hasMore={servicesData.hasMore}
+                currentPage={parseInt(initialParams.page || '1')}
+              />
             )}
           </main>
         </div>

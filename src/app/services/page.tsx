@@ -1,6 +1,7 @@
 import { Metadata } from 'next';
 import MarketingLayout from '../(marketing)/layout';
 import { ServicesPageClient } from '@/components/services/services-page-client';
+import { getServicesData } from '@/lib/services-data';
 
 export const metadata: Metadata = {
   title: 'Find Local Services | Verial',
@@ -25,10 +26,14 @@ export default async function ServicesPage({
   searchParams: Promise<SearchParams>;
 }) {
   const params = await searchParams;
+  const initialServicesData = await getServicesData(params);
 
   return (
     <MarketingLayout>
-      <ServicesPageClient initialParams={params} />
+      <ServicesPageClient
+        initialParams={params}
+        initialServicesData={initialServicesData}
+      />
     </MarketingLayout>
   );
 }
