@@ -26,7 +26,6 @@ interface ServicesPageClientProps {
   stats: {
     totalServices: number;
     averageRating: number;
-    averageResponseTime: string;
   };
 }
 
@@ -90,7 +89,7 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
       <div className="container mx-auto px-4 py-8">
         {/* Quick Stats */}
         <div className="mb-8">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
               <div className="text-2xl font-bold text-blue-600">{stats.totalServices}+</div>
               <div className="text-sm text-gray-600">Active Services</div>
@@ -102,10 +101,6 @@ export function ServicesPageClient({ initialParams, initialServicesData, stats }
             <div className="bg-white rounded-lg shadow-sm p-4 text-center">
               <div className="text-2xl font-bold text-purple-600">24/7</div>
               <div className="text-sm text-gray-600">Support Available</div>
-            </div>
-            <div className="bg-white rounded-lg shadow-sm p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600">{stats.averageResponseTime}</div>
-              <div className="text-sm text-gray-600">Average Response</div>
             </div>
           </div>
         </div>

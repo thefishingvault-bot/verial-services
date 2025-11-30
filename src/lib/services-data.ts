@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { services, providers, users, conversations, messages } from '@/db/schema';
+import { services, providers, users, conversations, messages, reviews } from '@/db/schema';
 import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne } from 'drizzle-orm';
 
 export interface SearchParams {
@@ -234,33 +234,61 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
     }
   }
 
-  // Transform data and add mock ratings (in production, this would come from reviews table)
-  const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => ({
-    id: service.id,
-    title: service.title,
-    description: service.description,
-    priceInCents: service.priceInCents,
-    category: service.category,
-    coverImageUrl: service.coverImageUrl,
-    createdAt: service.createdAt,
-    provider: {
-      id: service.providerId,
-      businessName: service.businessName,
-      handle: service.handle,
-      baseSuburb: service.baseSuburb,
-      baseRegion: service.baseRegion,
-      trustScore: service.trustScore,
-      isVerified: service.isVerified,
-      avatarUrl: service.avatarUrl,
-      averageResponseTime: responseTimes[service.providerId] || 'under 2h', // fallback
-    },
-    user: {
-      firstName: service.firstName,
-      lastName: service.lastName,
-    },
-    avgRating: Math.random() * 2 + 3, // Mock rating between 3-5
-    reviewCount: Math.floor(Math.random() * 50) + 1, // Mock review count
-  }));
+  // Get real ratings and review counts for each provider
+  const providerStats: Record<string, { avgRating: number; reviewCount: number }> = {};
+
+  if (providerIds.length > 0) {
+    // Get review stats for each provider
+    const reviewStats = await db
+      .select({
+        providerId: reviews.providerId,
+        avgRating: avg(reviews.rating),
+        reviewCount: sql<number>`count(*)`,
+      })
+      .from(reviews)
+      .where(sql`${reviews.providerId} IN (${sql.join(providerIds, sql`, `)})`)
+      .groupBy(reviews.providerId);
+
+    // Convert to a lookup object
+    reviewStats.forEach(stat => {
+      providerStats[stat.providerId] = {
+        avgRating: Number(stat.avgRating) || 0,
+        reviewCount: stat.reviewCount,
+      };
+    });
+  }
+
+  // Transform data with real ratings and review counts
+  const servicesWithProviders: ServiceWithProvider[] = servicesData.map(service => {
+    const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
+    
+    return {
+      id: service.id,
+      title: service.title,
+      description: service.description,
+      priceInCents: service.priceInCents,
+      category: service.category,
+      coverImageUrl: service.coverImageUrl,
+      createdAt: service.createdAt,
+      provider: {
+        id: service.providerId,
+        businessName: service.businessName,
+        handle: service.handle,
+        baseSuburb: service.baseSuburb,
+        baseRegion: service.baseRegion,
+        trustScore: service.trustScore,
+        isVerified: service.isVerified,
+        avatarUrl: service.avatarUrl,
+        averageResponseTime: responseTimes[service.providerId] || 'under 2h', // fallback
+      },
+      user: {
+        firstName: service.firstName,
+        lastName: service.lastName,
+      },
+      avgRating: stats.avgRating,
+      reviewCount: stats.reviewCount,
+    };
+  });
 
   return {
     services: servicesWithProviders,
@@ -272,7 +300,6 @@ export async function getServicesData(searchParams: SearchParams): Promise<{
 export async function getServicesStats(): Promise<{
   totalServices: number;
   averageRating: number;
-  averageResponseTime: string;
 }> {
   // Get total approved services
   const totalServicesResult = await db
@@ -283,89 +310,15 @@ export async function getServicesStats(): Promise<{
 
   const totalServices = totalServicesResult[0]?.count || 0;
 
-  // Get average rating from reviews (mock for now, would need reviews table)
-  const averageRating = 4.2; // Mock data - would calculate from reviews table
+  // Get average rating from reviews table
+  const ratingResult = await db
+    .select({ avgRating: avg(reviews.rating) })
+    .from(reviews);
 
-  // Get average response time across all providers
-  const allProviders = await db
-    .select({ id: providers.id })
-    .from(providers)
-    .where(eq(providers.status, 'approved'));
-
-  let totalResponseTime = 0;
-  let responseCount = 0;
-
-  for (const provider of allProviders) {
-    // Get conversations for this provider
-    const providerConversations = await db
-      .select({
-        conversationId: conversations.id,
-        user1Id: conversations.user1Id,
-        user2Id: conversations.user2Id,
-      })
-      .from(conversations)
-      .where(or(
-        eq(conversations.user1Id, provider.id),
-        eq(conversations.user2Id, provider.id)
-      ));
-
-    for (const conv of providerConversations) {
-      // Find first message from customer
-      const firstMessage = await db
-        .select({ createdAt: messages.createdAt })
-        .from(messages)
-        .where(and(
-          eq(messages.conversationId, conv.conversationId),
-          ne(messages.senderId, provider.id)
-        ))
-        .orderBy(asc(messages.createdAt))
-        .limit(1);
-
-      if (firstMessage.length === 0) continue;
-
-      // Find first response from provider
-      const firstResponse = await db
-        .select({ createdAt: messages.createdAt })
-        .from(messages)
-        .where(and(
-          eq(messages.conversationId, conv.conversationId),
-          eq(messages.senderId, provider.id),
-          gte(messages.createdAt, firstMessage[0].createdAt)
-        ))
-        .orderBy(asc(messages.createdAt))
-        .limit(1);
-
-      if (firstResponse.length > 0) {
-        const responseTime = firstResponse[0].createdAt.getTime() - firstMessage[0].createdAt.getTime();
-        if (responseTime > 0 && responseTime < 7 * 24 * 60 * 60 * 1000) { // Less than 7 days
-          totalResponseTime += responseTime;
-          responseCount++;
-        }
-      }
-    }
-  }
-
-  let averageResponseTime = 'under 2h'; // fallback
-  if (responseCount > 0) {
-    const avgResponseMs = totalResponseTime / responseCount;
-    const avgResponseHours = avgResponseMs / (1000 * 60 * 60);
-    
-    if (avgResponseHours < 1) {
-      const minutes = Math.round(avgResponseHours * 60);
-      averageResponseTime = `under ${Math.max(1, minutes)}m`;
-    } else if (avgResponseHours < 24) {
-      const hours = Math.floor(avgResponseHours);
-      const minutes = Math.round((avgResponseHours - hours) * 60);
-      averageResponseTime = minutes > 0 ? `${hours}h ${minutes}m` : `${hours}h`;
-    } else {
-      const days = Math.floor(avgResponseHours / 24);
-      averageResponseTime = `${days}d`;
-    }
-  }
+  const averageRating = ratingResult[0]?.avgRating ? Number(ratingResult[0].avgRating) : 0;
 
   return {
     totalServices,
     averageRating,
-    averageResponseTime,
   };
 }
