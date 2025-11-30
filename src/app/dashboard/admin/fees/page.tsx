@@ -7,7 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
 import { requireAdmin } from '@/lib/admin';
-import { getBaseUrl } from '@/lib/getBaseUrl';
+import { getAdminFeesReport, type FeeReportRow } from '@/server/admin/fees';
 import {
   DollarSign,
   TrendingUp,
@@ -25,17 +25,6 @@ type SearchParams = Promise<{
   from?: string;
   to?: string;
 }>;
-
-interface FeeReportRow {
-  bookingId: string;
-  status: string;
-  paidAt: string;
-  serviceTitle: string;
-  providerName: string;
-  customerEmail: string;
-  totalAmount: number;
-  platformFee: number;
-}
 
 interface DailyBucket {
   date: string;
@@ -110,35 +99,19 @@ export default async function AdminFeesPage({
   const fromIso = startDate.toISOString().split('T')[0];
   const toIso = endDate.toISOString().split('T')[0];
 
-  const baseUrl = getBaseUrl();
-  const url = new URL('/api/admin/fees/report', baseUrl);
-  url.searchParams.set('from', fromIso);
-  url.searchParams.set('to', toIso);
+  console.log('[ADMIN_FEES] Loading report for dates:', fromIso, 'to', toIso);
 
-  console.log('[ADMIN_FEES] Fetching from URL:', url.toString());
-
-  let res: Response;
+  let reportData: FeeReportRow[];
   try {
-    res = await fetch(url.toString(), { cache: 'no-store' });
+    reportData = await getAdminFeesReport({ from: fromIso, to: toIso });
   } catch (error) {
-    console.error('[ADMIN_FEES] Fetch failed:', error);
+    console.error('[ADMIN_FEES] Failed to load fees report:', error);
     return (
       <div className="text-sm text-destructive">
         We couldn&rsquo;t load fee data right now. Please try again later.
       </div>
     );
   }
-
-  if (!res.ok) {
-    console.error('[ADMIN_FEES] Fetch returned status:', res.status, await res.text());
-    return (
-      <div className="text-sm text-destructive">
-        We couldn&rsquo;t load fee data right now. Please try again later.
-      </div>
-    );
-  }
-
-  const reportData = (await res.json()) as FeeReportRow[];
 
   const totalGross = reportData.reduce((sum, row) => sum + row.totalAmount, 0);
   const totalFees = reportData.reduce((sum, row) => sum + row.platformFee, 0);
