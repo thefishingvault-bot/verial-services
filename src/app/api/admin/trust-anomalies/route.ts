@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { trustIncidents, providers, users } from '@/db/schema';
-import { eq, desc, and, gte, sql } from 'drizzle-orm';
+import { eq, desc, gte, sql, and } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -28,26 +28,24 @@ export async function GET(request: NextRequest) {
 
     // Calculate date filter
     const now = new Date();
-    let startDate: Date;
-    switch (timeframe) {
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+    const startDate: Date = (() => {
+      switch (timeframe) {
+        case '7d':
+          return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        case '30d':
+          return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        case '90d':
+          return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        default:
+          return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      }
+    })();
 
     // Build query conditions
-    let conditions = [gte(trustIncidents.createdAt, startDate)];
+    const conditions = [gte(trustIncidents.createdAt, startDate)];
 
     if (severity !== 'all') {
-      conditions.push(eq(trustIncidents.severity, severity as any));
+      conditions.push(sql`${trustIncidents.severity} = ${severity}`);
     }
 
     // Get trust incidents with provider info

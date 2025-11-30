@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { bookings, users, providers, services } from '@/db/schema';
-import { eq, and, desc, sql } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       .from(bookings)
       .leftJoin(providers, eq(bookings.providerId, providers.id))
       .leftJoin(services, eq(bookings.serviceId, services.id))
-      .where(eq(bookings.status, status as any))
+      .where(sql`${bookings.status} = ${status}`)
       .orderBy(desc(bookings.updatedAt))
       .limit(limit);
 
@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { originalBookingId, newScheduledDateTime, reason } = body;
+    const { originalBookingId, newScheduledDateTime } = body;
 
     if (!originalBookingId || !newScheduledDateTime) {
       return NextResponse.json(

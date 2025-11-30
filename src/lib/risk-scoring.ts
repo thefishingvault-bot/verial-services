@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { providers, trustIncidents, bookings, reviews, providerSuspensions } from "@/db/schema";
-import { eq, and, gte, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 export interface ProviderRiskMetrics {
   providerId: string;

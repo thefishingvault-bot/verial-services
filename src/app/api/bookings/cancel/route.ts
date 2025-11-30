@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { bookings, providers } from '@/db/schema';
+import { bookings } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq, and } from 'drizzle-orm';

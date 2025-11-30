@@ -108,6 +108,35 @@ type ApiResponse = {
   analytics: AnalyticsData;
 };
 
+type ScheduledReport = {
+  id: string;
+  email: string;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  reportType: 'summary' | 'detailed';
+};
+
+type FilterPreset = {
+  id: string;
+  name: string;
+  filters: {
+    searchQuery: string;
+    selectedRiskLevels: string[];
+    selectedStatuses: string[];
+    selectedIncidentTypes: string[];
+    dateRange: { start: string; end: string };
+    activityDateRange: { start: string; end: string };
+    completionRateRange: { min: string; max: string };
+    trustScoreRange: { min: string; max: string };
+    bookingCountRange: { min: string; max: string };
+  };
+  createdAt: string;
+};
+
+type ProviderHealthNotificationPayload = {
+  message?: string;
+  actionUrl?: string;
+};
+
 function ScheduledReportsModal({
   onSchedule,
   onCancel,
@@ -116,7 +145,7 @@ function ScheduledReportsModal({
 }: {
   onSchedule: (email: string, frequency: 'daily' | 'weekly' | 'monthly', reportType: 'summary' | 'detailed') => void;
   onCancel: () => void;
-  existingReports: any[];
+  existingReports: ScheduledReport[];
   onCancelReport: (reportId: string) => void;
 }) {
   const [email, setEmail] = useState('');
@@ -230,7 +259,7 @@ export default function AdminProviderHealthPage() {
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  const [savedFilters, setSavedFilters] = useState<FilterPreset[]>([]);
   const [filterName, setFilterName] = useState('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [activityDateRange, setActivityDateRange] = useState({ start: '', end: '' });
@@ -243,7 +272,7 @@ export default function AdminProviderHealthPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduledReports, setScheduledReports] = useState<any[]>([]);
+  const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
   const [riskScoreRange, setRiskScoreRange] = useState({ min: '', max: '' });
 
   // Real-time updates state
@@ -312,6 +341,10 @@ export default function AdminProviderHealthPage() {
   };
 
   const handleExportPDF = async () => {
+    if (!analytics) {
+      console.warn("Tried to generate PDF report without analytics");
+      return;
+    }
     try {
       const filename = `provider-health-report-${new Date().toISOString().split('T')[0]}.html`;
       await generatePDFReport(providers, analytics, filename);
@@ -453,7 +486,7 @@ export default function AdminProviderHealthPage() {
     alert('Filter preset saved successfully!');
   };
 
-  const loadFilterPreset = (preset: any) => {
+  const loadFilterPreset = (preset: FilterPreset) => {
     setSearchQuery(preset.filters.searchQuery || '');
     setSelectedRiskLevels(preset.filters.selectedRiskLevels || []);
     setSelectedStatuses(preset.filters.selectedStatuses || []);
@@ -519,11 +552,8 @@ export default function AdminProviderHealthPage() {
     setNotifications(sampleNotifications);
   }, []);
 
-  // Apply filters to providers
-  const filteredProviders = applyAdvancedFilters(providers);
-
-  // Real-time updates setup
-  const { isConnected, lastUpdate, updates, error: rtError, isRetrying } = useRealTimeUpdates(
+  // Real-time updates
+  const { isConnected, lastUpdate, isRetrying } = useRealTimeUpdates(
     {
       enabled: autoRefreshEnabled,
       updateInterval: refreshInterval,
@@ -531,14 +561,15 @@ export default function AdminProviderHealthPage() {
     (update) => {
       // Handle real-time updates
       if (update.type === 'alert' || update.type === 'incident') {
+        const data = update.data as ProviderHealthNotificationPayload;
         const notification: NotificationItem = {
           id: update.id,
           type: update.type === 'alert' ? 'warning' : 'error',
           title: update.type === 'alert' ? 'New Alert' : 'New Incident',
-          message: update.data.message || 'A new issue requires attention',
+          message: data.message || 'A new issue requires attention',
           timestamp: update.timestamp,
           read: false,
-          actionUrl: update.data.actionUrl,
+          actionUrl: data.actionUrl,
           actionText: 'View Details'
         };
         setNotifications(prev => [notification, ...prev.slice(0, 49)]); // Keep last 50
@@ -552,7 +583,7 @@ export default function AdminProviderHealthPage() {
   );
 
   // Polling for periodic data refresh
-  const { refetch: refetchData } = usePollingUpdates(
+  const { } = usePollingUpdates(
     async () => {
       await fetchProviders();
       return providers;
@@ -633,12 +664,14 @@ export default function AdminProviderHealthPage() {
     return <div className="p-6">Loading...</div>;
   }
 
+  // Apply advanced filters to providers
+  const filteredProviders = applyAdvancedFilters(providers);
+
   // Calculate summary stats
-  const totalProviders = providers.length;
-  const criticalRisk = providers.filter(p => p.riskLevel === "critical").length;
-  const highRisk = providers.filter(p => p.riskLevel === "high").length;
-  const unresolvedIncidents = providers.reduce((sum, p) => sum + p.unresolvedIncidents, 0);
-  const activeSuspensions = providers.filter(p => p.hasActiveSuspension).length;
+  const totalProviders = filteredProviders.length;
+  const criticalRisk = filteredProviders.filter(p => p.riskLevel === "critical").length;
+  const highRisk = filteredProviders.filter(p => p.riskLevel === "high").length;
+  const unresolvedIncidents = filteredProviders.reduce((sum, p) => sum + p.unresolvedIncidents, 0);
 
   return (
     <div className="space-y-6">

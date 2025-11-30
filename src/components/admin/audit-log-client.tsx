@@ -115,7 +115,7 @@ export default function AuditLogClient() {
     }
   };
 
-  const handleFilterChange = (key: string, value: any) => {
+  const handleFilterChange = (key: string, value: string | Date | undefined) => {
     setFilters(prev => ({
       ...prev,
       [key]: value,

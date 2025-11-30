@@ -352,7 +352,7 @@ export default function TemplateManagerClient() {
                             <AlertDialogHeader>
                               <AlertDialogTitle>Delete Template</AlertDialogTitle>
                               <AlertDialogDescription>
-                                Are you sure you want to delete "{template.name}"? This action cannot be undone.
+                                Are you sure you want to delete &ldquo;{template.name}&rdquo;? This action cannot be undone.
                               </AlertDialogDescription>
                             </AlertDialogHeader>
                             <AlertDialogFooter>
@@ -565,7 +565,7 @@ function TemplateForm({ formData, setFormData, onAddVariable, onUpdateVariable, 
           ))}
         </div>
         <p className="text-xs text-muted-foreground">
-          Variables can be used in the content with curly braces, e.g., {'{firstName}'}
+          Variables can be used in the content with curly braces, e.g., &#123;firstName&#125;
         </p>
       </div>
     </div>

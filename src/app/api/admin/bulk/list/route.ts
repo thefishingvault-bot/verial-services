@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { providers, users, bookings, services } from '@/db/schema';
-import { eq, and, or, ilike, inArray, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, sql } from 'drizzle-orm';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 

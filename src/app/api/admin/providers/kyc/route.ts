@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { eq, and, gte, lte, desc, asc, sql } from "drizzle-orm";
+import { eq, desc, asc } from "drizzle-orm";
 import { providers, users, bookings, reviews } from "@/db/schema";
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";

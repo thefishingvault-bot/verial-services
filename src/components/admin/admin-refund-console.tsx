@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, DollarSign, Calculator } from 'lucide-react';
 
@@ -49,11 +49,7 @@ export function AdminRefundConsole({ bookingId, maxRefundAmount, platformFeeBps 
   const [isLoadingRefunds, setIsLoadingRefunds] = useState(true);
 
   // Load existing refunds
-  useEffect(() => {
-    loadRefunds();
-  }, [bookingId]);
-
-  const loadRefunds = async () => {
+  const loadRefunds = useCallback(async () => {
     try {
       const response = await fetch(`/api/admin/bookings/${bookingId}/refunds`);
       if (response.ok) {
@@ -65,7 +61,11 @@ export function AdminRefundConsole({ bookingId, maxRefundAmount, platformFeeBps 
     } finally {
       setIsLoadingRefunds(false);
     }
-  };
+  }, [bookingId]);
+
+  useEffect(() => {
+    loadRefunds();
+  }, [loadRefunds]);
 
   const calculateRefundBreakdown = (refundAmount: number) => {
     const platformFeeRefund = Math.ceil(refundAmount * (platformFeeBps / 10000));
@@ -107,7 +107,7 @@ export function AdminRefundConsole({ bookingId, maxRefundAmount, platformFeeBps 
         throw new Error(error.error || 'Failed to process refund');
       }
 
-      const result = await response.json();
+      await response.json();
 
       // Reset form
       setAmount('');
@@ -118,9 +118,10 @@ export function AdminRefundConsole({ bookingId, maxRefundAmount, platformFeeBps 
       await loadRefunds();
 
       alert('Refund processed successfully!');
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error processing refund:', error);
-      alert(`Failed to process refund: ${error.message}`);
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      alert(`Failed to process refund: ${errorMessage}`);
     } finally {
       setIsSubmitting(false);
     }

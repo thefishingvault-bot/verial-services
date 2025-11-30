@@ -146,7 +146,39 @@ export function exportToJSON(data: ProviderHealthData[], filename: string = 'pro
   document.body.removeChild(link);
 }
 
-export async function generatePDFReport(data: ProviderHealthData[], analytics: any, filename: string = 'provider-health-report.pdf') {
+type AnalyticsData = {
+  platformAverages: {
+    avgCompletionRate: number;
+    avgCancellationRate: number;
+    avgTrustScore: number;
+    totalBookings: number;
+    totalIncidents: number;
+    highTrustProviders: number;
+  };
+  growthMetrics: {
+    newProviders30d: number;
+    newProviders90d: number;
+    avgBookingGrowth: number;
+    avgCompletionGrowth: number;
+  };
+  activityPatterns: {
+    peakHours: string;
+    busiestDays: string;
+    avgResponseTime: number;
+  };
+  summary: {
+    totalProviders: number;
+    activeProviders: number;
+    riskDistribution: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+    };
+  };
+};
+
+export async function generatePDFReport(data: ProviderHealthData[], analytics: AnalyticsData, filename: string = 'provider-health-report.pdf') {
   // This would typically use a PDF generation library like jsPDF or Puppeteer
   // For now, we'll create a simple HTML-based PDF structure
 
@@ -270,8 +302,14 @@ export function getScheduledReports() {
 }
 
 export function cancelScheduledReport(reportId: string) {
-  const scheduledReports = JSON.parse(localStorage.getItem('scheduledReports') || '[]');
-  const updatedReports = scheduledReports.map((report: any) =>
+  const scheduledReports: Array<{
+    id: string;
+    email: string;
+    frequency: 'daily' | 'weekly' | 'monthly';
+    reportType: 'summary' | 'detailed';
+    active: boolean;
+  }> = JSON.parse(localStorage.getItem('scheduledReports') || '[]');
+  const updatedReports = scheduledReports.map((report) =>
     report.id === reportId ? { ...report, active: false } : report
   );
   localStorage.setItem('scheduledReports', JSON.stringify(updatedReports));

@@ -1,5 +1,17 @@
 // In-memory audit log storage (in production, this would be a database table)
-let auditLogs: any[] = [
+interface AuditLog {
+  id: string;
+  userId: string;
+  action: string;
+  resource: string;
+  resourceId: string | null;
+  details: string;
+  ipAddress: string;
+  userAgent: string;
+  timestamp: string;
+}
+
+let auditLogs: AuditLog[] = [
   {
     id: 'audit_001',
     userId: 'system',

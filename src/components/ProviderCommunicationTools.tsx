@@ -10,11 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { format } from 'date-fns';
-import { CalendarIcon, Send, MessageSquare, Clock, Users, Filter, Search, Mail, Bell } from 'lucide-react';
+import { Send, MessageSquare, Clock, Users, Search, Mail, Bell } from 'lucide-react';
 
 interface Provider {
   id: string;
@@ -239,7 +237,7 @@ const ProviderCommunicationTools: React.FC = () => {
       setScheduledDate(undefined);
 
       alert(`Message sent successfully to ${selectedProviders.length} provider(s)!`);
-    } catch (error) {
+    } catch {
       alert('Failed to send message. Please try again.');
     } finally {
       setIsLoading(false);

@@ -2,9 +2,9 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { LineChart, BarChart, PieChart, AreaChart } from "@/components/charts";
-import { exportToCSV, exportToJSON, generatePDFReport, scheduleReport, getScheduledReports, cancelScheduledReport } from '@/lib/export-utils';
-import { useRealTimeUpdates, usePollingUpdates } from '@/hooks/useRealTimeUpdates';
+import { LineChart, BarChart, PieChart } from "@/components/charts";
+import { scheduleReport, getScheduledReports, cancelScheduledReport } from '@/lib/export-utils';
+import { useRealTimeUpdates } from '@/hooks/useRealTimeUpdates';
 import { RealTimeNotifications, NotificationItem } from '@/components/RealTimeNotifications';
 import { LiveActivityIndicator, AutoRefreshToggle } from '@/components/LiveActivityIndicator';
 
@@ -89,6 +89,32 @@ type ApiResponse = {
   analytics: KycAnalytics;
 };
 
+type ScheduledReport = {
+  id: string;
+  email: string;
+  frequency: 'daily' | 'weekly' | 'monthly';
+  reportType: 'summary' | 'detailed';
+};
+
+type KycFilterPreset = {
+  id: string;
+  name: string;
+  filters: {
+    searchQuery: string;
+    kycStatusFilter: string[];
+    riskLevelFilter: string[];
+    documentStatusFilter: string[];
+    dateRange: { start: string; end: string };
+    kycAgeRange: { min: string; max: string };
+  };
+  createdAt: string;
+};
+
+type ProviderKycNotificationPayload = {
+  message?: string;
+  actionUrl?: string;
+};
+
 function ScheduledReportsModal({
   onSchedule,
   onCancel,
@@ -97,7 +123,7 @@ function ScheduledReportsModal({
 }: {
   onSchedule: (email: string, frequency: 'daily' | 'weekly' | 'monthly', reportType: 'summary' | 'detailed') => void;
   onCancel: () => void;
-  existingReports: any[];
+  existingReports: ScheduledReport[];
   onCancelReport: (reportId: string) => void;
 }) {
   const [email, setEmail] = useState('');
@@ -209,9 +235,10 @@ export default function AdminKycStatusPage() {
   const [providers, setProviders] = useState<KycProvider[]>([]);
   const [analytics, setAnalytics] = useState<KycAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
-  const [savedFilters, setSavedFilters] = useState<any[]>([]);
+  const [savedFilters, setSavedFilters] = useState<KycFilterPreset[]>([]);
   const [filterName, setFilterName] = useState('');
   const [kycStatusFilter, setKycStatusFilter] = useState<string[]>([]);
   const [riskLevelFilter, setRiskLevelFilter] = useState<string[]>([]);
@@ -219,7 +246,7 @@ export default function AdminKycStatusPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduledReports, setScheduledReports] = useState<any[]>([]);
+  const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [kycAgeRange, setKycAgeRange] = useState({ min: '', max: '' });
 
@@ -233,19 +260,31 @@ export default function AdminKycStatusPage() {
 
   const fetchProviders = useCallback(async () => {
     setLoading(true);
+    setError(null);
+
     try {
       const params = new URLSearchParams({
         sort: sortBy,
         order: sortOrder,
       });
       const response = await fetch(`/api/admin/providers/kyc?${params}`);
-      if (response.ok) {
-        const data: ApiResponse = await response.json();
-        setProviders(data.providers);
-        setAnalytics(data.analytics);
+
+      if (response.status === 403) {
+        // Stop retrying on 403 - user is not authorized
+        setError("You are not authorized to view this page.");
+        return;
       }
-    } catch (error) {
-      console.error("Error fetching KYC providers:", error);
+
+      if (!response.ok) {
+        throw new Error("Failed to fetch KYC providers");
+      }
+
+      const data: ApiResponse = await response.json();
+      setProviders(data.providers);
+      setAnalytics(data.analytics);
+    } catch (err) {
+      console.error("Error fetching KYC providers:", err);
+      setError("Something went wrong while loading KYC providers.");
     } finally {
       setLoading(false);
     }
@@ -575,7 +614,7 @@ export default function AdminKycStatusPage() {
     alert('Filter preset saved successfully!');
   };
 
-  const loadFilterPreset = (preset: any) => {
+  const loadFilterPreset = (preset: KycFilterPreset) => {
     setSearchQuery(preset.filters.searchQuery || '');
     setKycStatusFilter(preset.filters.kycStatusFilter || []);
     setRiskLevelFilter(preset.filters.riskLevelFilter || []);
@@ -604,43 +643,42 @@ export default function AdminKycStatusPage() {
   const filteredProviders = applyAdvancedFilters(providers);
 
   // Real-time updates setup
-  const { isConnected, lastUpdate, updates, error: rtError, isRetrying } = useRealTimeUpdates(
+  const { isConnected, lastUpdate, isRetrying } = useRealTimeUpdates(
     {
       enabled: autoRefreshEnabled,
       updateInterval: refreshInterval,
     },
     (update) => {
-      // Handle real-time updates
+      // Handle real-time updates - only update notifications, don't refetch data
       if (update.type === 'provider_update' || update.type === 'alert') {
+        const data = update.data as ProviderKycNotificationPayload;
         const notification: NotificationItem = {
           id: update.id,
           type: update.type === 'alert' ? 'warning' : 'info',
           title: update.type === 'alert' ? 'KYC Alert' : 'KYC Update',
-          message: update.data.message || 'KYC status has been updated',
+          message: data?.message || 'KYC status has been updated',
           timestamp: update.timestamp,
           read: false,
-          actionUrl: update.data.actionUrl,
+          actionUrl: data?.actionUrl,
           actionText: 'View Details'
         };
         setNotifications(prev => [notification, ...prev.slice(0, 49)]); // Keep last 50
       }
 
-      // Trigger data refresh for provider updates
-      if (update.type === 'provider_update') {
-        fetchProviders();
-      }
+      // Note: Removed automatic data refresh to prevent infinite loops
+      // Manual refresh via handleManualRefresh() is still available
     }
   );
 
-  // Polling for periodic data refresh
-  const { refetch: refetchData } = usePollingUpdates(
-    async () => {
-      await fetchProviders();
-      return providers;
-    },
-    refreshInterval,
-    autoRefreshEnabled
-  );
+  // Polling for periodic data refresh - DISABLED to prevent infinite loops
+  // const { } = usePollingUpdates(
+  //   async () => {
+  //     await fetchProviders();
+  //     return providers;
+  //   },
+  //   refreshInterval,
+  //   autoRefreshEnabled
+  // );
 
   const handleSortChange = (newSort: SortOption) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -694,6 +732,22 @@ export default function AdminKycStatusPage() {
 
   if (loading) {
     return <div className="p-6">Loading KYC Status Dashboard...</div>;
+  }
+
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="text-red-600 text-lg">⚠️</div>
+            <div>
+              <h3 className="text-lg font-medium text-red-900">Error Loading KYC Data</h3>
+              <p className="text-red-800">{error}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // Calculate summary stats

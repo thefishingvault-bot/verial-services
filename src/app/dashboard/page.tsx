@@ -3,7 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock, Shield, AlertTriangle, BarChart3, Users, FileText, Gavel } from "lucide-react";
+import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock, Shield, AlertTriangle, BarChart3, FileText, Gavel } from "lucide-react";
 import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-analytics-card.client";
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";

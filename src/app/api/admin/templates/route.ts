@@ -2,10 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { users } from '@/db/schema';
-import { eq, desc } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 // In-memory storage for templates (in production, this would be a database table)
-let messageTemplates: any[] = [
+interface MessageTemplate {
+  id: string;
+  name: string;
+  category: string;
+  subject: string;
+  content: string;
+  variables: string[];
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const messageTemplates: MessageTemplate[] = [
   {
     id: 'welcome_new_user',
     name: 'Welcome New User',

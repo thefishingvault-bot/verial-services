@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, users, bookings, reviews, trustIncidents, providerSuspensions, disputes, refunds, riskRules } from "@/db/schema";
-import { eq, desc, asc, sql, and, gte, lte } from "drizzle-orm";
+import { eq, desc, asc, sql } from "drizzle-orm";
 import { RiskScoringEngine } from "@/lib/risk-scoring";
 
 // TODO: Replace with actual role check utility if needed

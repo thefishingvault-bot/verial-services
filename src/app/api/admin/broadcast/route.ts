@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { users, notifications } from '@/db/schema';
-import { eq, and, gte, lte, desc, sql } from 'drizzle-orm';
+import { eq, and, gte, desc, sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {
@@ -23,19 +23,10 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') || 'all';
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '50');
 
     // Get broadcast messages (notifications created by admin)
-    let whereConditions = [
-      eq(notifications.isRead, false), // Only show unread broadcasts for analytics
-    ];
-
-    if (status !== 'all') {
-      // For broadcast messages, we can filter by different criteria
-      // This is a simplified implementation
-    }
 
     // Get recent broadcast messages and their delivery stats
     const broadcastMessages = await db

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
-import { users, bookings, reviews, disputes, notifications } from '@/db/schema';
-import { eq, desc, and, gte, lte, sql, count, avg } from 'drizzle-orm';
+import { users, bookings, reviews, disputes } from '@/db/schema';
+import { eq, desc, and, gte, sql } from 'drizzle-orm';
 
 export async function GET(request: NextRequest) {
   try {

@@ -1,5 +1,4 @@
 import { pgTable, unique, varchar, text, timestamp, foreignKey, boolean, integer, time, pgEnum } from "drizzle-orm/pg-core"
-import { sql } from "drizzle-orm"
 
 export const bookingStatus = pgEnum("booking_status", ['pending', 'confirmed', 'paid', 'completed', 'canceled'])
 export const dayOfWeek = pgEnum("day_of_week", ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])

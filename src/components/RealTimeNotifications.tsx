@@ -37,10 +37,10 @@ export function RealTimeNotifications({
 
   const lastShownToastRef = useRef<string | null>(null);
 
-  // Show toast for new notifications
+  // Show toast for new notifications - use a separate effect to avoid cascading renders
   useEffect(() => {
-    const latestUnread = notifications.find(n => !n.read);
-    if (latestUnread && !showToast && lastShownToastRef.current !== latestUnread.id) {
+    const latestUnread = notifications.find(n => !n.read && lastShownToastRef.current !== n.id);
+    if (latestUnread && !showToast) {
       lastShownToastRef.current = latestUnread.id;
       setCurrentToast(latestUnread);
       setShowToast(true);
@@ -53,7 +53,7 @@ export function RealTimeNotifications({
 
       return () => clearTimeout(timer);
     }
-  }, [notifications]);
+  }, [notifications, showToast]);
 
   const getIcon = (type: NotificationItem['type']) => {
     switch (type) {

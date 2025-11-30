@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
-import { providerCommunications, scheduledCommunications, providers, users } from '@/db/schema';
+import { providerCommunications, scheduledCommunications, providers } from '@/db/schema';
 import { sql, desc, inArray } from 'drizzle-orm';
 import { sendEmail } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
@@ -177,10 +177,7 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const providerId = searchParams.get('providerId');
 
-    const where: any = {};
-    if (providerId) {
-      where.providerId = providerId;
-    }
+    const where = providerId ? sql`${providerCommunications.providerId} = ${providerId}` : undefined;
 
     const [communications, totalResult] = await Promise.all([
       db.query.providerCommunications.findMany({

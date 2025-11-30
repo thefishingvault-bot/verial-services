@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { refunds, bookings, users, providers } from "@/db/schema";
+import { refunds, bookings, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { stripe } from "@/lib/stripe";
 
@@ -73,8 +73,6 @@ export async function POST(request: NextRequest) {
 
     // Calculate fee split (10% platform fee as per create-intent route)
     const platformFeeBps = process.env.PLATFORM_FEE_BPS ? parseInt(process.env.PLATFORM_FEE_BPS) : 1000;
-    const platformFeeAmount = Math.ceil(bookingData.priceAtBooking * (platformFeeBps / 10000));
-    const providerAmount = bookingData.priceAtBooking - platformFeeAmount;
 
     // For refunds, we need to calculate how much of each portion to refund
     // This is a simplified calculation - in reality, you'd need to track what was actually transferred
@@ -132,7 +130,7 @@ export async function POST(request: NextRequest) {
         },
       });
 
-    } catch (stripeError: any) {
+    } catch (stripeError: unknown) {
       console.error("Stripe refund error:", stripeError);
 
       // Update refund status to failed
@@ -144,9 +142,11 @@ export async function POST(request: NextRequest) {
         })
         .where(eq(refunds.id, refundId));
 
+      const errorMessage = stripeError instanceof Error ? stripeError.message : "Unknown error occurred";
+
       return NextResponse.json({
         error: "Failed to process refund with payment provider",
-        details: stripeError.message,
+        details: errorMessage,
       }, { status: 500 });
     }
 

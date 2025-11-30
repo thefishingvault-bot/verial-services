@@ -32,8 +32,16 @@ interface UserSegment {
   count: number;
 }
 
+interface Broadcast {
+  id: string;
+  message: string;
+  createdAt: string;
+  totalSent: number;
+  totalRead: number;
+}
+
 interface BroadcastData {
-  broadcasts: any[];
+  broadcasts: Broadcast[];
   stats: BroadcastStats;
   trends: BroadcastTrend[];
   userSegments: UserSegment[];

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { providers, bookings } from '@/db/schema';
-import { eq, inArray } from 'drizzle-orm';
+import { inArray } from 'drizzle-orm';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
