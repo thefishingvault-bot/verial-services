@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Filter, MapPin, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
@@ -30,25 +31,68 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
   const [filters, setFilters] = useState<ServicesFilterState>(initialFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [servicesData, setServicesData] = useState(initialServicesData);
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const buildQueryFromFilters = (state: ServicesFilterState, extra: Record<string, string> = {}) => {
+    const params = new URLSearchParams();
+
+    if (state.categories?.length) params.set('category', state.categories[0]);
+    if (state.minPrice != null) params.set('minPrice', String(state.minPrice));
+    if (state.maxPrice != null) params.set('maxPrice', String(state.maxPrice));
+    if (state.minRating != null) params.set('rating', String(state.minRating));
+    if (state.search) params.set('q', state.search);
+    if (state.sort) params.set('sort', state.sort);
+
+    Object.entries(extra).forEach(([key, value]) => {
+      if (value) params.set(key, value);
+    });
+
+    return params;
+  };
+
+  const fetchServices = async (nextFilters: ServicesFilterState) => {
+    try {
+      setLoading(true);
+      const params = buildQueryFromFilters(nextFilters, { page: '1' });
+      const res = await fetch(`/api/services/list?${params.toString()}`);
+      if (!res.ok) {
+        console.error('Failed to fetch services', await res.text());
+        return;
+      }
+      const json = await res.json();
+      setServicesData({
+        services: json.services ?? [],
+        hasMore: json.hasMore ?? false,
+        totalCount: json.totalCount ?? (json.services?.length ?? 0),
+      });
+    } catch (err) {
+      console.error('Error fetching services', err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleViewToggle = () => {
     const newView = viewMode === 'map' ? 'grid' : 'map';
     setViewMode(newView);
 
-    const newParams = new URLSearchParams();
-    Object.entries(initialParams).forEach(([key, value]) => {
-      if (value !== undefined) {
-        newParams.set(key, value);
-      }
-    });
-    newParams.set('view', newView);
-    window.location.href = `/services?${newParams.toString()}`;
+    const params = buildQueryFromFilters(filters, { view: newView });
+    router.replace(`/services?${params.toString()}`);
   };
 
   const handleFiltersChange = (next: ServicesFilterState) => {
     setFilters(next);
-    // Optionally: fetch new data client-side or rely on server reload
+    const params = buildQueryFromFilters(next, { page: '1' });
+    router.replace(`/services?${params.toString()}`);
+    fetchServices(next);
   };
+
+  // Keep local filters in sync if URL/initialParams change due to navigation
+  useEffect(() => {
+    setFilters(initialFilters);
+    setServicesData(initialServicesData);
+  }, [initialFilters, initialServicesData]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -162,12 +206,26 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                 </div>
               </div>
             ) : (
-              <ServicesGridClient
-                services={servicesData.services}
-                searchParams={initialParams}
-                hasMore={servicesData.hasMore}
-                currentPage={parseInt(initialParams.page || '1')}
-              />
+              <>
+                {loading && (
+                  <div className="mb-4 text-sm text-gray-500">Updating results9ed</div>
+                )}
+                <ServicesGridClient
+                  services={servicesData.services}
+                  searchParams={{
+                    q: filters.search,
+                    category: filters.categories[0],
+                    minPrice: filters.minPrice?.toString(),
+                    maxPrice: filters.maxPrice?.toString(),
+                    rating: filters.minRating?.toString(),
+                    sort: filters.sort,
+                    view: viewMode,
+                    page: '1',
+                  }}
+                  hasMore={servicesData.hasMore}
+                  currentPage={1}
+                />
+              </>
             )}
           </main>
         </div>
