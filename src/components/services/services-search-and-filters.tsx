@@ -1,7 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -47,7 +46,6 @@ const sortOptions = [
 ];
 
 const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAndFiltersProps) => {
-  const router = useRouter();
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
   // Debounce for search and price slider
@@ -60,28 +58,8 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
   const minRating = filters.minRating ?? 0;
   const sortBy = filters.sort || 'relevance';
 
-  const applyFiltersToUrl = (next: ServicesFilterState) => {
-    const params = new URLSearchParams();
-    if (next.categories.length) params.set('categories', next.categories.join(','));
-    if (next.minPrice != null) params.set('minPrice', String(next.minPrice));
-    if (next.maxPrice != null) params.set('maxPrice', String(next.maxPrice));
-    if (next.minRating != null) params.set('minRating', String(next.minRating));
-    if (next.trustLevels.length) params.set('trustLevels', next.trustLevels.join(','));
-    if (next.search) params.set('q', next.search);
-    if (next.sort) params.set('sort', next.sort);
-    router.replace(`/services?${params.toString()}`);
-  };
-
   const handleFiltersChange = (next: ServicesFilterState, debounce = false) => {
     onFiltersChange(next);
-    if (debounce) {
-      if (debounceTimeout.current) clearTimeout(debounceTimeout.current);
-      debounceTimeout.current = setTimeout(() => {
-        applyFiltersToUrl(next);
-      }, 400);
-    } else {
-      applyFiltersToUrl(next);
-    }
   };
 
   const clearFilters = () => {
@@ -288,7 +266,7 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
             type="button"
             size="lg"
             className="h-12 px-8"
-            onClick={() => applyFiltersToUrl(filters)}
+            onClick={() => onFiltersChange(filters)}
           >
             Search
           </Button>

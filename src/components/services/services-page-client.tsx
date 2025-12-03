@@ -168,7 +168,24 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                 </SheetHeader>
                 <div className="mt-6">
                   <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg" />}>
-                    <ServicesAdvancedFilters searchParams={initialParams} />
+                    <ServicesAdvancedFilters
+                      searchParams={{
+                        minPrice: filters.minPrice?.toString(),
+                        maxPrice: filters.maxPrice?.toString(),
+                        rating: filters.minRating?.toString(),
+                        category: filters.categories[0],
+                      }}
+                      onFiltersChange={(next) => {
+                        const merged = {
+                          ...filters,
+                          categories: next.categories ?? filters.categories,
+                          minPrice: next.minPrice ?? filters.minPrice,
+                          maxPrice: next.maxPrice ?? filters.maxPrice,
+                          minRating: next.minRating ?? filters.minRating,
+                        };
+                        handleFiltersChange(merged);
+                      }}
+                    />
                   </Suspense>
                 </div>
               </SheetContent>
@@ -189,7 +206,24 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
           <aside className="hidden lg:block w-80 flex-shrink-0">
             <div className="sticky top-32">
               <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg" />}>
-                <ServicesAdvancedFilters searchParams={initialParams} />
+                <ServicesAdvancedFilters
+                  searchParams={{
+                    minPrice: filters.minPrice?.toString(),
+                    maxPrice: filters.maxPrice?.toString(),
+                    rating: filters.minRating?.toString(),
+                    category: filters.categories[0],
+                  }}
+                  onFiltersChange={(next) => {
+                    const merged = {
+                      ...filters,
+                      categories: next.categories ?? filters.categories,
+                      minPrice: next.minPrice ?? filters.minPrice,
+                      maxPrice: next.maxPrice ?? filters.maxPrice,
+                      minRating: next.minRating ?? filters.minRating,
+                    };
+                    handleFiltersChange(merged);
+                  }}
+                />
               </Suspense>
             </div>
           </aside>

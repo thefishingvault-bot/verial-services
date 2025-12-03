@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -18,20 +17,19 @@ import {
   RotateCcw
 } from 'lucide-react';
 
-interface SearchParams {
-  q?: string;
-  category?: string;
-  location?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
-  availability?: string;
-  sort?: string;
-  view?: 'grid' | 'map';
-}
-
 interface ServicesAdvancedFiltersProps {
-  searchParams: SearchParams;
+  searchParams: {
+    minPrice?: string;
+    maxPrice?: string;
+    rating?: string;
+    category?: string;
+  };
+  onFiltersChange?: (next: {
+    categories?: string[];
+    minPrice?: number;
+    maxPrice?: number;
+    minRating?: number;
+  }) => void;
   filterCounts?: {
     categories: { category: string; count: number }[];
     trustLevels: { trustLevel: string; count: number }[];
@@ -68,10 +66,7 @@ const availabilityOptions = [
   { value: 'next_week', label: 'Available Next Week' },
 ];
 
-export function ServicesAdvancedFilters({ searchParams, filterCounts }: ServicesAdvancedFiltersProps) {
-  const router = useRouter();
-  const currentSearchParams = useSearchParams();
-
+export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersChange }: ServicesAdvancedFiltersProps) {
   const [selectedCategories, setSelectedCategories] = useState<string[]>(
     searchParams.category ? [searchParams.category] : []
   );
@@ -94,38 +89,29 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts }: Services
     verifiedOnly: boolean;
     distance: number;
   }>) => {
-    const params = new URLSearchParams(currentSearchParams.toString());
+    if (!onFiltersChange) return;
+
+    const next: {
+      categories?: string[];
+      minPrice?: number;
+      maxPrice?: number;
+      minRating?: number;
+    } = {};
 
     if (updates.categories !== undefined) {
-      if (updates.categories.length > 0) {
-        params.set('category', updates.categories[0]); // For now, support single category
-      } else {
-        params.delete('category');
-      }
+      next.categories = updates.categories;
     }
 
     if (updates.priceRange !== undefined) {
-      if (updates.priceRange[0] > 0) {
-        params.set('minPrice', updates.priceRange[0].toString());
-      } else {
-        params.delete('minPrice');
-      }
-      if (updates.priceRange[1] < 500) {
-        params.set('maxPrice', updates.priceRange[1].toString());
-      } else {
-        params.delete('maxPrice');
-      }
+      next.minPrice = updates.priceRange[0];
+      next.maxPrice = updates.priceRange[1];
     }
 
     if (updates.minRating !== undefined) {
-      if (updates.minRating > 0) {
-        params.set('rating', updates.minRating.toString());
-      } else {
-        params.delete('rating');
-      }
+      next.minRating = updates.minRating;
     }
 
-    router.push(`/services?${params.toString()}`);
+    onFiltersChange(next);
   };
 
   const clearAllFilters = () => {
@@ -136,7 +122,14 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts }: Services
     setMinRating(0);
     setVerifiedOnly(false);
     setDistance(25);
-    router.push('/services');
+    if (onFiltersChange) {
+      onFiltersChange({
+        categories: [],
+        minPrice: 0,
+        maxPrice: 500,
+        minRating: 0,
+      });
+    }
   };
 
   const activeFiltersCount =
