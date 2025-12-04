@@ -1,6 +1,6 @@
 import { Metadata } from 'next';
 import MarketingLayout from '../(marketing)/layout';
-import ServicesPageShell from '@/components/services/services-page-shell';
+import ServicesPageShell from '../../components/services/services-page-shell';
 import {
   getServicesDataFromSearchParams,
   type ServicesSearchParams,
@@ -16,8 +16,8 @@ export default async function ServicesPage({
 }: {
   searchParams: Promise<ServicesSearchParams>;
 }) {
-  const params = await searchParams;
-  const data = await getServicesDataFromSearchParams(params);
+  const resolvedSearchParams = await searchParams;
+  const data = await getServicesDataFromSearchParams(resolvedSearchParams);
 
   return (
     <MarketingLayout>

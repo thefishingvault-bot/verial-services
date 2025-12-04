@@ -80,28 +80,17 @@ export default function ServicesGrid({
   }
 
   return (
-    <div className="space-y-6">
-      {/* Results Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            {totalCount} service{totalCount !== 1 ? 's' : ''} found
-          </h2>
-          {filters.q && (
-            <p className="text-sm text-gray-600 mt-1">
-              Results for &quot;{filters.q}&quot;
-            </p>
-          )}
-        </div>
-      </div>
-
+    <div className="space-y-5">
       {/* Services Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
         {services.map((service) => (
-          <Card key={service.id} className="group hover:shadow-lg transition-shadow duration-200">
+          <Card
+            key={service.id}
+            className="group hover:shadow-md transition-shadow duration-200 rounded-2xl border bg-white"
+          >
             <CardHeader className="p-0">
               {/* Service Image */}
-              <div className="relative aspect-video bg-gray-100 rounded-t-lg overflow-hidden">
+              <div className="relative aspect-[16/9] bg-gray-100 rounded-t-2xl overflow-hidden">
                 {service.coverImageUrl ? (
                   <img
                     src={service.coverImageUrl}
@@ -128,7 +117,7 @@ export default function ServicesGrid({
               </div>
             </CardHeader>
 
-            <CardContent className="p-4">
+              <CardContent className="p-4 flex flex-col h-full">
               {/* Service Title and Price */}
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
@@ -194,7 +183,7 @@ export default function ServicesGrid({
               </p>
 
               {/* Action Buttons */}
-              <div className="flex gap-2">
+              <div className="mt-auto flex gap-2">
                 <Link href={`/s/${service.id}`} className="flex-1">
                   <Button className="w-full" size="sm">
                     View Details

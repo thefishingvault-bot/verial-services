@@ -63,56 +63,79 @@ export default function ServicesPageShell({
   };
 
   return (
-    <div className="flex flex-col gap-6 lg:flex-row">
-      <aside className="w-full lg:w-72 shrink-0">
+    <div className="mx-auto w-full max-w-6xl px-4 lg:px-6 py-6 lg:py-10 space-y-6">
+      {/* Top controls: search + filters */}
+      <div className="sticky top-16 z-20 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 pb-3 mb-2">
         <ServicesSearchAndFilters
           filters={filters}
           onFiltersChange={handleFiltersChange}
         />
-      </aside>
+      </div>
 
-      <main className="flex-1 space-y-6">
-        {/* Hero + KPI stats */}
-        <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm text-muted-foreground">Active services</p>
-            <p className="mt-1 text-2xl font-semibold">{kpi.activeServices}</p>
+      {/* KPI row */}
+      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="rounded-xl border bg-white shadow-sm">
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Active services
+            </p>
           </div>
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm text-muted-foreground">Customer satisfaction</p>
-            <p className="mt-1 text-2xl font-semibold">
+          <div className="px-4 pb-4">
+            <p className="text-2xl font-semibold text-slate-900">
+              {kpi.activeServices}
+            </p>
+          </div>
+        </div>
+        <div className="rounded-xl border bg-white shadow-sm">
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Customer satisfaction
+            </p>
+          </div>
+          <div className="px-4 pb-4">
+            <p className="text-2xl font-semibold text-slate-900">
               {kpi.satisfactionRate}%
             </p>
           </div>
-          <div className="rounded-lg border bg-card p-4">
-            <p className="text-sm text-muted-foreground">Avg. response time</p>
-            <p className="mt-1 text-2xl font-semibold">
+        </div>
+        <div className="rounded-xl border bg-white shadow-sm">
+          <div className="px-4 pt-3 pb-1">
+            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
+              Avg. response time
+            </p>
+          </div>
+          <div className="px-4 pb-4">
+            <p className="text-2xl font-semibold text-slate-900">
               {kpi.avgResponseMinutes != null
                 ? `~${Math.round(kpi.avgResponseMinutes / 60)}h`
                 : "—"}
             </p>
           </div>
-        </section>
+        </div>
+      </section>
 
-        <section>
-          <ServicesGridClient
-            services={services}
-            searchParams={{
-              q: filters.q || undefined,
-              category: filters.category || undefined,
-              minPrice:
-                filters.minPrice != null ? String(filters.minPrice) : undefined,
-              maxPrice:
-                filters.maxPrice != null ? String(filters.maxPrice) : undefined,
-              rating:
-                filters.rating != null ? String(filters.rating) : undefined,
-              sort: filters.sort,
-            }}
-            hasMore={hasMore}
-            currentPage={1}
-          />
-        </section>
-      </main>
+      {/* Results + grid */}
+      <section className="space-y-4">
+        <h2 className="text-lg font-semibold text-slate-900">
+          {totalCount} {totalCount === 1 ? 'service' : 'services'} found
+        </h2>
+        <ServicesGridClient
+          services={services}
+          searchParams={{
+            q: filters.q || undefined,
+            category: filters.category || undefined,
+            minPrice:
+              filters.minPrice != null ? String(filters.minPrice) : undefined,
+            maxPrice:
+              filters.maxPrice != null ? String(filters.maxPrice) : undefined,
+            rating:
+              filters.rating != null ? String(filters.rating) : undefined,
+            sort: filters.sort,
+          }}
+          hasMore={hasMore}
+          currentPage={1}
+        />
+      </section>
     </div>
   );
 }
