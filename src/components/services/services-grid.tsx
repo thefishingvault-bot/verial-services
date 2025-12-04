@@ -51,6 +51,7 @@ function getTrustScoreLabel(score: number) {
 }
 type ServicesGridProps = {
   services: ServiceWithProvider[];
+  totalCount: number;
   hasMore: boolean;
   filters: ServicesFilters;
 };
