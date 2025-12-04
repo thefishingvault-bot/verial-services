@@ -87,20 +87,6 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
 
   return (
     <div className="space-y-6">
-      {/* Results Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-xl font-semibold text-gray-900">
-            {services.length} service{services.length !== 1 ? 's' : ''} found
-          </h2>
-          {searchParams.q && (
-            <p className="text-sm text-gray-600 mt-1">
-              Results for &quot;{searchParams.q}&quot;
-            </p>
-          )}
-        </div>
-      </div>
-
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {services.map((service) => (
