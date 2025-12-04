@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,15 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { Slider } from "@/components/ui/slider";
-import { Search, SlidersHorizontal, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import type { ServicesFilters } from "@/lib/services-data";
 
 interface ServicesSearchAndFiltersProps {
@@ -53,8 +45,6 @@ const ServicesSearchAndFilters = ({
   filters,
   onFiltersChange,
 }: ServicesSearchAndFiltersProps) => {
-  const [showMobileFilters, setShowMobileFilters] = useState(false);
-
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
   const searchQuery = filters.q || "";
