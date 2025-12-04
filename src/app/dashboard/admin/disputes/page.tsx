@@ -192,15 +192,14 @@ export default async function AdminDisputesPage({
     .filter(d => d.refundAmount)
     .reduce((sum, d) => sum + (d.refundAmount || 0), 0);
 
-  // Calculate urgency based on time since creation
-  function getUrgentDisputes(disputeList: any[], now: number) {
-    return disputeList.filter(d => {
-      const daysSinceCreation = (now - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+  // Calculate urgency based on days open (using createdAt only)
+  function getUrgentDisputes(list: typeof disputeList) {
+    return list.filter(d => {
+      const daysSinceCreation = (new Date().getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
       return d.status === "open" && daysSinceCreation > 3;
     }).length;
   }
-  const now = Date.now();
-  const urgentDisputes = getUrgentDisputes(disputeList, now);
+  const urgentDisputes = getUrgentDisputes(disputeList);
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -388,9 +387,48 @@ export default async function AdminDisputesPage({
 }
 
 // Separate component for the disputes table
-function DisputesTable({ disputes }: { disputes: any[] }) {
-  // Move Date.now() outside render
-  const now = Date.now();
+function DisputesTable({
+  disputes,
+}: {
+  disputes: Array<{
+    id: string;
+    reason: string;
+    description: string | null;
+    amountDisputed: number | null;
+    status: string;
+    adminDecision: string | null;
+    refundAmount: number | null;
+    createdAt: Date;
+    resolvedAt: Date | null;
+    initiatorType: string;
+    bookingId: string;
+    initiatorId: string;
+    booking: {
+      id: string;
+      status: string;
+      totalAmount: number;
+      scheduledAt: Date | null;
+      service: { id: string; name: string };
+    };
+    provider: {
+      id: string;
+      businessName: string;
+      handle: string;
+    };
+    initiator: {
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string;
+    };
+    customer: {
+      id: string;
+      firstName: string | null;
+      lastName: string | null;
+      email: string;
+    };
+  }>;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -420,7 +458,7 @@ function DisputesTable({ disputes }: { disputes: any[] }) {
           </TableHeader>
           <TableBody>
             {disputes.map((dispute) => {
-              const daysSinceCreation = (now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+              const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
               const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
               const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
               // ...existing code...

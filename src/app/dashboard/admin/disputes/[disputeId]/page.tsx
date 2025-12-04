@@ -204,13 +204,13 @@ export default async function AdminDisputeDetailPage({
 
       {/* Status Overview */}
       {(() => {
-          const now = Date.now();
-          function getDaysOpen(createdAt: Date, now: number) {
-            return Math.floor((now - createdAt.getTime()) / (1000 * 60 * 60 * 24));
+          function getDaysOpen(createdAt: Date, resolvedAt?: Date | null) {
+            const end = resolvedAt ?? new Date();
+            return Math.floor((end.getTime() - createdAt.getTime()) / (1000 * 60 * 60 * 24));
           }
-          const daysOpen = getDaysOpen(dispute.createdAt, now);
+          const daysOpen = getDaysOpen(dispute.createdAt, dispute.resolvedAt);
         const isHighValue = dispute.amountDisputed && dispute.amountDisputed > 5000;
-        const isUrgent = (now - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24) > 3;
+        const isUrgent = daysOpen > 3;
         return (
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <Card>

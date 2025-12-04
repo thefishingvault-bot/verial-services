@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
-import { services, providers, users, conversations, messages, reviews } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte, avg, ne, inArray } from 'drizzle-orm';
+import { services, providers, users, reviews } from '@/db/schema';
+import { eq, and, or, like, sql, desc, asc, gte, lte, avg, inArray } from 'drizzle-orm';
 
 export type ServiceCategory = "cleaning" | "plumbing" | "gardening" | "it_support" | "accounting" | "detailing" | "other";
 
@@ -87,9 +87,11 @@ export async function getServicesData({ filters }: { filters: ServicesFilterStat
   // Category filter
   if (filters.categories && filters.categories.length > 0) {
     const allowedCategories = ["cleaning", "plumbing", "gardening", "it_support", "accounting", "detailing", "other"] as const;
-    const validCategories = filters.categories.filter((cat): cat is typeof allowedCategories[number] => allowedCategories.includes(cat as any));
+    const validCategories = filters.categories.filter((cat): cat is (typeof allowedCategories)[number] =>
+      (allowedCategories as readonly string[]).includes(cat)
+    );
     if (validCategories.length > 0) {
-      whereConditions.push(inArray(services.category, validCategories as readonly typeof allowedCategories[number][]));
+      whereConditions.push(inArray(services.category, validCategories));
     }
   }
 
@@ -104,9 +106,11 @@ export async function getServicesData({ filters }: { filters: ServicesFilterStat
   // Trust level filter
   if (filters.trustLevels && filters.trustLevels.length > 0) {
     const allowedTrustLevels = ["bronze", "silver", "gold", "platinum"] as const;
-    const validTrustLevels = filters.trustLevels.filter((tl): tl is typeof allowedTrustLevels[number] => allowedTrustLevels.includes(tl as any));
+    const validTrustLevels = filters.trustLevels.filter((tl): tl is (typeof allowedTrustLevels)[number] =>
+      (allowedTrustLevels as readonly string[]).includes(tl)
+    );
     if (validTrustLevels.length > 0) {
-      whereConditions.push(inArray(providers.trustLevel, validTrustLevels as readonly typeof allowedTrustLevels[number][]));
+      whereConditions.push(inArray(providers.trustLevel, validTrustLevels));
     }
   }
 

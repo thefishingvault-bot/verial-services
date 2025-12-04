@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { services, providers, users } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { eq, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -111,7 +111,18 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
 
   // Category filter
   if (searchParams.category) {
-    whereConditions.push(eq(services.category, searchParams.category as any));
+    const allowedCategories = [
+      'cleaning',
+      'plumbing',
+      'gardening',
+      'it_support',
+      'accounting',
+      'detailing',
+      'other',
+    ] as const;
+    if ((allowedCategories as readonly string[]).includes(searchParams.category)) {
+      whereConditions.push(eq(services.category, searchParams.category as (typeof allowedCategories)[number]));
+    }
   }
 
   // Location filter (simplified - would need geocoding in production)
@@ -154,7 +165,7 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
       break;
   }
 
-  const page = parseInt(searchParams.page || '1');
+  const page = parseInt(searchParams.page || '1', 10);
   const limit = 12; // Show 12 services per page
   const offset = (page - 1) * limit;
 

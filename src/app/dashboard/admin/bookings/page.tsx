@@ -116,8 +116,7 @@ export default async function AdminBookingsPage({
     .reduce((sum, b) => sum + (b.priceAtBooking || 0), 0);
 
   // Calculate recent bookings (last 7 days)
-  const now = Date.now();
-  const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
   const recentBookings = bookingsData.filter(b => b.createdAt >= sevenDaysAgo).length;
 
   return (
@@ -290,11 +289,29 @@ export default async function AdminBookingsPage({
     </div>
   );
 }
-
 // Separate component for the bookings table
-function BookingsTable({ bookings }: { bookings: any[] }) {
-  // Move Date.now() outside render
-  const now = Date.now();
+function BookingsTable({
+  bookings,
+}: {
+  bookings: Array<{
+    id: string;
+    status: "pending" | "confirmed" | "paid" | "completed" | "canceled";
+    scheduledDate: Date | null;
+    priceAtBooking: number;
+    paymentIntentId: string | null;
+    createdAt: Date;
+    updatedAt: Date;
+    userId: string | null;
+    providerId: string | null;
+    serviceId: string | null;
+    customerFirstName: string | null;
+    customerLastName: string | null;
+    customerEmail: string | null;
+    providerBusinessName: string | null;
+    providerHandle: string | null;
+    serviceTitle: string | null;
+  }>;
+}) {
   return (
     <Card>
       <CardHeader>
@@ -325,7 +342,7 @@ function BookingsTable({ bookings }: { bookings: any[] }) {
           </TableHeader>
           <TableBody>
             {bookings.map((booking) => {
-              const daysSinceCreation = (now - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+              const daysSinceCreation = (new Date().getTime() - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
               const isRecent = daysSinceCreation < 1; // Less than 24 hours
               return (
                 <TableRow key={booking.id} className={isRecent ? "bg-blue-50" : ""}>

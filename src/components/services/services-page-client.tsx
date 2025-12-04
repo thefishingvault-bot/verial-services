@@ -88,11 +88,8 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
     fetchServices(next);
   };
 
-  // Keep local filters in sync if URL/initialParams change due to navigation
-  useEffect(() => {
-    setFilters(initialFilters);
-    setServicesData(initialServicesData);
-  }, [initialFilters, initialServicesData]);
+  // We intentionally avoid re-syncing from initial props on every navigation,
+  // so client-side filtering/fetching remains the source of truth.
 
   return (
     <div className="min-h-screen bg-gray-50">
