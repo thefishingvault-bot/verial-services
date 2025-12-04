@@ -73,7 +73,7 @@ export default function ServicesPageShell({
       </div>
 
       {/* KPI row */}
-      <section className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="rounded-xl border bg-white shadow-sm">
           <div className="px-4 pt-3 pb-1">
             <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
@@ -95,20 +95,6 @@ export default function ServicesPageShell({
           <div className="px-4 pb-4">
             <p className="text-2xl font-semibold text-slate-900">
               {kpi.satisfactionRate}%
-            </p>
-          </div>
-        </div>
-        <div className="rounded-xl border bg-white shadow-sm">
-          <div className="px-4 pt-3 pb-1">
-            <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
-              Avg. response time
-            </p>
-          </div>
-          <div className="px-4 pb-4">
-            <p className="text-2xl font-semibold text-slate-900">
-              {kpi.avgResponseMinutes != null
-                ? `~${Math.round(kpi.avgResponseMinutes / 60)}h`
-                : "—"}
             </p>
           </div>
         </div>

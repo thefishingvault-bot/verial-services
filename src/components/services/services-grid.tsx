@@ -58,7 +58,6 @@ type ServicesGridProps = {
 
 export default function ServicesGrid({
   services,
-  totalCount,
   hasMore,
   filters,
 }: ServicesGridProps) {
