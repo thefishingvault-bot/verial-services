@@ -155,3 +155,9 @@
     @apply mx-auto w-full max-w-6xl px-4 md:px-6 lg:px-8;
   }
 }
+
+@supports (color: color-mix(in lab, red, red)) {
+  .bg-slate-50\/80 {
+    background-color: color-mix(in oklab, oklch(1 0 0) 80%, transparent);
+  }
+}
