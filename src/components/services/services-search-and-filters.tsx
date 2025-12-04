@@ -2,7 +2,6 @@
 
 import { useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -90,73 +89,157 @@ const ServicesSearchAndFilters = ({
 
   return (
     <div className="space-y-3">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-1 gap-2">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
-            <Input
-              type="search"
-              placeholder="What service do you need? (e.g., 'window cleaning')"
-              value={searchQuery}
-              onChange={(e) =>
-                handleFiltersChange(
-                  {
+      {/* Main search + filters bar */}
+      <div className="mb-1 flex flex-col gap-3 md:flex-row md:items-center">
+        <div className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-3 shadow-sm">
+          {/* Mobile layout */}
+          <div className="space-y-2 md:hidden">
+            {/* Search */}
+            <div className="flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-emerald-500/60 focus-within:border-emerald-500 transition">
+              <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="What service do you need? (e.g., 'window cleaning')"
+                className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                value={searchQuery}
+                onChange={(e) =>
+                  handleFiltersChange(
+                    {
+                      ...filters,
+                      q: e.target.value,
+                    },
+                    true,
+                  )
+                }
+              />
+            </div>
+
+            {/* Category + sort */}
+            <div className="grid grid-cols-2 gap-2">
+              <Select
+                value={selectedCategory || "all"}
+                onValueChange={(value) => {
+                  handleFiltersChange({
                     ...filters,
-                    q: e.target.value,
-                  },
-                  true,
-                )
-              }
-              className="pl-10 h-11 text-sm"
-            />
+                    category: value === "all" ? null : value,
+                  });
+                }}
+              >
+                <SelectTrigger
+                  aria-label="Filter by category"
+                  className="h-10 rounded-lg border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700"
+                >
+                  <SelectValue placeholder="All categories" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All categories</SelectItem>
+                  {categories.map((category) => (
+                    <SelectItem key={category.value} value={category.value}>
+                      {category.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={sortBy}
+                onValueChange={(value) =>
+                  handleFiltersChange({
+                    ...filters,
+                    sort: value as ServicesFilters["sort"],
+                  })
+                }
+              >
+                <SelectTrigger
+                  aria-label="Sort services"
+                  className="h-10 rounded-lg border-slate-200 bg-white text-xs sm:text-sm font-medium text-slate-700"
+                >
+                  <SelectValue placeholder="Most relevant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sortOptions.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <Select
-            value={selectedCategory || "all"}
-            onValueChange={(value) => {
-              handleFiltersChange({
-                ...filters,
-                category: value === "all" ? null : value,
-              });
-            }}
-          >
-            <SelectTrigger className="h-11 w-40 text-sm">
-              <SelectValue placeholder="Category" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((category) => (
-                <SelectItem key={category.value} value={category.value}>
-                  {category.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
+          {/* Desktop layout */}
+          <div className="hidden md:flex items-center gap-3">
+            {/* Search */}
+            <div className="flex-1 flex items-center gap-2 bg-white rounded-lg px-3 py-2 border border-slate-200 focus-within:ring-2 focus-within:ring-emerald-500/60 focus-within:border-emerald-500 transition">
+              <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
+              <input
+                type="search"
+                placeholder="What service do you need? (e.g., 'window cleaning')"
+                className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                value={searchQuery}
+                onChange={(e) =>
+                  handleFiltersChange(
+                    {
+                      ...filters,
+                      q: e.target.value,
+                    },
+                    true,
+                  )
+                }
+              />
+            </div>
 
-        <div className="flex items-center gap-2">
-          <Select
-            value={sortBy}
-            onValueChange={(value) =>
-              handleFiltersChange({
-                ...filters,
-                sort: value as ServicesFilters["sort"],
-              })
-            }
-          >
-            <SelectTrigger className="h-11 w-40 text-sm">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              {sortOptions.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            {/* Category */}
+            <Select
+              value={selectedCategory || "all"}
+              onValueChange={(value) => {
+                handleFiltersChange({
+                  ...filters,
+                  category: value === "all" ? null : value,
+                });
+              }}
+            >
+              <SelectTrigger
+                aria-label="Filter by category"
+                className="h-10 min-w-[160px] rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
+              >
+                <SelectValue placeholder="All categories" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All categories</SelectItem>
+                {categories.map((category) => (
+                  <SelectItem key={category.value} value={category.value}>
+                    {category.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
 
-          {/* Optional: future extra controls like view toggle could go here */}
+            {/* Sort */}
+            <Select
+              value={sortBy}
+              onValueChange={(value) =>
+                handleFiltersChange({
+                  ...filters,
+                  sort: value as ServicesFilters["sort"],
+                })
+              }
+            >
+              <SelectTrigger
+                aria-label="Sort services"
+                className="h-10 min-w-[150px] rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
+              >
+                <SelectValue placeholder="Most relevant" />
+              </SelectTrigger>
+              <SelectContent>
+                {sortOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
