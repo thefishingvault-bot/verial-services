@@ -1,20 +1,18 @@
 'use client';
 
 import { Suspense, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Filter, MapPin, Grid3X3 } from 'lucide-react';
+import { MapPin, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CheckCircle } from 'lucide-react';
 import ServicesSearchAndFilters from '@/components/services/services-search-and-filters';
 import { ServicesGridClient } from '@/components/services/services-grid-client';
 import { ServicesMap } from '@/components/services/services-map';
-import { ServicesLoading } from '@/components/services/services-loading';
-import { ServicesAdvancedFilters } from '@/components/services/services-advanced-filters';
-import type { ServiceWithProvider, ServicesFilterState } from '@/lib/services-data';
+// NOTE: Advanced sidebar filters are currently disabled on the services page.
+import type { ServiceWithProvider, ServicesFilters } from '@/lib/services-data';
 
 interface ServicesPageClientProps {
-  initialFilters: ServicesFilterState;
+  initialFilters: ServicesFilters;
   initialServicesData: {
     services: ServiceWithProvider[];
     hasMore: boolean;
@@ -28,11 +26,9 @@ interface ServicesPageClientProps {
 }
 
 const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initialParams }: ServicesPageClientProps) => {
-  const [filters, setFilters] = useState<ServicesFilterState>(initialFilters);
+  const [filters, setFilters] = useState<ServicesFilters>(initialFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
-  const [servicesData] = useState(initialServicesData);
   const [loading] = useState(false);
-  const router = useRouter();
 
   // Temporarily disable dynamic filtering logic; keep initial SSR data only.
   const handleViewToggle = () => {
@@ -40,7 +36,7 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
     setViewMode(newView);
   };
 
-  const handleFiltersChange = (next: ServicesFilterState) => {
+  const handleFiltersChange = (next: ServicesFilters) => {
     setFilters(next);
   };
 
@@ -102,61 +98,19 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
           </div>
         </div>
 
-        {/* Mobile Filter Button */}
-        <div className="lg:hidden mb-6">
-          <div className="flex gap-3">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button variant="outline" className="flex-1">
-                  <Filter className="w-4 h-4 mr-2" />
-                  Filters
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="left" className="w-80">
-                <SheetHeader>
-                  <SheetTitle>Advanced Filters</SheetTitle>
-                </SheetHeader>
-                <div className="mt-6">
-                  <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg" />}>
-                    <ServicesAdvancedFilters
-                      searchParams={{
-                        minPrice: filters.minPrice?.toString(),
-                        maxPrice: filters.maxPrice?.toString(),
-                        rating: filters.minRating?.toString(),
-                        category: filters.categories[0],
-                      }}
-                    />
-                  </Suspense>
-                </div>
-              </SheetContent>
-            </Sheet>
-
-            <Button
-              variant={viewMode === 'map' ? 'default' : 'outline'}
-              size="sm"
-              onClick={handleViewToggle}
-            >
-              {viewMode === 'map' ? <Grid3X3 className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
-            </Button>
-          </div>
+        {/* View toggle only (advanced filters removed) */}
+        <div className="lg:hidden mb-6 flex justify-end">
+          <Button
+            variant={viewMode === 'map' ? 'default' : 'outline'}
+            size="sm"
+            onClick={handleViewToggle}
+          >
+            {viewMode === 'map' ? <Grid3X3 className="w-4 h-4" /> : <MapPin className="w-4 h-4" />}
+          </Button>
         </div>
 
         <div className="flex gap-8">
-          {/* Sidebar Filters - Hidden on mobile, shown on desktop */}
-          <aside className="hidden lg:block w-80 flex-shrink-0">
-            <div className="sticky top-32">
-              <Suspense fallback={<div className="animate-pulse bg-gray-200 h-96 rounded-lg" />}>
-                <ServicesAdvancedFilters
-                  searchParams={{
-                    minPrice: filters.minPrice?.toString(),
-                    maxPrice: filters.maxPrice?.toString(),
-                    rating: filters.minRating?.toString(),
-                    category: filters.categories[0],
-                  }}
-                />
-              </Suspense>
-            </div>
-          </aside>
+          {/* Advanced sidebar filters removed */}
 
           {/* Main Content Area */}
           <main className="flex-1 min-w-0">

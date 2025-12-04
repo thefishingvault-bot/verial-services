@@ -1,6 +1,3 @@
-import { db } from '@/lib/db';
-import { services, providers, users } from '@/db/schema';
-import { eq, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,55 +5,14 @@ import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import {
   Star,
-  MapPin,
-  Clock,
   CheckCircle,
   MessageCircle,
   Heart,
   DollarSign,
-  Search
+  Search,
 } from 'lucide-react';
 import { LoadMoreButton } from './load-more-button';
-
-interface SearchParams {
-  q?: string;
-  category?: string;
-  location?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
-  availability?: string;
-  sort?: string;
-  view?: 'grid' | 'map';
-  page?: string;
-}
-
-interface ServiceWithProvider {
-  id: string;
-  title: string;
-  description: string | null;
-  priceInCents: number;
-  category: string;
-  coverImageUrl: string | null;
-  createdAt: Date;
-  provider: {
-    id: string;
-    businessName: string | null;
-    handle: string | null;
-    baseSuburb: string | null;
-    baseRegion: string | null;
-    trustScore: number;
-    isVerified: boolean;
-    avatarUrl: string | null;
-  };
-  user: {
-    firstName: string | null;
-    lastName: string | null;
-  };
-  avgRating: number;
-  reviewCount: number;
-  distance?: number; // Would be calculated based on user location
-}
+import type { ServiceWithProvider, ServicesFilters } from '@/lib/services-data';
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -93,96 +49,20 @@ function getTrustScoreLabel(score: number) {
   if (score >= 60) return 'Good';
   return 'New';
 }
+type ServicesGridProps = {
+  services: ServiceWithProvider[];
+  totalCount: number;
+  hasMore: boolean;
+  filters: ServicesFilters;
+};
 
-export async function ServicesGrid({ searchParams }: { searchParams: SearchParams }) {
-  // Build the query based on search parameters
-  const whereConditions = [eq(providers.status, 'approved')];
-
-  // Text search
-  if (searchParams.q) {
-    whereConditions.push(
-      or(
-        like(services.title, `%${searchParams.q}%`),
-        like(services.description, `%${searchParams.q}%`),
-        like(providers.businessName, `%${searchParams.q}%`)
-      )!
-    );
-  }
-
-  // Category filter
-  if (searchParams.category) {
-    const allowedCategories = [
-      'cleaning',
-      'plumbing',
-      'gardening',
-      'it_support',
-      'accounting',
-      'detailing',
-      'other',
-    ] as const;
-    if ((allowedCategories as readonly string[]).includes(searchParams.category)) {
-      whereConditions.push(eq(services.category, searchParams.category as (typeof allowedCategories)[number]));
-    }
-  }
-
-  // Location filter (simplified - would need geocoding in production)
-  if (searchParams.location) {
-    whereConditions.push(
-      or(
-        like(providers.baseSuburb, `%${searchParams.location}%`),
-        like(providers.baseRegion, `%${searchParams.location}%`)
-      )!
-    );
-  }
-
-  // Price range filter
-  if (searchParams.minPrice) {
-    whereConditions.push(gte(services.priceInCents, parseInt(searchParams.minPrice) * 100));
-  }
-  if (searchParams.maxPrice) {
-    whereConditions.push(lte(services.priceInCents, parseInt(searchParams.maxPrice) * 100));
-  }
-
-  // Build order by
-  let orderBy = desc(services.createdAt);
-  switch (searchParams.sort) {
-    case 'rating':
-      // This would need a proper join with reviews table
-      orderBy = desc(sql`COALESCE(avg_rating, 0)`);
-      break;
-    case 'price_low':
-      orderBy = asc(services.priceInCents);
-      break;
-    case 'price_high':
-      orderBy = desc(services.priceInCents);
-      break;
-    case 'newest':
-      orderBy = desc(services.createdAt);
-      break;
-    case 'relevance':
-    default:
-      orderBy = desc(services.createdAt);
-      break;
-  }
-
-  const page = parseInt(searchParams.page || '1', 10);
-  const limit = 12; // Show 12 services per page
-  const offset = (page - 1) * limit;
-
-
-  // Use getServicesData to fetch services with avgRating and reviewCount
-  const filters = {
-    categories: searchParams.category ? [searchParams.category] : [],
-    minPrice: searchParams.minPrice ? parseInt(searchParams.minPrice) : undefined,
-    maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
-    minRating: searchParams.rating ? parseFloat(searchParams.rating) : undefined,
-    trustLevels: [],
-    search: searchParams.q,
-    sort: searchParams.sort,
-  };
-  const { services: servicesWithProviders } = await import('@/lib/services-data').then(mod => mod.getServicesData({ filters }));
-
-  if (servicesWithProviders.length === 0) {
+export default function ServicesGrid({
+  services,
+  totalCount,
+  hasMore,
+  filters,
+}: ServicesGridProps) {
+  if (services.length === 0) {
     return (
       <div className="text-center py-12">
         <div className="text-gray-400 mb-4">
@@ -205,11 +85,11 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-semibold text-gray-900">
-            {servicesWithProviders.length} service{servicesWithProviders.length !== 1 ? 's' : ''} found
+            {totalCount} service{totalCount !== 1 ? 's' : ''} found
           </h2>
-          {searchParams.q && (
+          {filters.q && (
             <p className="text-sm text-gray-600 mt-1">
-              Results for &quot;{searchParams.q}&quot;
+              Results for &quot;{filters.q}&quot;
             </p>
           )}
         </div>
@@ -217,7 +97,7 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
 
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {servicesWithProviders.map((service) => (
+        {services.map((service) => (
           <Card key={service.id} className="group hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="p-0">
               {/* Service Image */}
@@ -331,9 +211,18 @@ export async function ServicesGrid({ searchParams }: { searchParams: SearchParam
 
       {/* Load More Button */}
       <LoadMoreButton
-        searchParams={searchParams}
-        currentPage={page}
-        hasMore={servicesWithProviders.length === limit}
+        searchParams={{
+          q: filters.q || undefined,
+          category: filters.category || undefined,
+          minPrice:
+            filters.minPrice != null ? String(filters.minPrice) : undefined,
+          maxPrice:
+            filters.maxPrice != null ? String(filters.maxPrice) : undefined,
+          rating: filters.rating != null ? String(filters.rating) : undefined,
+          sort: filters.sort,
+        }}
+        currentPage={1}
+        hasMore={hasMore}
       />
     </div>
   );

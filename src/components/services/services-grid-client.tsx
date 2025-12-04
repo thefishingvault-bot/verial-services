@@ -1,22 +1,21 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import Link from "next/link";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Star,
-  MapPin,
   Clock,
   CheckCircle,
   MessageCircle,
   Heart,
   DollarSign,
-  Search
-} from 'lucide-react';
-import { LoadMoreButton } from './load-more-button';
-import { ServiceWithProvider, SearchParams } from '@/lib/services-data';
+  Search,
+} from "lucide-react";
+import { LoadMoreButton } from "./load-more-button";
+import type { ServiceWithProvider } from "@/lib/services-data";
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -56,7 +55,14 @@ function getTrustScoreLabel(score: number) {
 
 interface ServicesGridClientProps {
   services: ServiceWithProvider[];
-  searchParams: SearchParams;
+  searchParams: {
+    q?: string;
+    category?: string;
+    minPrice?: string;
+    maxPrice?: string;
+    rating?: string;
+    sort?: string;
+  };
   hasMore: boolean;
   currentPage: number;
 }

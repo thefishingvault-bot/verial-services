@@ -1,26 +1,30 @@
-'use client';
+"use client";
 
-import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Badge } from '@/components/ui/badge';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
-import { Slider } from '@/components/ui/slider';
+import { useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
-  Search,
-  MapPin,
-  Filter,
-  Grid3X3,
-  Map,
-  X,
-  SlidersHorizontal
-} from 'lucide-react';
-import type { ServicesFilterState } from '@/lib/services-data';
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { Slider } from "@/components/ui/slider";
+import { Search, SlidersHorizontal, X } from "lucide-react";
+import type { ServicesFilters } from "@/lib/services-data";
 
 interface ServicesSearchAndFiltersProps {
-  filters: ServicesFilterState;
-  onFiltersChange: (next: ServicesFilterState) => void;
+  filters: ServicesFilters;
+  onFiltersChange: (next: ServicesFilters) => void;
 }
 
 const categories = [
@@ -45,42 +49,53 @@ const sortOptions = [
   { value: 'newest', label: 'Recently Added' },
 ];
 
-const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAndFiltersProps) => {
+const ServicesSearchAndFilters = ({
+  filters,
+  onFiltersChange,
+}: ServicesSearchAndFiltersProps) => {
   const [showMobileFilters, setShowMobileFilters] = useState(false);
 
-  // Debounce for search and price slider
   const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Controlled state from filters prop
-  const searchQuery = filters.search || '';
-  const selectedCategories = filters.categories || [];
-  const priceRange = [filters.minPrice ?? 0, filters.maxPrice ?? 500];
-  const minRating = filters.minRating ?? 0;
-  const sortBy = filters.sort || 'relevance';
+  const searchQuery = filters.q || "";
+  const selectedCategory = filters.category ?? "";
+  const priceRange: [number, number] = [
+    filters.minPrice ?? 0,
+    filters.maxPrice ?? 500,
+  ];
+  const minRating = filters.rating ?? 0;
+  const sortBy = filters.sort || "relevance";
 
-  const handleFiltersChange = (next: ServicesFilterState, debounce = false) => {
+  const handleFiltersChange = (next: ServicesFilters, debounce = false) => {
+    if (debounce) {
+      if (debounceTimeout.current) {
+        clearTimeout(debounceTimeout.current);
+      }
+      debounceTimeout.current = setTimeout(() => {
+        onFiltersChange(next);
+      }, 300);
+      return;
+    }
     onFiltersChange(next);
   };
 
   const clearFilters = () => {
-    const cleared: ServicesFilterState = {
-      categories: [],
-      minPrice: 0,
-      maxPrice: 500,
-      minRating: 0,
-      trustLevels: [],
-      search: '',
-      sort: 'relevance',
+    const cleared: ServicesFilters = {
+      q: "",
+      category: null,
+      minPrice: null,
+      maxPrice: null,
+      rating: null,
+      sort: "relevance",
     };
     handleFiltersChange(cleared);
   };
 
   const activeFiltersCount = [
     searchQuery,
-    selectedCategories.length ? selectedCategories.join(',') : '',
-    minRating > 0 ? minRating : '',
-    priceRange[0] > 0 || priceRange[1] < 500 ? 'price' : '',
-    filters.trustLevels.length ? filters.trustLevels.join(',') : '',
+    selectedCategory,
+    minRating > 0 ? minRating : "",
+    priceRange[0] > 0 || priceRange[1] < 500 ? "price" : "",
   ].filter(Boolean).length;
 
   return (
@@ -94,7 +109,15 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
             type="search"
             placeholder="What service do you need?"
             value={searchQuery}
-            onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value }, true)}
+            onChange={(e) =>
+              handleFiltersChange(
+                {
+                  ...filters,
+                  q: e.target.value,
+                },
+                true,
+              )
+            }
             className="pl-10 h-12 text-base w-full"
           />
         </div>
@@ -102,10 +125,12 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
         {/* Controls Row */}
         <div className="flex gap-2">
           <Select
-            value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+            value={selectedCategory || "all"}
             onValueChange={(value) => {
-              const newCategories = value === 'all' ? [] : [value];
-              handleFiltersChange({ ...filters, categories: newCategories });
+              handleFiltersChange({
+                ...filters,
+                category: value === "all" ? null : value,
+              });
             }}
           >
             <SelectTrigger className="h-12 flex-1">
@@ -123,7 +148,12 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
 
           <Select
             value={sortBy}
-            onValueChange={(value) => handleFiltersChange({ ...filters, sort: value })}
+            onValueChange={(value) =>
+              handleFiltersChange({
+                ...filters,
+                sort: value as ServicesFilters["sort"],
+              })
+            }
           >
             <SelectTrigger className="h-12 w-32">
               <SelectValue placeholder="Sort" />
@@ -147,17 +177,27 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
             type="search"
             placeholder="What service do you need? (e.g., 'window cleaning')"
             value={searchQuery}
-            onChange={(e) => handleFiltersChange({ ...filters, search: e.target.value }, true)}
+            onChange={(e) =>
+              handleFiltersChange(
+                {
+                  ...filters,
+                  q: e.target.value,
+                },
+                true,
+              )
+            }
             className="pl-10 h-12 text-base"
           />
         </div>
 
         <div className="flex gap-2">
           <Select
-            value={selectedCategories.length === 1 ? selectedCategories[0] : 'all'}
+            value={selectedCategory || "all"}
             onValueChange={(value) => {
-              const newCategories = value === 'all' ? [] : [value];
-              handleFiltersChange({ ...filters, categories: newCategories });
+              handleFiltersChange({
+                ...filters,
+                category: value === "all" ? null : value,
+              });
             }}
           >
             <SelectTrigger className="w-40 h-12">
@@ -175,7 +215,12 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
 
           <Select
             value={sortBy}
-            onValueChange={(value) => handleFiltersChange({ ...filters, sort: value })}
+            onValueChange={(value) =>
+              handleFiltersChange({
+                ...filters,
+                sort: value as ServicesFilters["sort"],
+              })
+            }
           >
             <SelectTrigger className="w-40 h-12">
               <SelectValue placeholder="Sort by" />
@@ -221,7 +266,12 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
                   </label>
                   <Select
                     value={String(minRating)}
-                    onValueChange={(value) => handleFiltersChange({ ...filters, minRating: parseFloat(value) || 0 })}
+                    onValueChange={(value) =>
+                      handleFiltersChange({
+                        ...filters,
+                        rating: Number(value) || 0,
+                      })
+                    }
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Any rating" />
@@ -242,7 +292,16 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
                   <div className="px-2">
                     <Slider
                       value={priceRange}
-                      onValueChange={(value) => handleFiltersChange({ ...filters, minPrice: value[0], maxPrice: value[1] }, true)}
+                      onValueChange={(value) =>
+                        handleFiltersChange(
+                          {
+                            ...filters,
+                            minPrice: value[0],
+                            maxPrice: value[1],
+                          },
+                          true,
+                        )
+                      }
                       max={500}
                       min={0}
                       step={10}
@@ -282,16 +341,29 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
               Search: {searchQuery}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => handleFiltersChange({ ...filters, search: '' })}
+                onClick={() =>
+                  handleFiltersChange({
+                    ...filters,
+                    q: "",
+                  })
+                }
               />
             </Badge>
           )}
-          {selectedCategories.length > 0 && (
+          {selectedCategory && (
             <Badge variant="secondary" className="flex items-center gap-1">
-              {selectedCategories.map(cat => categories.find(c => c.value === cat)?.label).join(', ')}
+              {
+                categories.find((c) => c.value === selectedCategory)?.label ??
+                selectedCategory
+              }
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => handleFiltersChange({ ...filters, categories: [] })}
+                onClick={() =>
+                  handleFiltersChange({
+                    ...filters,
+                    category: null,
+                  })
+                }
               />
             </Badge>
           )}
@@ -300,7 +372,12 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
               <span className="text-yellow-500">★</span> {minRating}+ stars
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => handleFiltersChange({ ...filters, minRating: 0 })}
+                onClick={() =>
+                  handleFiltersChange({
+                    ...filters,
+                    rating: 0,
+                  })
+                }
               />
             </Badge>
           )}
@@ -309,7 +386,13 @@ const ServicesSearchAndFilters = ({ filters, onFiltersChange }: ServicesSearchAn
               ${priceRange[0]} - ${priceRange[1]}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() => handleFiltersChange({ ...filters, minPrice: 0, maxPrice: 500 })}
+                onClick={() =>
+                  handleFiltersChange({
+                    ...filters,
+                    minPrice: 0,
+                    maxPrice: 500,
+                  })
+                }
               />
             </Badge>
           )}
