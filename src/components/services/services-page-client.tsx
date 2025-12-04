@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Filter, MapPin, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -30,66 +30,19 @@ interface ServicesPageClientProps {
 const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initialParams }: ServicesPageClientProps) => {
   const [filters, setFilters] = useState<ServicesFilterState>(initialFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
-  const [servicesData, setServicesData] = useState(initialServicesData);
-  const [loading, setLoading] = useState(false);
+  const [servicesData] = useState(initialServicesData);
+  const [loading] = useState(false);
   const router = useRouter();
 
-  const buildQueryFromFilters = (state: ServicesFilterState, extra: Record<string, string> = {}) => {
-    const params = new URLSearchParams();
-
-    if (state.categories?.length) params.set('category', state.categories[0]);
-    if (state.minPrice != null) params.set('minPrice', String(state.minPrice));
-    if (state.maxPrice != null) params.set('maxPrice', String(state.maxPrice));
-    if (state.minRating != null) params.set('rating', String(state.minRating));
-    if (state.search) params.set('q', state.search);
-    if (state.sort) params.set('sort', state.sort);
-
-    Object.entries(extra).forEach(([key, value]) => {
-      if (value) params.set(key, value);
-    });
-
-    return params;
-  };
-
-  const fetchServices = async (nextFilters: ServicesFilterState) => {
-    try {
-      setLoading(true);
-      const params = buildQueryFromFilters(nextFilters, { page: '1' });
-      const res = await fetch(`/api/services/list?${params.toString()}`);
-      if (!res.ok) {
-        console.error('Failed to fetch services', await res.text());
-        return;
-      }
-      const json = await res.json();
-      setServicesData({
-        services: json.services ?? [],
-        hasMore: json.hasMore ?? false,
-        totalCount: json.totalCount ?? (json.services?.length ?? 0),
-      });
-    } catch (err) {
-      console.error('Error fetching services', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Temporarily disable dynamic filtering logic; keep initial SSR data only.
   const handleViewToggle = () => {
     const newView = viewMode === 'map' ? 'grid' : 'map';
     setViewMode(newView);
-
-    const params = buildQueryFromFilters(filters, { view: newView });
-    router.replace(`/services?${params.toString()}`);
   };
 
   const handleFiltersChange = (next: ServicesFilterState) => {
     setFilters(next);
-    const params = buildQueryFromFilters(next, { page: '1' });
-    router.replace(`/services?${params.toString()}`);
-    fetchServices(next);
   };
-
-  // We intentionally avoid re-syncing from initial props on every navigation,
-  // so client-side filtering/fetching remains the source of truth.
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -172,16 +125,6 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                         rating: filters.minRating?.toString(),
                         category: filters.categories[0],
                       }}
-                      onFiltersChange={(next) => {
-                        const merged = {
-                          ...filters,
-                          categories: next.categories ?? filters.categories,
-                          minPrice: next.minPrice ?? filters.minPrice,
-                          maxPrice: next.maxPrice ?? filters.maxPrice,
-                          minRating: next.minRating ?? filters.minRating,
-                        };
-                        handleFiltersChange(merged);
-                      }}
                     />
                   </Suspense>
                 </div>
@@ -210,16 +153,6 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                     rating: filters.minRating?.toString(),
                     category: filters.categories[0],
                   }}
-                  onFiltersChange={(next) => {
-                    const merged = {
-                      ...filters,
-                      categories: next.categories ?? filters.categories,
-                      minPrice: next.minPrice ?? filters.minPrice,
-                      maxPrice: next.maxPrice ?? filters.maxPrice,
-                      minRating: next.minRating ?? filters.minRating,
-                    };
-                    handleFiltersChange(merged);
-                  }}
                 />
               </Suspense>
             </div>
@@ -242,18 +175,9 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                   <div className="mb-4 text-sm text-gray-500">Updating results9ed</div>
                 )}
                 <ServicesGridClient
-                  services={servicesData.services}
-                  searchParams={{
-                    q: filters.search,
-                    category: filters.categories[0],
-                    minPrice: filters.minPrice?.toString(),
-                    maxPrice: filters.maxPrice?.toString(),
-                    rating: filters.minRating?.toString(),
-                    sort: filters.sort,
-                    view: viewMode,
-                    page: '1',
-                  }}
-                  hasMore={servicesData.hasMore}
+                  services={initialServicesData.services}
+                  searchParams={{}}
+                  hasMore={initialServicesData.hasMore}
                   currentPage={1}
                 />
               </>
