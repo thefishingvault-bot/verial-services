@@ -7,7 +7,14 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
 import { requireAdmin } from '@/lib/admin';
-import { getAdminFeesReport, type FeeReportRow } from '@/server/admin/fees';
+import {
+  getAdminFeesReport,
+  type FeeReportRow,
+  getFeesSummary,
+  type FeesSummary,
+  getFeesByProvider,
+  type FeesByProviderRow,
+} from '@/server/admin/fees';
 import {
   DollarSign,
   TrendingUp,
@@ -30,13 +37,6 @@ interface DailyBucket {
   gross: number;
   fees: number;
   netToVerial: number;
-}
-
-interface ProviderBucket {
-  providerName: string;
-  totalGross: number;
-  totalFees: number;
-  totalNetToVerial: number;
 }
 
 const formatCurrency = (cents: number) =>
@@ -101,8 +101,13 @@ export default async function AdminFeesPage({
   console.log('[ADMIN_FEES] Loading report for dates:', fromIso, 'to', toIso);
 
   let reportData: FeeReportRow[];
+  const year = endDate.getUTCFullYear();
+  let summary: FeesSummary | null = null;
+  let providersByYear: FeesByProviderRow[] = [];
   try {
     reportData = await getAdminFeesReport({ from: fromIso, to: toIso });
+    summary = await getFeesSummary(year);
+    providersByYear = await getFeesByProvider(year);
   } catch (error) {
     console.error('[ADMIN_FEES] Failed to load fees report:', error);
     return (
@@ -112,14 +117,14 @@ export default async function AdminFeesPage({
     );
   }
 
-  const totalGross = reportData.reduce((sum, row) => sum + row.totalAmount, 0);
-  const totalFees = reportData.reduce((sum, row) => sum + row.platformFee, 0);
-  const netToProviders = totalGross - totalFees;
+  const totalGross = summary?.totals.totalGross ?? 0;
+  const totalFees = summary?.totals.totalFee ?? 0;
+  const totalGst = summary?.totals.totalGst ?? 0;
+  const netToProviders = summary?.totals.totalNet ?? 0;
   const netToVerial = totalFees;
   const averageFeeRate = totalGross > 0 ? totalFees / totalGross : 0;
 
   const dailyMap = new Map<string, DailyBucket>();
-  const providerMap = new Map<string, ProviderBucket>();
 
   for (const row of reportData) {
     const dateKey = row.paidAt.split('T')[0];
@@ -137,24 +142,17 @@ export default async function AdminFeesPage({
     existingDay.fees += fees;
     existingDay.netToVerial += net;
     dailyMap.set(dateKey, existingDay);
-
-    const providerKey = row.providerName;
-    const existingProvider = providerMap.get(providerKey) ?? {
-      providerName: providerKey,
-      totalGross: 0,
-      totalFees: 0,
-      totalNetToVerial: 0,
-    };
-    existingProvider.totalGross += gross;
-    existingProvider.totalFees += fees;
-    existingProvider.totalNetToVerial += net;
-    providerMap.set(providerKey, existingProvider);
   }
-
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   const providerFilter = (params as { provider?: string }).provider?.toLowerCase() ?? '';
 
-  const providers = Array.from(providerMap.values())
+  const providers = providersByYear
+    .map((p) => ({
+      providerName: p.providerName ?? p.providerId,
+      totalGross: p.totalGross,
+      totalFees: p.totalFee,
+      totalNetToVerial: p.totalNet,
+    }))
     .filter((p) =>
       providerFilter
         ? p.providerName.toLowerCase().includes(providerFilter)
@@ -175,9 +173,11 @@ export default async function AdminFeesPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export Report
+          <Button variant="outline" asChild>
+            <a href={`/api/admin/fees/by-provider?year=${year}&format=csv`}>
+              <Download className="mr-2 h-4 w-4" />
+              Export Providers CSV
+            </a>
           </Button>
           <Button variant="outline">
             <BarChart3 className="mr-2 h-4 w-4" />
@@ -244,7 +244,52 @@ export default async function AdminFeesPage({
             </p>
           </CardContent>
         </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">GST on Fees</CardTitle>
+            <TrendingUp className="h-4 w-4 text-amber-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-amber-600">{formatCurrency(totalGst)}</div>
+            <p className="text-xs text-muted-foreground">Collected GST on platform fees</p>
+          </CardContent>
+        </Card>
       </div>
+
+      {/* Monthly Trend */}
+      {summary?.monthlyTrend?.length ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Monthly Trend ({year})</CardTitle>
+            <CardDescription>Gross, fees, and net amounts based on settled earnings.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Month</TableHead>
+                    <TableHead className="text-right">Gross</TableHead>
+                    <TableHead className="text-right">Fees</TableHead>
+                    <TableHead className="text-right">Net to Providers</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {summary.monthlyTrend.map((m) => (
+                    <TableRow key={m.month}>
+                      <TableCell className="font-medium">{m.month}</TableCell>
+                      <TableCell className="text-right">{formatCurrency(m.gross)}</TableCell>
+                      <TableCell className="text-right text-green-600">{formatCurrency(m.fee)}</TableCell>
+                      <TableCell className="text-right text-purple-600 font-medium">{formatCurrency(m.net)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* Revenue Over Time */}
       <Card>

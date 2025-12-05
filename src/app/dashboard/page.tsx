@@ -9,6 +9,7 @@ import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
 import { ProviderServicePerformanceCardClient } from "@/components/dashboard/provider-service-performance-card.client";
 import { ProviderPayoutsSummaryCardClient } from "@/components/dashboard/provider-payouts-summary-card.client";
+import { ProviderConnectBanner } from "@/components/dashboard/provider-connect-banner";
 
 export default function DashboardPage() {
   const { user } = useUser();
@@ -174,6 +175,10 @@ export default function DashboardPage() {
         <p className="text-muted-foreground mb-8">
           Manage your business, bookings, and availability.
         </p>
+
+        <div className="mb-6">
+          <ProviderConnectBanner />
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <ProviderAnalyticsCardClient />
