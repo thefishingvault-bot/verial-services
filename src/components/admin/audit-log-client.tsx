@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Activity, Shield, Users, AlertTriangle, Search, Calendar as CalendarIcon, Filter } from 'lucide-react';
+import { Activity, Shield, Users, AlertTriangle, Calendar as CalendarIcon, Filter } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/components/ui/use-toast';
@@ -82,11 +81,7 @@ export default function AuditLogClient() {
   });
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchAuditLogs();
-  }, [filters]);
-
-  const fetchAuditLogs = async () => {
+  const fetchAuditLogs = useCallback(async () => {
     try {
       const params = new URLSearchParams();
 
@@ -113,7 +108,11 @@ export default function AuditLogClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, toast]);
+
+  useEffect(() => {
+    fetchAuditLogs();
+  }, [fetchAuditLogs]);
 
   const handleFilterChange = (key: string, value: string | Date | undefined) => {
     setFilters(prev => ({

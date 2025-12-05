@@ -1,9 +1,8 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { useState } from 'react';
 import { MapPin, Grid3X3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { CheckCircle } from 'lucide-react';
 import ServicesSearchAndFilters from '@/components/services/services-search-and-filters';
 import { ServicesGridClient } from '@/components/services/services-grid-client';
@@ -22,10 +21,9 @@ interface ServicesPageClientProps {
     totalServices: number;
     averageRating: number;
   };
-  initialParams: Record<string, string>;
 }
 
-const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initialParams }: ServicesPageClientProps) => {
+const ServicesPageClient = ({ initialFilters, initialServicesData, stats }: ServicesPageClientProps) => {
   const [filters, setFilters] = useState<ServicesFilters>(initialFilters);
   const [viewMode, setViewMode] = useState<'grid' | 'map'>('grid');
   const [loading] = useState(false);
@@ -120,7 +118,7 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats, initia
                   <h2 className="text-xl font-semibold text-gray-900 mb-4">
                     Services Near You
                   </h2>
-                  <ServicesMap searchParams={initialParams} />
+                  <ServicesMap />
                 </div>
               </div>
             ) : (

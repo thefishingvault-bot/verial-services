@@ -126,7 +126,7 @@ export default function BroadcastMessagingClient() {
           variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch {
       toast({
         title: 'Error',
         description: 'Network error occurred',

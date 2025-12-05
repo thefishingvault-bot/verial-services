@@ -35,6 +35,7 @@ export function useRealTimeUpdates(
 
   const finalConfig = { ...DEFAULT_CONFIG, ...config };
   const wsRef = useRef<WebSocket | null>(null);
+  const isConnectedRef = useRef(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const retryCountRef = useRef(0);
@@ -43,18 +44,15 @@ export function useRealTimeUpdates(
     if (!finalConfig.enabled) return;
 
     try {
-      // For demo purposes, we'll use polling since we don't have a WebSocket server
-      // In production, replace with actual WebSocket URL
-      const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
-
       // Simulate WebSocket connection for now
       setIsConnected(true);
+      isConnectedRef.current = true;
       setError(null);
       retryCountRef.current = 0;
 
       // Simulate receiving updates
       const simulateUpdate = () => {
-        if (!isConnected) return;
+        if (!isConnectedRef.current) return;
 
         const mockUpdates: RealTimeUpdate[] = [
           {
@@ -81,7 +79,7 @@ export function useRealTimeUpdates(
       setIsConnected(false);
       // Retry logic will be handled by the caller
     }
-  }, [finalConfig.enabled, finalConfig.updateInterval, onUpdate, isConnected]);
+  }, [finalConfig.enabled, finalConfig.updateInterval, onUpdate]);
 
   const handleRetry = useCallback(() => {
     if (retryCountRef.current >= finalConfig.maxRetries) {
@@ -100,6 +98,7 @@ export function useRealTimeUpdates(
 
   const disconnect = useCallback(() => {
     setIsConnected(false);
+    isConnectedRef.current = false;
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
@@ -129,18 +128,15 @@ export function useRealTimeUpdates(
       // Start connection asynchronously
       const startConnection = async () => {
         try {
-          // For demo purposes, we'll use polling since we don't have a WebSocket server
-          // In production, replace with actual WebSocket URL
-          const wsUrl = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001';
-
           // Simulate WebSocket connection for now
           setIsConnected(true);
+          isConnectedRef.current = true;
           setError(null);
           retryCountRef.current = 0;
 
           // Simulate receiving updates
           const simulateUpdate = () => {
-            if (!isConnected) return;
+            if (!isConnectedRef.current) return;
 
             const mockUpdates: RealTimeUpdate[] = [
               {
@@ -187,6 +183,7 @@ export function useRealTimeUpdates(
     disconnect,
     sendMessage,
     clearUpdates,
+    retry: handleRetry,
     config: finalConfig
   };
 }

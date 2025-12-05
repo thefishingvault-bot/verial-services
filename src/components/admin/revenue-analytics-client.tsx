@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { DollarSign, TrendingUp, TrendingDown, Users, Building, Calendar, RefreshCw, BarChart3, PieChart, MapPin } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Users, Calendar, RefreshCw, BarChart3, MapPin } from 'lucide-react';
 
 interface OverallStats {
   totalRevenue: number;
@@ -71,7 +71,7 @@ export function RevenueAnalyticsClient() {
   const [revenueByProvider, setRevenueByProvider] = useState<ProviderRevenue[]>([]);
   const [revenueByRegion, setRevenueByRegion] = useState<RegionRevenue[]>([]);
 
-  const fetchRevenueAnalytics = async () => {
+  const fetchRevenueAnalytics = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -93,11 +93,11 @@ export function RevenueAnalyticsClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [groupBy, timeframe]);
 
   useEffect(() => {
     fetchRevenueAnalytics();
-  }, [timeframe, groupBy]);
+  }, [fetchRevenueAnalytics]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {

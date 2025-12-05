@@ -2,23 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Star, MapPin, DollarSign } from 'lucide-react';
 import Link from 'next/link';
-
-interface SearchParams {
-  q?: string;
-  category?: string;
-  location?: string;
-  minPrice?: string;
-  maxPrice?: string;
-  rating?: string;
-  availability?: string;
-  sort?: string;
-  view?: 'grid' | 'map';
-}
 
 interface ServiceLocation {
   id: string;
@@ -93,7 +80,7 @@ const mockServices: ServiceLocation[] = [
   },
 ];
 
-export function ServicesMap({ searchParams }: { searchParams: SearchParams }) {
+export function ServicesMap() {
   const [selectedService, setSelectedService] = useState<ServiceLocation | null>(null);
   const [mapLoaded, setMapLoaded] = useState(false);
 

@@ -18,24 +18,14 @@ import {
   CheckCircle,
   Clock,
   DollarSign,
-  Eye,
   Filter,
   Search,
   Shield,
-  Users,
-  Calendar,
   TrendingUp,
   MessageSquare,
   FileText,
-  ArrowUpDown,
-  MoreHorizontal
+  ArrowUpDown
 } from "lucide-react";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
 
 interface SearchParams {
   status?: string;
@@ -320,7 +310,7 @@ export default async function AdminDisputesPage({
 
       {/* Main Content */}
       <Tabs defaultValue={activeTab} className="space-y-4">
-        <div className="flex justify-between items-center">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <TabsList>
             <TabsTrigger value="all">All Disputes</TabsTrigger>
             <TabsTrigger value="open">Open ({openDisputes})</TabsTrigger>
@@ -329,17 +319,17 @@ export default async function AdminDisputesPage({
           </TabsList>
 
           {/* Advanced Filters */}
-          <div className="flex gap-2">
-            <div className="relative">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
+            <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
                 placeholder="Search disputes..."
-                className="pl-9 w-64"
+                className="pl-9"
                 defaultValue={searchQuery}
               />
             </div>
             <Select defaultValue={statusFilter}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-full sm:w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -350,7 +340,7 @@ export default async function AdminDisputesPage({
               </SelectContent>
             </Select>
             <Select defaultValue={typeFilter}>
-              <SelectTrigger className="w-32">
+              <SelectTrigger className="w-full sm:w-32">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -359,7 +349,7 @@ export default async function AdminDisputesPage({
                 <SelectItem value="provider">Provider</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" size="sm">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">
               <Filter className="h-4 w-4 mr-2" />
               More Filters
             </Button>
@@ -438,82 +428,172 @@ function DisputesTable({
         </CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>
-                <div className="flex items-center gap-2">
-                  Booking
-                  <ArrowUpDown className="h-4 w-4" />
-                </div>
-              </TableHead>
-              <TableHead>Initiator</TableHead>
-              <TableHead>Reason</TableHead>
-              <TableHead>Amount</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead>Priority</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {disputes.map((dispute) => {
-              const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-              const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
-              const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
-              // ...existing code...
-              return (
-                <TableRow key={dispute.id} className={isUrgent ? "bg-red-50" : ""}>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium">{dispute.booking.service.name}</div>
-                      <div className="text-sm text-muted-foreground">
-                        {dispute.provider.businessName}
+        <div className="hidden lg:block overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>
+                  <div className="flex items-center gap-2">
+                    Booking
+                    <ArrowUpDown className="h-4 w-4" />
+                  </div>
+                </TableHead>
+                <TableHead>Initiator</TableHead>
+                <TableHead>Reason</TableHead>
+                <TableHead>Amount</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {disputes.map((dispute) => {
+                const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+                const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
+                const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
+                return (
+                  <TableRow key={dispute.id} className={isUrgent ? "bg-red-50" : ""}>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="font-medium">{dispute.booking.service.name}</div>
+                        <div className="text-sm text-muted-foreground">
+                          {dispute.provider.businessName}
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          {dispute.booking.scheduledAt ?
+                            dispute.booking.scheduledAt.toLocaleDateString() :
+                            "Not scheduled"}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="font-medium">
+                          {dispute.initiator.firstName} {dispute.initiator.lastName}
+                        </div>
+                        <Badge variant="outline" className="text-xs">
+                          {dispute.initiatorType}
+                        </Badge>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="font-medium capitalize">
+                          {dispute.reason.replace("_", " ")}
+                        </div>
+                        <div className="text-sm text-muted-foreground line-clamp-2">
+                          {dispute.description}
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {dispute.amountDisputed ? (
+                          <div className="font-medium">
+                            ${(dispute.amountDisputed / 100).toFixed(2)}
+                          </div>
+                        ) : (
+                          <span className="text-muted-foreground">N/A</span>
+                        )}
+                        {dispute.refundAmount && (
+                          <div className="text-sm text-green-600">
+                            Refunded: ${(dispute.refundAmount / 100).toFixed(2)}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={
+                        dispute.status === "open" ? "destructive" :
+                        dispute.status === "under_review" ? "secondary" :
+                        dispute.status === "resolved" ? "default" :
+                        "outline"
+                      }>
+                        {dispute.status.replace("_", " ")}
+                      </Badge>
+                      {dispute.adminDecision && (
+                        <div className="text-xs text-muted-foreground mt-1 capitalize">
+                          {dispute.adminDecision.replace("_", " ")}
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-1">
+                        {isUrgent && (
+                          <Badge variant="destructive" className="text-xs">
+                            Urgent
+                          </Badge>
+                        )}
+                        {isHighPriority && (
+                          <Badge variant="secondary" className="text-xs">
+                            High Value
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="text-sm">
+                        {dispute.createdAt.toLocaleDateString()}
                       </div>
                       <div className="text-xs text-muted-foreground">
-                        {dispute.booking.scheduledAt ?
-                          dispute.booking.scheduledAt.toLocaleDateString() :
-                          "Not scheduled"}
+                        {Math.floor(daysSinceCreation)}d ago
                       </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium">
-                        {dispute.initiator.firstName} {dispute.initiator.lastName}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        {dispute.status === "open" && (
+                          <form action={`/api/admin/disputes/${dispute.id}/review`} method="POST" className="inline">
+                            <Button type="submit" size="sm" variant="outline">
+                              Start Review
+                            </Button>
+                          </form>
+                        )}
+                        {dispute.status === "under_review" && (
+                          <Button asChild size="sm">
+                            <Link href={`/dashboard/admin/disputes/${dispute.id}`}>
+                              Resolve
+                            </Link>
+                          </Button>
+                        )}
+                        <Button asChild size="sm" variant="outline">
+                          <Link href={`/dashboard/admin/bookings?bookingId=${dispute.booking.id}`}>
+                            View Booking
+                          </Link>
+                        </Button>
                       </div>
-                      <Badge variant="outline" className="text-xs">
-                        {dispute.initiatorType}
-                      </Badge>
-                    </div>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
+              {disputes.length === 0 && (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                    No disputes found matching the current filters.
                   </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium capitalize">
-                        {dispute.reason.replace("_", " ")}
-                      </div>
-                      <div className="text-sm text-muted-foreground line-clamp-2">
-                        {dispute.description}
-                      </div>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {/* Mobile Cards */}
+        <div className="grid gap-3 lg:hidden">
+          {disputes.map((dispute) => {
+            const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
+            const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000;
+            return (
+              <Card key={dispute.id} className={isUrgent ? "border-red-200 bg-red-50" : undefined}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-semibold">{dispute.booking.service.name}</p>
+                      <p className="text-sm text-muted-foreground">{dispute.provider.businessName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {dispute.booking.scheduledAt ? dispute.booking.scheduledAt.toLocaleDateString() : "Not scheduled"}
+                      </p>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      {dispute.amountDisputed ? (
-                        <div className="font-medium">
-                          ${(dispute.amountDisputed / 100).toFixed(2)}
-                        </div>
-                      ) : (
-                        <span className="text-muted-foreground">N/A</span>
-                      )}
-                      {dispute.refundAmount && (
-                        <div className="text-sm text-green-600">
-                          Refunded: ${(dispute.refundAmount / 100).toFixed(2)}
-                        </div>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
                     <Badge variant={
                       dispute.status === "open" ? "destructive" :
                       dispute.status === "under_review" ? "secondary" :
@@ -522,69 +602,64 @@ function DisputesTable({
                     }>
                       {dispute.status.replace("_", " ")}
                     </Badge>
-                    {dispute.adminDecision && (
-                      <div className="text-xs text-muted-foreground mt-1 capitalize">
-                        {dispute.adminDecision.replace("_", " ")}
-                      </div>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex gap-1">
-                      {isUrgent && (
-                        <Badge variant="destructive" className="text-xs">
-                          Urgent
-                        </Badge>
-                      )}
-                      {isHighPriority && (
-                        <Badge variant="secondary" className="text-xs">
-                          High Value
-                        </Badge>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <p className="text-muted-foreground">Initiator</p>
+                      <p className="font-medium">{dispute.initiator.firstName} {dispute.initiator.lastName}</p>
+                      <Badge variant="outline" className="text-xs mt-1 capitalize">{dispute.initiatorType}</Badge>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-muted-foreground">Amount</p>
+                      <p className="font-semibold">
+                        {dispute.amountDisputed ? `$${(dispute.amountDisputed / 100).toFixed(2)}` : 'N/A'}
+                      </p>
+                      {dispute.refundAmount && (
+                        <p className="text-xs text-green-600">Refunded ${(dispute.refundAmount / 100).toFixed(2)}</p>
                       )}
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {dispute.createdAt.toLocaleDateString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {Math.floor(daysSinceCreation)}d ago
-                    </div>
-                  </TableCell>
-                  <TableCell>
+                  </div>
+
+                  <p className="text-sm text-muted-foreground line-clamp-2">{dispute.description}</p>
+
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
                     <div className="flex gap-2">
-                      {dispute.status === "open" && (
-                        <form action={`/api/admin/disputes/${dispute.id}/review`} method="POST" className="inline">
-                          <Button type="submit" size="sm" variant="outline">
-                            Start Review
-                          </Button>
-                        </form>
-                      )}
-                      {dispute.status === "under_review" && (
-                        <Button asChild size="sm">
-                          <Link href={`/dashboard/admin/disputes/${dispute.id}`}>
-                            Resolve
-                          </Link>
+                      {isUrgent && <Badge variant="destructive" className="text-[10px]">Urgent</Badge>}
+                      {isHighPriority && <Badge variant="secondary" className="text-[10px]">High Value</Badge>}
+                    </div>
+                    <span>{Math.floor(daysSinceCreation)}d ago</span>
+                  </div>
+
+                  <div className="flex flex-wrap gap-2">
+                    {dispute.status === "open" && (
+                      <form action={`/api/admin/disputes/${dispute.id}/review`} method="POST" className="inline">
+                        <Button type="submit" size="sm" variant="outline" className="w-full sm:w-auto">
+                          Start Review
                         </Button>
-                      )}
-                      <Button asChild size="sm" variant="outline">
-                        <Link href={`/dashboard/admin/bookings?bookingId=${dispute.booking.id}`}>
-                          View Booking
+                      </form>
+                    )}
+                    {dispute.status === "under_review" && (
+                      <Button asChild size="sm" className="w-full sm:w-auto">
+                        <Link href={`/dashboard/admin/disputes/${dispute.id}`}>
+                          Resolve
                         </Link>
                       </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {disputes.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                  No disputes found matching the current filters.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                    )}
+                    <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
+                      <Link href={`/dashboard/admin/bookings?bookingId=${dispute.booking.id}`}>
+                        View Booking
+                      </Link>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+          {disputes.length === 0 && (
+            <div className="text-center py-8 text-muted-foreground">No disputes found matching the current filters.</div>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

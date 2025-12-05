@@ -1,12 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { AlertTriangle, Users, TrendingUp, Shield, DollarSign, Star } from 'lucide-react';
+import { AlertTriangle, Users, TrendingUp, Shield, Star } from 'lucide-react';
 
 interface CustomerRiskData {
   customerId: string;
@@ -63,7 +62,7 @@ export function CustomerRiskClient() {
   const [timeframe, setTimeframe] = useState('30d');
   const [riskLevel, setRiskLevel] = useState('all');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ timeframe, riskLevel });
@@ -77,11 +76,11 @@ export function CustomerRiskClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [riskLevel, timeframe]);
 
   useEffect(() => {
     fetchData();
-  }, [timeframe, riskLevel]);
+  }, [fetchData]);
 
   const getRiskColor = (level: string) => {
     switch (level) {

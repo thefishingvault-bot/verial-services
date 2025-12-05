@@ -1,8 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -56,7 +55,7 @@ export function TrustAnomaliesClient() {
   const [timeframe, setTimeframe] = useState('30d');
   const [severity, setSeverity] = useState('all');
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ timeframe, severity });
@@ -70,11 +69,11 @@ export function TrustAnomaliesClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [severity, timeframe]);
 
   useEffect(() => {
     fetchData();
-  }, [timeframe, severity]);
+  }, [fetchData]);
 
   const getSeverityColor = (severity: string) => {
     switch (severity) {

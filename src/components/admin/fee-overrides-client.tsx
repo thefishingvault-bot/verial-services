@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -51,7 +51,7 @@ export function FeeOverridesClient() {
   const [overrideReason, setOverrideReason] = useState('');
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 
-  const fetchFeeOverrides = async () => {
+  const fetchFeeOverrides = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -69,11 +69,11 @@ export function FeeOverridesClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter]);
 
   useEffect(() => {
     fetchFeeOverrides();
-  }, [statusFilter]);
+  }, [fetchFeeOverrides]);
 
   const handleSetOverride = async () => {
     if (!selectedProvider || !customFeeRate) return;
@@ -136,14 +136,6 @@ export function FeeOverridesClient() {
       style: 'currency',
       currency: 'USD',
     }).format(amount / 100); // Convert cents to dollars
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   if (loading) {

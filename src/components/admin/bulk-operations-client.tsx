@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -49,11 +49,7 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
 
-  useEffect(() => {
-    fetchItems();
-  }, [operationType, filters]);
-
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     setLoading(true);
     try {
       const url = new URL('/api/admin/bulk/list', window.location.origin);
@@ -73,7 +69,11 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
     } finally {
       setLoading(false);
     }
-  };
+  }, [filters, operationType]);
+
+  useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -113,6 +113,7 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
         alert('Failed to perform bulk action');
       }
     } catch (error) {
+      console.error('Error performing bulk action:', error);
       alert('Error performing bulk action');
     }
   };

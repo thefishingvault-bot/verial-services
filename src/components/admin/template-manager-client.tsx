@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,9 +10,8 @@ import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Search, FileText, BarChart3 } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface Template {
@@ -62,11 +61,7 @@ export default function TemplateManagerClient() {
   });
   const { toast } = useToast();
 
-  useEffect(() => {
-    fetchTemplates();
-  }, []);
-
-  const fetchTemplates = async () => {
+  const fetchTemplates = useCallback(async () => {
     try {
       const params = new URLSearchParams();
       if (selectedCategory !== 'all') params.append('category', selectedCategory);
@@ -87,11 +82,11 @@ export default function TemplateManagerClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm, selectedCategory, toast]);
 
   useEffect(() => {
     fetchTemplates();
-  }, [selectedCategory, searchTerm]);
+  }, [fetchTemplates]);
 
   const handleCreateTemplate = async () => {
     if (!formData.name || !formData.category || !formData.subject || !formData.content) {
@@ -129,6 +124,7 @@ export default function TemplateManagerClient() {
         });
       }
     } catch (error) {
+      console.error('Error creating template:', error);
       toast({
         title: 'Error',
         description: 'Network error occurred',
@@ -169,6 +165,7 @@ export default function TemplateManagerClient() {
         });
       }
     } catch (error) {
+      console.error('Error updating template:', error);
       toast({
         title: 'Error',
         description: 'Network error occurred',
@@ -198,6 +195,7 @@ export default function TemplateManagerClient() {
         });
       }
     } catch (error) {
+      console.error('Error deleting template:', error);
       toast({
         title: 'Error',
         description: 'Network error occurred',

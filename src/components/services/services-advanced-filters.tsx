@@ -10,10 +10,8 @@ import { Separator } from '@/components/ui/separator';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
   Star,
-  MapPin,
   Clock,
   CheckCircle,
-  X,
   RotateCcw
 } from 'lucide-react';
 

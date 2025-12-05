@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -51,7 +51,7 @@ export function PayoutExceptionsClient() {
   const [statusFilter, setStatusFilter] = useState('all');
   const [timeframeFilter, setTimeframeFilter] = useState('30d');
 
-  const fetchPayoutExceptions = async () => {
+  const fetchPayoutExceptions = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -70,11 +70,11 @@ export function PayoutExceptionsClient() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [statusFilter, timeframeFilter]);
 
   useEffect(() => {
     fetchPayoutExceptions();
-  }, [statusFilter, timeframeFilter]);
+  }, [fetchPayoutExceptions]);
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -115,14 +115,6 @@ export function PayoutExceptionsClient() {
       style: 'currency',
       currency: 'USD',
     }).format(amount / 100); // Convert cents to dollars
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-    });
   };
 
   if (loading) {

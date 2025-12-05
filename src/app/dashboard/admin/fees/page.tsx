@@ -16,8 +16,7 @@ import {
   Download,
   BarChart3,
   PieChart,
-  ArrowUpDown,
-  Filter
+  ArrowUpDown
 } from 'lucide-react';
 
 type SearchParams = Promise<{
@@ -266,52 +265,54 @@ export default async function AdminFeesPage({
               <p className="text-sm">Try broadening the date range to see more data.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <div className="flex items-center gap-2">
-                      Date
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">Gross Volume</TableHead>
-                  <TableHead className="text-right">Platform Fees</TableHead>
-                  <TableHead className="text-right">Net Revenue</TableHead>
-                  <TableHead className="text-right">Fee Rate</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {daily.map((d) => {
-                  const feeRate = d.gross > 0 ? (d.fees / d.gross) * 100 : 0;
-                  return (
-                    <TableRow key={d.date}>
-                      <TableCell className="font-medium">
-                        {new Date(d.date).toLocaleDateString('en-NZ', {
-                          weekday: 'short',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(d.gross)}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {formatCurrency(d.fees)}
-                      </TableCell>
-                      <TableCell className="text-right text-purple-600 font-medium">
-                        {formatCurrency(d.netToVerial)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline" className="text-xs">
-                          {feeRate.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        Date
+                        <ArrowUpDown className="h-4 w-4" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Gross Volume</TableHead>
+                    <TableHead className="text-right">Platform Fees</TableHead>
+                    <TableHead className="text-right">Net Revenue</TableHead>
+                    <TableHead className="text-right">Fee Rate</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {daily.map((d) => {
+                    const feeRate = d.gross > 0 ? (d.fees / d.gross) * 100 : 0;
+                    return (
+                      <TableRow key={d.date}>
+                        <TableCell className="font-medium">
+                          {new Date(d.date).toLocaleDateString('en-NZ', {
+                            weekday: 'short',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(d.gross)}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {formatCurrency(d.fees)}
+                        </TableCell>
+                        <TableCell className="text-right text-purple-600 font-medium">
+                          {formatCurrency(d.netToVerial)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className="text-xs">
+                            {feeRate.toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -335,55 +336,57 @@ export default async function AdminFeesPage({
               <p className="text-sm">Try broadening the date range or adjusting filters.</p>
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>
-                    <div className="flex items-center gap-2">
-                      Provider
-                      <ArrowUpDown className="h-4 w-4" />
-                    </div>
-                  </TableHead>
-                  <TableHead className="text-right">Gross Volume</TableHead>
-                  <TableHead className="text-right">Platform Fees</TableHead>
-                  <TableHead className="text-right">Net Revenue</TableHead>
-                  <TableHead className="text-right">Fee Rate</TableHead>
-                  <TableHead className="text-right">Contribution</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {providers.map((p) => {
-                  const feeRate = p.totalGross > 0 ? (p.totalFees / p.totalGross) * 100 : 0;
-                  const contributionPercent = totalFees > 0 ? (p.totalFees / totalFees) * 100 : 0;
-                  return (
-                    <TableRow key={p.providerName}>
-                      <TableCell>
-                        <div className="font-medium">{p.providerName}</div>
-                      </TableCell>
-                      <TableCell className="text-right font-medium">
-                        {formatCurrency(p.totalGross)}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {formatCurrency(p.totalFees)}
-                      </TableCell>
-                      <TableCell className="text-right text-purple-600 font-medium">
-                        {formatCurrency(p.totalNetToVerial)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="outline" className="text-xs">
-                          {feeRate.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Badge variant="secondary" className="text-xs">
-                          {contributionPercent.toFixed(1)}%
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>
+                      <div className="flex items-center gap-2">
+                        Provider
+                        <ArrowUpDown className="h-4 w-4" />
+                      </div>
+                    </TableHead>
+                    <TableHead className="text-right">Gross Volume</TableHead>
+                    <TableHead className="text-right">Platform Fees</TableHead>
+                    <TableHead className="text-right">Net Revenue</TableHead>
+                    <TableHead className="text-right">Fee Rate</TableHead>
+                    <TableHead className="text-right">Contribution</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {providers.map((p) => {
+                    const feeRate = p.totalGross > 0 ? (p.totalFees / p.totalGross) * 100 : 0;
+                    const contributionPercent = totalFees > 0 ? (p.totalFees / totalFees) * 100 : 0;
+                    return (
+                      <TableRow key={p.providerName}>
+                        <TableCell>
+                          <div className="font-medium">{p.providerName}</div>
+                        </TableCell>
+                        <TableCell className="text-right font-medium">
+                          {formatCurrency(p.totalGross)}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {formatCurrency(p.totalFees)}
+                        </TableCell>
+                        <TableCell className="text-right text-purple-600 font-medium">
+                          {formatCurrency(p.totalNetToVerial)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline" className="text-xs">
+                            {feeRate.toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="secondary" className="text-xs">
+                            {contributionPercent.toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
           )}
         </CardContent>
       </Card>
