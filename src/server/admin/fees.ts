@@ -84,6 +84,13 @@ export async function getAdminFeesReport({ from, to }: { from: string; to: strin
 
 const STATUS_ELIGIBLE = ['awaiting_payout', 'paid_out'] as const;
 
+function isMissingTableError(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: string }).code === '42P01';
+}
+
 export async function getFeesSummary(year: number): Promise<FeesSummary> {
   const start = new Date(Date.UTC(year, 0, 1));
   const end = new Date(Date.UTC(year + 1, 0, 1));
@@ -102,7 +109,13 @@ export async function getFeesSummary(year: number): Promise<FeesSummary> {
         inArray(providerEarnings.status, STATUS_ELIGIBLE),
       ),
     )
-    .then((rows) => rows[0]);
+    .then((rows) => rows[0])
+    .catch((error) => {
+      if (isMissingTableError(error)) {
+        return { totalGross: 0, totalFee: 0, totalGst: 0, totalNet: 0 };
+      }
+      throw error;
+    });
 
   const monthlyTrend = await db
     .select({
@@ -119,7 +132,13 @@ export async function getFeesSummary(year: number): Promise<FeesSummary> {
       ),
     )
     .groupBy(sql`date_trunc('month', ${providerEarnings.paidAt})`)
-    .orderBy(sql`date_trunc('month', ${providerEarnings.paidAt})`);
+    .orderBy(sql`date_trunc('month', ${providerEarnings.paidAt})`)
+    .catch((error) => {
+      if (isMissingTableError(error)) {
+        return [] as FeesSummary['monthlyTrend'];
+      }
+      throw error;
+    });
 
   return {
     year,
@@ -149,7 +168,13 @@ export async function getFeesByProvider(year: number): Promise<FeesByProviderRow
       ),
     )
     .groupBy(providerEarnings.providerId, providers.businessName)
-    .orderBy(desc(sql`coalesce(sum(${providerEarnings.platformFeeAmount}), 0)`));
+    .orderBy(desc(sql`coalesce(sum(${providerEarnings.platformFeeAmount}), 0)`))
+    .catch((error) => {
+      if (isMissingTableError(error)) {
+        return [] as FeesByProviderRow[];
+      }
+      throw error;
+    });
 
   return rows;
 }
