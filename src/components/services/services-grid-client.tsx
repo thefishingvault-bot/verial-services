@@ -14,7 +14,7 @@ import {
   Search,
 } from "lucide-react";
 import { LoadMoreButton } from "./load-more-button";
-import { FavoriteToggle } from "./favorite-toggle";
+import { FavoriteToggle } from "@/components/services/favorite-toggle";
 import type { ServiceWithProviderAndFavorite } from "@/lib/services-data";
 
 const categoryMap: Record<string, string> = {

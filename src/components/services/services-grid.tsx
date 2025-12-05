@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 import { LoadMoreButton } from './load-more-button';
 import type { ServicesFilters, ServiceWithProviderAndFavorite } from '@/lib/services-data';
-import { FavoriteToggle } from './favorite-toggle';
+import { FavoriteToggle } from '@/components/services/favorite-toggle';
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
