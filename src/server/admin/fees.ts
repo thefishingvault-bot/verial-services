@@ -38,7 +38,7 @@ export async function getAdminFeesReport({ from, to }: { from: string; to: strin
   toDate.setHours(23, 59, 59, 999); // End of day
 
   // Build base conditions
-  const baseConditions = [inArray(bookings.status, ['paid', 'completed'])];
+  const baseConditions = [sql`(${bookings.status})::text in ('paid','completed')`];
 
   // Add date conditions if specified
   baseConditions.push(gte(bookings.updatedAt, fromDate));

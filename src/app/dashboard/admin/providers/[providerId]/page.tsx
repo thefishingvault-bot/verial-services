@@ -53,12 +53,12 @@ export default async function AdminProviderDetailPage({
   const [bookingStats] = await db
     .select({
       total: sql<number>`count(*)`,
-      pending: sql<number>`sum(case when ${bookings.status} = 'pending' then 1 else 0 end)`,
-      accepted: sql<number>`sum(case when ${bookings.status} = 'accepted' then 1 else 0 end)`,
-      paid: sql<number>`sum(case when ${bookings.status} = 'paid' then 1 else 0 end)`,
-      completed: sql<number>`sum(case when ${bookings.status} = 'completed' then 1 else 0 end)`,
-      canceled: sql<number>`sum(case when ${bookings.status} in ('canceled_customer','canceled_provider') then 1 else 0 end)`,
-      lifetimeRevenue: sql<number>`coalesce(sum(case when ${bookings.status} in ('paid','completed') then ${bookings.priceAtBooking} else 0 end), 0)`,
+      pending: sql<number>`sum(case when ${bookings.status}::text = 'pending' then 1 else 0 end)`,
+      accepted: sql<number>`sum(case when ${bookings.status}::text = 'accepted' then 1 else 0 end)`,
+      paid: sql<number>`sum(case when ${bookings.status}::text = 'paid' then 1 else 0 end)`,
+      completed: sql<number>`sum(case when ${bookings.status}::text = 'completed' then 1 else 0 end)`,
+      canceled: sql<number>`sum(case when ${bookings.status}::text in ('canceled_customer','canceled_provider') then 1 else 0 end)`,
+      lifetimeRevenue: sql<number>`coalesce(sum(case when ${bookings.status}::text in ('paid','completed') then ${bookings.priceAtBooking} else 0 end), 0)`,
       lastBookingAt: sql<Date | null>`max(${bookings.createdAt})`,
     })
     .from(bookings)
