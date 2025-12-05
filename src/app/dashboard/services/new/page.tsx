@@ -29,6 +29,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Separator } from '@/components/ui/separator';
 import { ImageUploader } from '@/components/forms/image-uploader';
+import { useToast } from '@/components/ui/use-toast';
 
 // As per schema: serviceCategoryEnum
 const categories = [
@@ -64,6 +65,7 @@ export default function NewServicePage() {
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
 
   const router = useRouter();
+  const { toast } = useToast();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -113,7 +115,7 @@ export default function NewServicePage() {
   // --- Step 2: Handle image upload completion ---
   const handleUploadComplete = (publicUrl: string) => {
     setCoverImageUrl(publicUrl);
-    alert('Image uploaded successfully!');
+    toast({ title: 'Image uploaded successfully!' });
     // Optionally, redirect after a short delay
     setTimeout(() => {
       router.push('/dashboard/bookings/provider'); // Go to provider bookings

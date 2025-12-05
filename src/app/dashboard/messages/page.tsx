@@ -25,9 +25,11 @@ export default function MessagesPage() {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    const controller = new AbortController();
+
     async function load() {
       try {
-        const res = await fetch('/api/chat/conversations');
+        const res = await fetch('/api/chat/conversations', { signal: controller.signal });
 
         if (!res.ok) {
           setConversations([]);
@@ -45,6 +47,9 @@ export default function MessagesPage() {
 
         setConversations(conversationsArray);
       } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return;
+        }
         if (process.env.NODE_ENV !== 'production') {
           console.error('Failed to load conversations', error);
         }
@@ -55,6 +60,8 @@ export default function MessagesPage() {
     }
 
     void load();
+
+    return () => controller.abort();
   }, []);
 
   if (isLoading) {
@@ -78,7 +85,7 @@ export default function MessagesPage() {
   }
 
   return (
-    <div className="container max-w-4xl mx-auto p-4 md:p-8 h-[calc(100vh-5rem)] flex flex-col">
+    <div className="container max-w-4xl mx-auto p-4 md:p-8 flex flex-col min-h-[70vh] lg:h-[calc(100vh-5rem)]">
       <h1 className="text-3xl font-bold mb-6">Messages</h1>
       <div className="flex-1 overflow-y-auto space-y-2">
         {conversations.map((conv) => (

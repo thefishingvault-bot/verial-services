@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Loader2, AlertCircle } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ProviderSettings {
   chargesGst: boolean;
@@ -18,6 +19,7 @@ interface ProviderSettings {
 export default function ProviderSettingsPage() {
   const { user } = useUser();
   const isProvider = user?.publicMetadata?.role === 'provider';
+  const { toast } = useToast();
 
   const [chargesGst, setChargesGst] = useState(true); // Default to true
   const [baseSuburb, setBaseSuburb] = useState('');
@@ -70,7 +72,7 @@ export default function ProviderSettingsPage() {
 
       if (!res.ok) throw new Error(await res.text());
 
-      alert('Settings saved successfully!');
+      toast({ title: 'Settings saved successfully!' });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to save settings.';
       setError(message);
