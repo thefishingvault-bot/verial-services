@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -116,10 +117,13 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
               {/* Service Image */}
               <div className="relative aspect-video bg-gray-100 rounded-t-lg overflow-hidden">
                 {service.coverImageUrl ? (
-                  <img
+                  <Image
                     src={service.coverImageUrl}
                     alt={service.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    fill
+                    sizes="(min-width: 1024px) 33vw, (min-width: 768px) 50vw, 100vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-200"
+                    priority={false}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">

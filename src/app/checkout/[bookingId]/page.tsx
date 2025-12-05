@@ -62,10 +62,10 @@ export default function CheckoutPage() {
 
   const renderContent = () => {
     if (error) {
-      return <div style={{ color: 'red' }}>Error: {error}</div>;
+      return <div className="text-red-600">Error: {error}</div>;
     }
     if (!clientSecret || !bookingDetails) {
-      return <div>Loading payment details...</div>;
+      return <div className="text-sm text-muted-foreground">Loading payment details...</div>;
     }
     return (
       <StripeProvider clientSecret={clientSecret}>
@@ -75,14 +75,20 @@ export default function CheckoutPage() {
   };
 
   return (
-    <div style={{ padding: '2rem', maxWidth: '500px', margin: 'auto' }}>
-      <h1>Complete Your Payment</h1>
-      <p style={{ margin: '1rem 0' }}>
-        You are paying <strong>NZD ${((bookingDetails?.amount ?? 0) / 100).toFixed(2)}</strong>
-        <br />
-        Booking ID: {bookingId}
-      </p>
-      {renderContent()}
+    <div className="min-h-screen bg-white px-4 py-10">
+      <div className="mx-auto w-full max-w-xl space-y-4">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold text-gray-900">Complete Your Payment</h1>
+          <p className="text-sm text-gray-600">
+            You are paying <strong>NZD ${((bookingDetails?.amount ?? 0) / 100).toFixed(2)}</strong>
+            <br />
+            Booking ID: {bookingId}
+          </p>
+        </div>
+        <div className="rounded-lg border bg-white p-4 shadow-sm">
+          {renderContent()}
+        </div>
+      </div>
     </div>
   );
 }

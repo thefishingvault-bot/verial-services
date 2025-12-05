@@ -1,5 +1,6 @@
 "use client";
 
+import Image from 'next/image';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -93,10 +94,13 @@ export default function ServicesGrid({
               {/* Service Image */}
               <div className="relative aspect-[16/9] bg-gray-100 rounded-t-2xl overflow-hidden">
                 {service.coverImageUrl ? (
-                  <img
+                  <Image
                     src={service.coverImageUrl}
                     alt={service.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                    fill
+                    sizes="(min-width: 1280px) 30vw, (min-width: 768px) 45vw, 100vw"
+                    className="object-cover group-hover:scale-105 transition-transform duration-200"
+                    priority={false}
                   />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-gray-400">
@@ -129,7 +133,7 @@ export default function ServicesGrid({
                 </h3>
                 <div className="text-right ml-2">
                   <div className="text-lg font-bold text-gray-900">
-                    ${formatPrice(service.priceInCents / 100)}
+                    {formatPrice(service.priceInCents / 100)}
                   </div>
                   <div className="text-xs text-gray-500">per hour</div>
                 </div>
