@@ -3,12 +3,12 @@ import { bookings, providers, reviews, services, users, providerNotes } from '@/
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-trust-button';
 import { AddProviderNote } from '@/components/admin/add-provider-note';
+import { AdminProviderModerationControls } from '@/components/admin/admin-provider-moderation-controls';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -448,31 +448,15 @@ export default async function AdminProviderDetailPage({
         <Card className="md:col-span-1 lg:col-span-1">
           <CardHeader>
             <CardTitle>Admin actions</CardTitle>
-            <CardDescription>Planned moderation controls (not wired yet).</CardDescription>
+            <CardDescription>Moderation controls for this provider.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <div className="flex flex-wrap gap-2">
-              {provider.status === 'pending' && (
-                <>
-                  <Button size="sm" variant="outline" disabled>
-                    Approve provider
-                  </Button>
-                  <Button size="sm" variant="outline" disabled>
-                    Reject provider
-                  </Button>
-                </>
-              )}
-              <Button size="sm" variant="outline" disabled>
-                {provider.isVerified ? 'Remove verified badge' : 'Mark as verified'}
-              </Button>
-              <Button size="sm" variant="outline" disabled>
-                Ban provider
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              These controls are placeholders and will be wired to admin APIs in a later
-              task.
-            </p>
+          <CardContent>
+            <AdminProviderModerationControls
+              providerId={provider.id}
+              status={provider.status}
+              isVerified={provider.isVerified}
+              isSuspended={provider.isSuspended}
+            />
           </CardContent>
         </Card>
 
