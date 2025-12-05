@@ -1,7 +1,7 @@
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { bookings, users, providers, services } from "@/db/schema";
-import { eq, desc, and, or, like } from "drizzle-orm";
+import { bookings, users, providers, services, bookingStatusEnum } from "@/db/schema";
+import { eq, desc, and, or, like, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin";
@@ -31,6 +31,8 @@ interface SearchParams {
   tab?: string;
 }
 
+type BookingStatusValue = (typeof bookingStatusEnum.enumValues)[number];
+
 export default async function AdminBookingsPage({
   searchParams,
 }: {
@@ -55,8 +57,18 @@ export default async function AdminBookingsPage({
   // Build where conditions
   const whereConditions = [];
 
-  if (statusFilter !== "all") {
-    whereConditions.push(eq(bookings.status, statusFilter as "pending" | "confirmed" | "paid" | "completed" | "canceled"));
+  const canceledStatuses: BookingStatusValue[] = ["canceled_customer", "canceled_provider"];
+
+  if (statusFilter === "canceled") {
+    whereConditions.push(inArray(bookings.status, canceledStatuses));
+  } else {
+    const normalizedStatus = statusFilter === "confirmed" ? "accepted" : statusFilter;
+    if (
+      normalizedStatus !== "all" &&
+      bookingStatusEnum.enumValues.includes(normalizedStatus as BookingStatusValue)
+    ) {
+      whereConditions.push(eq(bookings.status, normalizedStatus as BookingStatusValue));
+    }
   }
 
   if (searchQuery) {
@@ -106,10 +118,12 @@ export default async function AdminBookingsPage({
   // Get summary stats
   const totalBookings = bookingsData.length;
   const pendingBookings = bookingsData.filter(b => b.status === "pending").length;
-  const confirmedBookings = bookingsData.filter(b => b.status === "confirmed").length;
+  const confirmedBookings = bookingsData.filter(b => b.status === "accepted").length;
   const paidBookings = bookingsData.filter(b => b.status === "paid").length;
   const completedBookings = bookingsData.filter(b => b.status === "completed").length;
-  const canceledBookings = bookingsData.filter(b => b.status === "canceled").length;
+  const canceledBookings = bookingsData.filter(
+    b => b.status === "canceled_customer" || b.status === "canceled_provider",
+  ).length;
   const totalRevenue = bookingsData
     .filter(b => b.status === "paid" || b.status === "completed")
     .reduce((sum, b) => sum + (b.priceAtBooking || 0), 0);
@@ -225,7 +239,7 @@ export default async function AdminBookingsPage({
           <TabsList>
             <TabsTrigger value="all">All Bookings ({totalBookings})</TabsTrigger>
             <TabsTrigger value="pending">Pending ({pendingBookings})</TabsTrigger>
-            <TabsTrigger value="confirmed">Confirmed ({confirmedBookings})</TabsTrigger>
+            <TabsTrigger value="confirmed">Accepted ({confirmedBookings})</TabsTrigger>
             <TabsTrigger value="paid">Paid ({paidBookings})</TabsTrigger>
             <TabsTrigger value="completed">Completed ({completedBookings})</TabsTrigger>
             <TabsTrigger value="canceled">Canceled ({canceledBookings})</TabsTrigger>
@@ -248,7 +262,7 @@ export default async function AdminBookingsPage({
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
+                <SelectItem value="confirmed">Accepted</SelectItem>
                 <SelectItem value="paid">Paid</SelectItem>
                 <SelectItem value="completed">Completed</SelectItem>
                 <SelectItem value="canceled">Canceled</SelectItem>
@@ -270,7 +284,7 @@ export default async function AdminBookingsPage({
         </TabsContent>
 
         <TabsContent value="confirmed" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "confirmed")} />
+          <BookingsTable bookings={bookingsData.filter(b => b.status === "accepted")} />
         </TabsContent>
 
         <TabsContent value="paid" className="space-y-4">
@@ -282,7 +296,7 @@ export default async function AdminBookingsPage({
         </TabsContent>
 
         <TabsContent value="canceled" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "canceled")} />
+          <BookingsTable bookings={bookingsData.filter(b => canceledStatuses.includes(b.status))} />
         </TabsContent>
       </Tabs>
     </div>
@@ -294,7 +308,7 @@ function BookingsTable({
 }: {
   bookings: Array<{
     id: string;
-    status: "pending" | "confirmed" | "paid" | "completed" | "canceled";
+    status: BookingStatusValue;
     scheduledDate: Date | null;
     priceAtBooking: number;
     paymentIntentId: string | null;
@@ -392,7 +406,7 @@ function BookingsTable({
                     <TableCell>
                       <Badge
                         variant={
-                          booking.status === "confirmed"
+                          booking.status === "accepted"
                             ? "default"
                             : booking.status === "pending"
                             ? "secondary"
@@ -400,7 +414,11 @@ function BookingsTable({
                             ? "default"
                             : booking.status === "completed"
                             ? "default"
-                            : "destructive"
+                            : booking.status?.startsWith("canceled")
+                            ? "destructive"
+                            : booking.status === "declined"
+                            ? "destructive"
+                            : "secondary"
                         }
                       >
                         {booking.status}
@@ -456,7 +474,7 @@ function BookingsTable({
                     </div>
                     <Badge
                       variant={
-                        booking.status === "confirmed"
+                        booking.status === "accepted"
                           ? "default"
                           : booking.status === "pending"
                           ? "secondary"
@@ -464,7 +482,11 @@ function BookingsTable({
                           ? "default"
                           : booking.status === "completed"
                           ? "default"
-                          : "destructive"
+                          : booking.status?.startsWith("canceled")
+                          ? "destructive"
+                          : booking.status === "declined"
+                          ? "destructive"
+                          : "secondary"
                       }
                     >
                       {booking.status}

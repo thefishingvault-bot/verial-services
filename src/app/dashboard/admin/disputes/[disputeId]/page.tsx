@@ -332,8 +332,8 @@ export default async function AdminDisputeDetailPage({
                   <Label className="text-sm font-medium">Booking Status</Label>
                   <Badge variant={
                     dispute.booking.status === "completed" ? "default" :
-                    dispute.booking.status === "confirmed" ? "secondary" :
-                    dispute.booking.status === "canceled" ? "destructive" :
+                    dispute.booking.status === "accepted" ? "secondary" :
+                    dispute.booking.status.startsWith("canceled") ? "destructive" :
                     "outline"
                   } className="mt-1">
                     {dispute.booking.status}

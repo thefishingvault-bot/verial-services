@@ -33,7 +33,8 @@ export async function ProviderThisWeekCard() {
     where: (b, { and, eq, gte, lt, ne }) =>
       and(
         eq(b.providerId, provider.id),
-        ne(b.status, "canceled"),
+        ne(b.status, "canceled_customer"),
+        ne(b.status, "canceled_provider"),
         gte(b.scheduledDate, startOfToday),
         lt(b.scheduledDate, endOfWeek),
       ),

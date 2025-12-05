@@ -54,10 +54,10 @@ export default async function AdminProviderDetailPage({
     .select({
       total: sql<number>`count(*)`,
       pending: sql<number>`sum(case when ${bookings.status} = 'pending' then 1 else 0 end)`,
-      confirmed: sql<number>`sum(case when ${bookings.status} = 'confirmed' then 1 else 0 end)`,
+      accepted: sql<number>`sum(case when ${bookings.status} = 'accepted' then 1 else 0 end)`,
       paid: sql<number>`sum(case when ${bookings.status} = 'paid' then 1 else 0 end)`,
       completed: sql<number>`sum(case when ${bookings.status} = 'completed' then 1 else 0 end)`,
-      canceled: sql<number>`sum(case when ${bookings.status} = 'canceled' then 1 else 0 end)`,
+      canceled: sql<number>`sum(case when ${bookings.status} in ('canceled_customer','canceled_provider') then 1 else 0 end)`,
       lifetimeRevenue: sql<number>`coalesce(sum(case when ${bookings.status} in ('paid','completed') then ${bookings.priceAtBooking} else 0 end), 0)`,
       lastBookingAt: sql<Date | null>`max(${bookings.createdAt})`,
     })
@@ -401,8 +401,8 @@ export default async function AdminProviderDetailPage({
                 <div className="font-medium">{bookingStats?.pending ?? 0}</div>
               </div>
               <div>
-                <div className="text-muted-foreground">Confirmed</div>
-                <div className="font-medium">{bookingStats?.confirmed ?? 0}</div>
+                <div className="text-muted-foreground">Accepted</div>
+                <div className="font-medium">{bookingStats?.accepted ?? 0}</div>
               </div>
               <div>
                 <div className="text-muted-foreground">Paid</div>

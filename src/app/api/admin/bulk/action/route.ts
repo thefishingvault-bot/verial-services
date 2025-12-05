@@ -70,7 +70,7 @@ export async function POST(req: Request) {
       if (action === 'cancel') {
         await db.update(bookings)
           .set({
-            status: 'canceled',
+            status: 'canceled_provider',
             updatedAt: new Date(),
           })
           .where(inArray(bookings.id, ids));

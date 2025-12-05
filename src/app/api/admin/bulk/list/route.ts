@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { providers, users, bookings, services } from '@/db/schema';
+import { providers, users, bookings, services, bookingStatusEnum } from '@/db/schema';
 import { eq, and, or, ilike, sql } from 'drizzle-orm';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
@@ -80,9 +80,12 @@ export async function GET(req: Request) {
     } else if (type === 'bookings') {
       // Build where conditions for bookings
       const whereConditions = [];
+      const statusFilter = bookingStatusEnum.enumValues.find(
+        (value): value is (typeof bookingStatusEnum.enumValues)[number] => value === status,
+      );
 
-      if (status !== 'all') {
-        whereConditions.push(eq(bookings.status, status as 'pending' | 'confirmed' | 'paid' | 'completed' | 'canceled'));
+      if (status !== 'all' && statusFilter) {
+        whereConditions.push(eq(bookings.status, statusFilter));
       }
 
       if (q) {
