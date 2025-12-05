@@ -583,11 +583,13 @@ export default function AdminProviderHealthPage() {
   );
 
   // Polling for periodic data refresh
-  const { } = usePollingUpdates(
-    async () => {
-      await fetchProviders();
-      return providers;
-    },
+  const pollProviders = useCallback(async () => {
+    await fetchProviders();
+    return null;
+  }, [fetchProviders]);
+
+  usePollingUpdates(
+    pollProviders,
     refreshInterval,
     autoRefreshEnabled
   );
