@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, users, bookings, reviews, trustIncidents, providerSuspensions, disputes, refunds, riskRules } from "@/db/schema";
-import { eq, desc, asc, sql } from "drizzle-orm";
+import { eq, desc, asc, sql, inArray, and } from "drizzle-orm";
 import { RiskScoringEngine } from "@/lib/risk-scoring";
 
 // TODO: Replace with actual role check utility if needed
@@ -214,11 +214,95 @@ export async function GET(request: NextRequest) {
         establishedProviders.reduce((sum, p) => sum + (p.completionRate30d - p.completionRate90d), 0) / establishedProviders.length : 0,
     };
 
-    // Activity patterns (simplified - in real implementation would analyze booking timestamps)
+    const providerIds = filteredProviders.map((p) => p.id);
+
+    // Time series for the last 90 days (real data, filled for missing days)
+    const bookingTrendsRaw = providerIds.length === 0 ? [] : await db
+      .select({
+        day: sql<Date>`date_trunc('day', ${bookings.createdAt})`,
+        total: sql<number>`count(*)`,
+        completed: sql<number>`count(case when ${bookings.status} = 'completed' then 1 end)`,
+        canceled: sql<number>`count(case when ${bookings.status} = 'canceled' then 1 end)`,
+      })
+      .from(bookings)
+      .where(and(
+        inArray(bookings.providerId, providerIds),
+        sql`${bookings.createdAt} >= ${ninetyDaysAgo}`
+      ))
+      .groupBy(sql`date_trunc('day', ${bookings.createdAt})`)
+      .orderBy(sql`date_trunc('day', ${bookings.createdAt})`);
+
+    const trendMap = new Map<string, { total: number; completed: number; canceled: number }>();
+    bookingTrendsRaw.forEach((row) => {
+      const key = new Date(row.day).toISOString().slice(0, 10);
+      trendMap.set(key, {
+        total: Number(row.total),
+        completed: Number(row.completed),
+        canceled: Number(row.canceled),
+      });
+    });
+
+    const bookingTimeSeries: Array<{ date: string; total: number; completed: number; canceled: number; completionRate: number; cancellationRate: number; }>
+      = [];
+
+    for (let i = 89; i >= 0; i--) {
+      const date = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      const key = date.toISOString().slice(0, 10);
+      const value = trendMap.get(key) || { total: 0, completed: 0, canceled: 0 };
+      const completionRate = value.total > 0 ? (value.completed / value.total) * 100 : 0;
+      const cancellationRate = value.total > 0 ? (value.canceled / value.total) * 100 : 0;
+      bookingTimeSeries.push({
+        date: key,
+        total: value.total,
+        completed: value.completed,
+        canceled: value.canceled,
+        completionRate,
+        cancellationRate,
+      });
+    }
+
+    // Activity patterns derived from bookings in the last 30 days
+    const activityByHour = providerIds.length === 0 ? [] : await db
+      .select({
+        hour: sql<number>`extract(hour from ${bookings.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(bookings)
+      .where(and(
+        inArray(bookings.providerId, providerIds),
+        sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
+      ))
+      .groupBy(sql`extract(hour from ${bookings.createdAt})`)
+      .orderBy(sql`extract(hour from ${bookings.createdAt})`);
+
+    const activityByWeekday = providerIds.length === 0 ? [] : await db
+      .select({
+        weekday: sql<number>`extract(dow from ${bookings.createdAt})`,
+        count: sql<number>`count(*)`,
+      })
+      .from(bookings)
+      .where(and(
+        inArray(bookings.providerId, providerIds),
+        sql`${bookings.createdAt} >= ${thirtyDaysAgo}`
+      ))
+      .groupBy(sql`extract(dow from ${bookings.createdAt})`)
+      .orderBy(sql`extract(dow from ${bookings.createdAt})`);
+
+    const weekdayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+    const busiestDays = activityByWeekday
+      .sort((a, b) => Number(b.count) - Number(a.count))
+      .slice(0, 2)
+      .map((d) => weekdayNames[Math.max(0, Math.min(6, Number(d.weekday)))]);
+
+    const peakHourEntries = activityByHour
+      .sort((a, b) => Number(b.count) - Number(a.count))
+      .slice(0, 2)
+      .map((h) => `${String(Number(h.hour)).padStart(2, "0")}:00`);
+
     const activityPatterns = {
-      peakHours: "2-6 PM", // Would be calculated from booking data
-      busiestDays: "Wed, Thu, Fri", // Would be calculated from booking data
-      avgResponseTime: 2.3, // Would be calculated from booking response data
+      peakHours: peakHourEntries.length > 0 ? peakHourEntries.join(" & ") : "N/A",
+      busiestDays: busiestDays.length > 0 ? busiestDays.join(", ") : "N/A",
+      avgResponseTime: 0, // Not tracked yet
     };
 
     return NextResponse.json({
@@ -226,6 +310,9 @@ export async function GET(request: NextRequest) {
       analytics: {
         platformAverages,
         growthMetrics,
+        trends: {
+          bookingTimeSeries,
+        },
         activityPatterns,
         summary: {
           totalProviders,

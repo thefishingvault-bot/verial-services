@@ -71,6 +71,15 @@ type ProviderHealth = {
   }>;
 };
 
+type BookingTrendPoint = {
+  date: string;
+  total: number;
+  completed: number;
+  canceled: number;
+  completionRate: number;
+  cancellationRate: number;
+};
+
 type AnalyticsData = {
   platformAverages: {
     avgCompletionRate: number;
@@ -85,6 +94,9 @@ type AnalyticsData = {
     newProviders90d: number;
     avgBookingGrowth: number;
     avgCompletionGrowth: number;
+  };
+  trends: {
+    bookingTimeSeries: BookingTrendPoint[];
   };
   activityPatterns: {
     peakHours: string;
@@ -299,7 +311,10 @@ export default function AdminProviderHealthPage() {
       const response = await fetch(`/api/admin/providers/health?${params}`);
       if (response.ok) {
         const data: ApiResponse = await response.json();
-        setProviders(data.providers);
+        setProviders(data.providers.map((provider) => ({
+          ...provider,
+          createdAt: new Date(provider.createdAt),
+        })));
         setAnalytics(data.analytics);
       }
     } catch (error) {
@@ -347,7 +362,14 @@ export default function AdminProviderHealthPage() {
     }
     try {
       const filename = `provider-health-report-${new Date().toISOString().split('T')[0]}.html`;
-      await generatePDFReport(providers, analytics, filename);
+      const reportAnalytics: AnalyticsData = {
+        ...analytics,
+        activityPatterns: {
+          ...analytics.activityPatterns,
+          avgResponseTime: analytics.activityPatterns.avgResponseTime ?? 0,
+        },
+      };
+      await generatePDFReport(providers, reportAnalytics, filename);
       setShowExportMenu(false);
     } catch (error) {
       console.error('PDF generation failed:', error);
@@ -517,40 +539,24 @@ export default function AdminProviderHealthPage() {
     setSavedFilters(presets);
   }, []);
 
-  // Initialize sample notifications for demo
+  // Derive notifications from real provider risk signals
   useEffect(() => {
-    const sampleNotifications: NotificationItem[] = [
-      {
-        id: 'sample-1',
-        type: 'warning',
-        title: 'High Risk Provider Alert',
-        message: 'Provider "John\'s Cleaning Service" has exceeded risk threshold with 3 unresolved incidents.',
-        timestamp: new Date(Date.now() - 5 * 60 * 1000), // 5 minutes ago
+    const riskAlerts = providers
+      .filter((p) => p.riskLevel === 'critical' || p.unresolvedIncidents > 0)
+      .slice(0, 5)
+      .map<NotificationItem>((p) => ({
+        id: `alert-${p.id}`,
+        type: p.riskLevel === 'critical' ? 'error' : 'warning',
+        title: p.riskLevel === 'critical' ? 'Critical Risk Provider' : 'Unresolved Incidents',
+        message: `${p.businessName} has ${p.unresolvedIncidents} unresolved incident(s) and risk level ${p.riskLevel}.`,
+        timestamp: new Date(),
         read: false,
-        actionUrl: '/dashboard/admin/providers/provider-123',
-        actionText: 'Review Provider'
-      },
-      {
-        id: 'sample-2',
-        type: 'info',
-        title: 'Scheduled Report Generated',
-        message: 'Weekly provider health summary report has been generated and sent to admin@company.com',
-        timestamp: new Date(Date.now() - 15 * 60 * 1000), // 15 minutes ago
-        read: true
-      },
-      {
-        id: 'sample-3',
-        type: 'error',
-        title: 'Critical System Alert',
-        message: 'Multiple providers have reported payment processing issues in the last hour.',
-        timestamp: new Date(Date.now() - 30 * 60 * 1000), // 30 minutes ago
-        read: false,
-        actionUrl: '/dashboard/admin/payments',
-        actionText: 'Check Payments'
-      }
-    ];
-    setNotifications(sampleNotifications);
-  }, []);
+        actionUrl: `/dashboard/admin/providers/${p.id}`,
+        actionText: 'View Provider',
+      }));
+
+    setNotifications(riskAlerts);
+  }, [providers]);
 
   // Real-time updates
   const { isConnected, lastUpdate, isRetrying } = useRealTimeUpdates(
@@ -674,6 +680,24 @@ export default function AdminProviderHealthPage() {
   const criticalRisk = filteredProviders.filter(p => p.riskLevel === "critical").length;
   const highRisk = filteredProviders.filter(p => p.riskLevel === "high").length;
   const unresolvedIncidents = filteredProviders.reduce((sum, p) => sum + p.unresolvedIncidents, 0);
+  const providerCount = providers.length || 1;
+  const profileCompleteCount = providers.filter(p => p.businessName && p.handle).length;
+  const servicesAddedCount = providers.filter(p => p.totalBookings > 0).length;
+  const reviewsCount = providers.filter(p => p.totalReviews > 0).length;
+  const trust80Count = providers.filter(p => p.trustScore >= 80).length;
+  const averageCompletionRate = providers.length > 0
+    ? Math.round(providers.reduce((sum, p) => sum + p.completionRate, 0) / providers.length)
+    : 0;
+
+  const completionTrend = analytics?.trends.bookingTimeSeries.map((point) => ({
+    name: point.date.slice(5),
+    value: Number(point.completionRate.toFixed(1)),
+  })) || [];
+
+  const bookingVolumeTrend = analytics?.trends.bookingTimeSeries.map((point) => ({
+    name: point.date.slice(5),
+    value: point.total,
+  })) || [];
 
   return (
     <div className="space-y-6">
@@ -1260,15 +1284,7 @@ export default function AdminProviderHealthPage() {
             <div>
               <h5 className="text-sm font-medium text-gray-700 mb-2">Completion Rate Trend</h5>
               <LineChart
-                data={[
-                  { name: 'Day 1', value: 85 },
-                  { name: 'Day 15', value: 87 },
-                  { name: 'Day 30', value: 82 },
-                  { name: 'Day 45', value: 89 },
-                  { name: 'Day 60', value: 91 },
-                  { name: 'Day 75', value: 88 },
-                  { name: 'Day 90', value: 92 }
-                ]}
+                data={completionTrend}
                 width={300}
                 height={150}
                 color="#10B981"
@@ -1277,15 +1293,7 @@ export default function AdminProviderHealthPage() {
             <div>
               <h5 className="text-sm font-medium text-gray-700 mb-2">Booking Volume Trend</h5>
               <AreaChart
-                data={[
-                  { name: 'Day 1', value: 45 },
-                  { name: 'Day 15', value: 52 },
-                  { name: 'Day 30', value: 48 },
-                  { name: 'Day 45', value: 61 },
-                  { name: 'Day 60', value: 55 },
-                  { name: 'Day 75', value: 58 },
-                  { name: 'Day 90', value: 63 }
-                ]}
+                data={bookingVolumeTrend}
                 width={300}
                 height={150}
                 color="#3B82F6"
@@ -1302,15 +1310,7 @@ export default function AdminProviderHealthPage() {
             <div>
               <h5 className="text-sm font-medium text-gray-700 mb-2">Booking Volume Trends (Last 90 Days)</h5>
               <AreaChart
-                data={Array.from({ length: 90 }, (_, i) => {
-                  const date = new Date();
-                  date.setDate(date.getDate() - (89 - i));
-                  const bookings = Math.floor(Math.random() * 50) + 20; // Mock data
-                  return {
-                    name: date.toISOString().split('T')[0],
-                    value: bookings
-                  };
-                })}
+                data={bookingVolumeTrend}
                 width={400}
                 height={200}
                 color="#3B82F6"
@@ -1343,7 +1343,7 @@ export default function AdminProviderHealthPage() {
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="text-lg font-semibold text-green-900 mb-1">Avg Completion Rate</div>
               <div className="text-3xl font-bold text-green-600">
-                {Math.round(providers.reduce((sum, p) => sum + p.completionRate, 0) / providers.length)}%
+                {averageCompletionRate}%
               </div>
               <div className="text-sm text-green-700 mt-1">Across all providers</div>
             </div>
@@ -1409,15 +1409,19 @@ export default function AdminProviderHealthPage() {
             <div className="space-y-3">
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">Peak Hours</span>
-                <span className="text-sm font-medium">{analytics?.activityPatterns.peakHours || "2-6 PM"}</span>
+                <span className="text-sm font-medium">{analytics?.activityPatterns.peakHours || "N/A"}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">Busiest Days</span>
-                <span className="text-sm font-medium">{analytics?.activityPatterns.busiestDays || "Wed, Thu, Fri"}</span>
+                <span className="text-sm font-medium">{analytics?.activityPatterns.busiestDays || "N/A"}</span>
               </div>
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">Avg Response Time</span>
-                <span className="text-sm font-medium">{analytics?.activityPatterns.avgResponseTime || 2.3} hours</span>
+                <span className="text-sm font-medium">
+                  {analytics && analytics.activityPatterns.avgResponseTime > 0
+                    ? `${analytics.activityPatterns.avgResponseTime} hours`
+                    : 'N/A'}
+                </span>
               </div>
             </div>
           </div>
@@ -1480,13 +1484,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Profile Complete</span>
                 <span className="text-green-600 font-bold">
-                  {providers.filter(p => p.businessName && p.handle).length}/{providers.length}
+                  {profileCompleteCount}/{providers.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-green-600 h-2 rounded-full"
-                  style={{ width: `${(providers.filter(p => p.businessName && p.handle).length / providers.length) * 100}%` }}
+                  style={{ width: `${providers.length ? (profileCompleteCount / providers.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1495,13 +1499,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Services Added</span>
                 <span className="text-blue-600 font-bold">
-                  {providers.filter(p => p.totalBookings > 0).length}/{providers.length}
+                  {servicesAddedCount}/{providers.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full"
-                  style={{ width: `${(providers.filter(p => p.totalBookings > 0).length / providers.length) * 100}%` }}
+                  style={{ width: `${providers.length ? (servicesAddedCount / providers.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1510,13 +1514,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Reviews Received</span>
                 <span className="text-purple-600 font-bold">
-                  {providers.filter(p => p.totalReviews > 0).length}/{providers.length}
+                  {reviewsCount}/{providers.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-purple-600 h-2 rounded-full"
-                  style={{ width: `${(providers.filter(p => p.totalReviews > 0).length / providers.length) * 100}%` }}
+                  style={{ width: `${providers.length ? (reviewsCount / providers.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1525,13 +1529,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Trust Score ≥80</span>
                 <span className="text-emerald-600 font-bold">
-                  {providers.filter(p => p.trustScore >= 80).length}/{providers.length}
+                  {trust80Count}/{providers.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-emerald-600 h-2 rounded-full"
-                  style={{ width: `${(providers.filter(p => p.trustScore >= 80).length / providers.length) * 100}%` }}
+                  style={{ width: `${providers.length ? (trust80Count / providers.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1550,7 +1554,7 @@ export default function AdminProviderHealthPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-blue-600 h-2 rounded-full"
-                      style={{ width: `${(providers.filter(p => p.daysActive <= 30).length / providers.length) * 100}%` }}
+                      style={{ width: `${(providers.filter(p => p.daysActive <= 30).length / providerCount) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1562,7 +1566,7 @@ export default function AdminProviderHealthPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-green-600 h-2 rounded-full"
-                      style={{ width: `${(providers.filter(p => p.daysActive > 30 && p.daysActive <= 90).length / providers.length) * 100}%` }}
+                      style={{ width: `${(providers.filter(p => p.daysActive > 30 && p.daysActive <= 90).length / providerCount) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1574,7 +1578,7 @@ export default function AdminProviderHealthPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-yellow-600 h-2 rounded-full"
-                      style={{ width: `${(providers.filter(p => p.daysActive > 90 && p.daysActive <= 180).length / providers.length) * 100}%` }}
+                      style={{ width: `${(providers.filter(p => p.daysActive > 90 && p.daysActive <= 180).length / providerCount) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1586,7 +1590,7 @@ export default function AdminProviderHealthPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-purple-600 h-2 rounded-full"
-                      style={{ width: `${(providers.filter(p => p.daysActive > 180).length / providers.length) * 100}%` }}
+                      style={{ width: `${(providers.filter(p => p.daysActive > 180).length / providerCount) * 100}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1743,12 +1747,18 @@ export default function AdminProviderHealthPage() {
                     ))}
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
+                    <a
+                      href={`/dashboard/admin/trust?search=${encodeURIComponent(provider.businessName)}`}
+                      className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                    >
                       Escalate
-                    </button>
-                    <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                    </a>
+                    <a
+                      href={`/dashboard/admin/providers/${provider.id}`}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
                       Review
-                    </button>
+                    </a>
                     <a
                       href={`/dashboard/admin/providers/${provider.id}`}
                       className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
@@ -1841,12 +1851,12 @@ export default function AdminProviderHealthPage() {
                     )}
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
-                      Apply All
-                    </button>
-                    <button className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700">
-                      Review
-                    </button>
+                    <a
+                      href={`/dashboard/admin/providers/${provider.id}`}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
+                      Review Provider
+                    </a>
                   </div>
                 </div>
               ))}
@@ -2085,35 +2095,10 @@ export default function AdminProviderHealthPage() {
                         >
                           👁️ Details
                         </a>
-                        <button
-                          className="text-orange-600 hover:text-orange-900 text-xs bg-orange-50 px-2 py-1 rounded"
-                          title="Create new trust incident"
-                          onClick={() => {/* TODO: Implement create incident modal */}}
-                        >
-                          🚨 Incident
-                        </button>
-                        <button
-                          className={`text-xs px-2 py-1 rounded ${
-                            provider.hasActiveSuspension
-                              ? 'text-green-600 bg-green-50 hover:text-green-900'
-                              : 'text-red-600 bg-red-50 hover:text-red-900'
-                          }`}
-                          title={provider.hasActiveSuspension ? "Unsuspend provider" : "Suspend provider"}
-                          onClick={() => {/* TODO: Implement suspension toggle */}}
-                        >
-                          {provider.hasActiveSuspension ? '🔓 Unsuspend' : '🚫 Suspend'}
-                        </button>
                       </div>
 
                       {/* Secondary Actions Row */}
                       <div className="flex gap-1 flex-wrap">
-                        <button
-                          className="text-purple-600 hover:text-purple-900 text-xs bg-purple-50 px-2 py-1 rounded"
-                          title="Send notification to provider"
-                          onClick={() => {/* TODO: Implement notification modal */}}
-                        >
-                          📧 Notify
-                        </button>
                         <a
                           href={`/dashboard/admin/bookings?provider=${provider.id}`}
                           className="text-indigo-600 hover:text-indigo-900 text-xs bg-indigo-50 px-2 py-1 rounded"
@@ -2229,28 +2214,6 @@ export default function AdminProviderHealthPage() {
                   >
                     👁️ Details
                   </a>
-                  <button
-                    className="text-orange-600 hover:text-orange-900 text-xs bg-orange-50 px-2 py-1 rounded"
-                    onClick={() => {/* TODO: Implement create incident modal */}}
-                  >
-                    🚨 Incident
-                  </button>
-                  <button
-                    className={`text-xs px-2 py-1 rounded ${
-                      provider.hasActiveSuspension
-                        ? 'text-green-600 bg-green-50 hover:text-green-900'
-                        : 'text-red-600 bg-red-50 hover:text-red-900'
-                    }`}
-                    onClick={() => {/* TODO: Implement suspension toggle */}}
-                  >
-                    {provider.hasActiveSuspension ? '🔓 Unsuspend' : '🚫 Suspend'}
-                  </button>
-                  <button
-                    className="text-purple-600 hover:text-purple-900 text-xs bg-purple-50 px-2 py-1 rounded"
-                    onClick={() => {/* TODO: Implement notification modal */}}
-                  >
-                    📧 Notify
-                  </button>
                 </div>
 
                 {/* Secondary Actions */}
