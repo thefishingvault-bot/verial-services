@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -68,6 +69,26 @@ interface ServicesGridClientProps {
 }
 
 export function ServicesGridClient({ services, searchParams, hasMore, currentPage }: ServicesGridClientProps) {
+  const [items, setItems] = useState<ServiceWithProviderAndFavorite[]>(services);
+
+  useEffect(() => {
+    setItems(services);
+  }, [services]);
+
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
+  }, [items]);
+
+  const handleFavoriteChange = (serviceId: string, next: boolean) => {
+    setItems((prev) =>
+      prev.map((item) =>
+        item.id === serviceId
+          ? { ...item, isFavorite: next }
+          : item,
+      ),
+    );
+  };
+
   if (services.length === 0) {
     return (
       <div className="text-center py-12">
@@ -89,7 +110,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
     <div className="space-y-6">
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {services.map((service) => (
+        {sortedItems.map((service) => (
           <Card key={service.id} className="group hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="p-0">
               {/* Service Image */}
@@ -110,6 +131,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                 <FavoriteToggle
                   serviceId={service.id}
                   initialIsFavorite={service.isFavorite}
+                  onToggleOptimistic={(next) => handleFavoriteChange(service.id, next)}
                 />
 
                 {/* Category Badge */}

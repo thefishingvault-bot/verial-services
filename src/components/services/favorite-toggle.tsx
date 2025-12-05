@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@clerk/nextjs";
 import { Heart } from "lucide-react";
@@ -9,13 +9,19 @@ import { cn } from "@/lib/utils";
 interface FavoriteToggleProps {
   serviceId: string;
   initialIsFavorite: boolean;
+  onToggleOptimistic?: (next: boolean) => void;
+  onError?: () => void;
 }
 
-export function FavoriteToggle({ serviceId, initialIsFavorite }: FavoriteToggleProps) {
+export function FavoriteToggle({ serviceId, initialIsFavorite, onToggleOptimistic, onError }: FavoriteToggleProps) {
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
   const { isSignedIn } = useAuth();
+
+  useEffect(() => {
+    setIsFavorite(initialIsFavorite);
+  }, [initialIsFavorite]);
 
   const toggleFavorite = () => {
     if (!isSignedIn) {
@@ -26,6 +32,7 @@ export function FavoriteToggle({ serviceId, initialIsFavorite }: FavoriteToggleP
     startTransition(async () => {
       const next = !isFavorite;
       setIsFavorite(next);
+      onToggleOptimistic?.(next);
 
       try {
         if (next) {
@@ -39,10 +46,9 @@ export function FavoriteToggle({ serviceId, initialIsFavorite }: FavoriteToggleP
             method: "DELETE",
           });
         }
-
-        router.refresh();
       } catch (error) {
         setIsFavorite(!next);
+        onError?.();
         console.error("Failed to toggle favorite", error);
       }
     });
