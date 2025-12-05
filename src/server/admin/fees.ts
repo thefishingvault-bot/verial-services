@@ -85,10 +85,12 @@ export async function getAdminFeesReport({ from, to }: { from: string; to: strin
 const STATUS_ELIGIBLE = ['awaiting_payout', 'paid_out'] as const;
 
 function isMissingTableError(error: unknown): boolean {
-  return typeof error === 'object'
-    && error !== null
-    && 'code' in error
-    && (error as { code?: string }).code === '42P01';
+  if (typeof error !== 'object' || error === null) return false;
+
+  const code = (error as { code?: string }).code;
+  const causeCode = (error as { cause?: { code?: string } }).cause?.code;
+
+  return code === '42P01' || causeCode === '42P01';
 }
 
 export async function getFeesSummary(year: number): Promise<FeesSummary> {
