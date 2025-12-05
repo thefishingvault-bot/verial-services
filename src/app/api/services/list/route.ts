@@ -130,7 +130,7 @@ export async function GET(req: NextRequest) {
           rating: reviews.rating,
         })
         .from(reviews)
-        .where(inArray(reviews.providerId, providerIds));
+        .where(and(inArray(reviews.providerId, providerIds), eq(reviews.isHidden, false)));
 
       reviewData.forEach((r) => {
         const key = String(r.providerId);

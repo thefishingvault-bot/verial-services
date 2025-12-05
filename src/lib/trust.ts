@@ -41,7 +41,7 @@ export const calculateTrustScore = async (providerId: string): Promise<number> =
         reviewCount: sql<number>`COUNT(*)`,
       })
       .from(reviews)
-      .where(eq(reviews.providerId, providerId));
+      .where(and(eq(reviews.providerId, providerId), eq(reviews.isHidden, false)));
 
     const avgRating = reviewStats[0]?.avgRating || 0;
     const reviewCount = reviewStats[0]?.reviewCount || 0;

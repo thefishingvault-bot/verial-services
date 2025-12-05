@@ -42,6 +42,17 @@ interface ServiceDetails {
   };
 }
 
+interface ServiceReview {
+  id: string;
+  rating: number;
+  comment: string | null;
+  createdAt: string;
+  user?: {
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+}
+
 export default function ServiceDetailPage() {
   const params = useParams();
   const slug = params.slug as string;
@@ -51,6 +62,7 @@ export default function ServiceDetailPage() {
   const [service, setService] = useState<ServiceDetails | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reviewsData, setReviewsData] = useState<{ items: ServiceReview[]; avgRating: number; total: number }>({ items: [], avgRating: 0, total: 0 });
 
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [availableSlots, setAvailableSlots] = useState<string[]>([]);
@@ -107,6 +119,23 @@ export default function ServiceDetailPage() {
         setIsLoadingSlots(false);
       });
   }, [service, selectedDate]);
+
+  useEffect(() => {
+    if (!service?.id) return;
+
+    fetch(`/api/reviews/service/${service.id}?pageSize=20`)
+      .then((res) => res.json())
+      .then((data) => {
+        setReviewsData({
+          items: data.items ?? [],
+          avgRating: data.avgRating ?? 0,
+          total: data.total ?? 0,
+        });
+      })
+      .catch(() => {
+        // silent fail for reviews
+      });
+  }, [service?.id]);
 
   // Fetch blocked dates (time offs) for this provider
   useEffect(() => {
@@ -261,6 +290,38 @@ export default function ServiceDetailPage() {
               </p>
             </CardContent>
           </Card>
+
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>What customers are saying</CardTitle>
+                  <CardDescription>
+                    {reviewsData.total > 0
+                      ? `${reviewsData.avgRating.toFixed(1)} / 5 from ${reviewsData.total} review${reviewsData.total === 1 ? '' : 's'}`
+                      : 'No reviews yet.'}
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {reviewsData.items.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No reviews yet.</p>
+                  ) : (
+                    reviewsData.items.map((review) => {
+                      const name = [review.user?.firstName, review.user?.lastName?.charAt(0)].filter(Boolean).join(' ') || 'Customer';
+                      return (
+                        <div key={review.id} className="rounded-md border p-3 space-y-1">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="font-medium">{name}</span>
+                            <span className="text-yellow-500 font-semibold">{review.rating} ★</span>
+                          </div>
+                          {review.comment && <p className="text-sm text-muted-foreground">{review.comment}</p>}
+                          <span className="text-[11px] text-muted-foreground">
+                            {new Date(review.createdAt).toLocaleDateString('en-NZ')}
+                          </span>
+                        </div>
+                      );
+                    })
+                  )}
+                </CardContent>
+              </Card>
         </div>
 
         <div className="md:col-span-1">

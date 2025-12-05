@@ -264,8 +264,17 @@ export const reviews = pgTable("reviews", {
   providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }), // The provider being reviewed
   bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }).unique(), // A booking can only have one review
 
+  serviceId: varchar("service_id", { length: 255 }).references(() => services.id, { onDelete: "set null" }), // Optional denorm to the service
+
   rating: integer("rating").notNull(), // Rating from 1 to 5
   comment: text("comment"),
+
+  tipAmount: integer("tip_amount"), // Optional future tip in cents
+
+  isHidden: boolean("is_hidden").default(false).notNull(),
+  hiddenReason: text("hidden_reason"),
+  hiddenBy: varchar("hidden_by", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+  hiddenAt: timestamp("hidden_at"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

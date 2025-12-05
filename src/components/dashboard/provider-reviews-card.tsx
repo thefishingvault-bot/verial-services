@@ -28,7 +28,7 @@ export async function ProviderReviewsCard() {
   if (!provider) return null;
 
   const reviews = await db.query.reviews.findMany({
-    where: (r, { eq }) => eq(r.providerId, provider.id),
+    where: (r, { eq, and }) => and(eq(r.providerId, provider.id), eq(r.isHidden, false)),
     orderBy: (r, { desc }) => desc(r.createdAt),
     limit: 10,
     columns: { id: true, rating: true, comment: true, createdAt: true },

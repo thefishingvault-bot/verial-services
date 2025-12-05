@@ -63,6 +63,7 @@ async function getProviderData(handle: string, currentUserId: string | null) {
             columns: { firstName: true, lastName: true },
           },
         },
+        where: eq(reviews.isHidden, false),
         orderBy: [desc(reviews.createdAt)],
       },
       bookings: {
