@@ -3,7 +3,7 @@
 import { useUser } from "@clerk/nextjs";
 import Link from "next/link";
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock, Shield, AlertTriangle, BarChart3, FileText, Gavel } from "lucide-react";
+import { Search, Calendar, User, Package, Briefcase, CreditCard, Settings, Clock, Shield, AlertTriangle, BarChart3, FileText, Gavel, Banknote } from "lucide-react";
 import { ProviderAnalyticsCardClient } from "@/components/dashboard/provider-analytics-card.client";
 import { ProviderThisWeekCardClient } from "@/components/dashboard/provider-this-week-card.client";
 import { ProviderReviewsCardClient } from "@/components/dashboard/provider-reviews-card.client";
@@ -138,6 +138,18 @@ export default function DashboardPage() {
           </Link>
 
           {/* Finance */}
+          <Link href="/dashboard/admin/payments">
+            <Card className="hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div className="space-y-1">
+                  <CardTitle>Manage Payments</CardTitle>
+                  <CardDescription>Monitor charges, refunds, and payouts.</CardDescription>
+                </div>
+                <Banknote className="h-8 w-8 text-muted-foreground" />
+              </CardHeader>
+            </Card>
+          </Link>
+
           <Link href="/dashboard/admin/fees">
             <Card className="hover:shadow-lg transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between">
