@@ -390,8 +390,11 @@ function BookingTableRow({ booking }: { booking: BookingRow }) {
       <TableCell>
         <Badge variant={
           booking.status === 'completed' ? 'default' :
-          booking.status === 'confirmed' ? 'secondary' :
-          booking.status === 'pending' ? 'outline' : 'destructive'
+          booking.status === 'paid' ? 'secondary' :
+          booking.status === 'accepted' ? 'secondary' :
+          booking.status === 'pending' ? 'outline' :
+          booking.status === 'declined' ? 'destructive' :
+          booking.status?.startsWith('canceled') ? 'destructive' : 'outline'
         }>
           {booking.status}
         </Badge>

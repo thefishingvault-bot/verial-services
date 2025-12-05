@@ -22,9 +22,20 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { formatPrice } from "@/lib/utils";
 import { useToast } from "@/components/ui/use-toast";
 
+type ProviderBookingStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "paid"
+  | "completed"
+  | "canceled_customer"
+  | "canceled_provider"
+  | "disputed"
+  | "refunded";
+
 interface ProviderBooking {
   id: string;
-  status: "pending" | "confirmed" | "paid" | "completed" | "canceled";
+  status: ProviderBookingStatus;
   createdAt: string;
   scheduledDate: string | null;
   priceAtBooking: number;
@@ -42,14 +53,21 @@ const getStatusColor = (status: ProviderBooking["status"]) => {
   switch (status) {
     case "pending":
       return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
-    case "confirmed":
+    case "accepted":
       return "bg-blue-100 text-blue-800 hover:bg-blue-100";
+    case "declined":
+    case "canceled_provider":
+      return "bg-red-100 text-red-800 hover:bg-red-100";
+    case "canceled_customer":
+      return "bg-orange-100 text-orange-800 hover:bg-orange-100";
     case "paid":
       return "bg-green-100 text-green-800 hover:bg-green-100";
     case "completed":
       return "bg-gray-100 text-gray-800 hover:bg-gray-100";
-    case "canceled":
-      return "bg-red-100 text-red-800 hover:bg-red-100";
+    case "disputed":
+      return "bg-amber-100 text-amber-800 hover:bg-amber-100";
+    case "refunded":
+      return "bg-slate-100 text-slate-800 hover:bg-slate-100";
     default:
       return "bg-gray-100 text-gray-800";
   }
@@ -94,14 +112,23 @@ export default function ProviderBookingsPage() {
 
   const handleUpdateStatus = async (
     bookingId: string,
-    newStatus: ProviderBooking["status"],
+    action: "accept" | "decline" | "cancel" | "mark-completed",
   ) => {
     setActionLoading(bookingId);
     try {
+      let reason: string | undefined;
+      if (action === "decline" || action === "cancel") {
+        reason = window.prompt("Please provide a reason (visible to the customer):") || undefined;
+        if (!reason) {
+          setActionLoading(null);
+          return;
+        }
+      }
+
       const res = await fetch("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, newStatus }),
+        body: JSON.stringify({ bookingId, action, reason }),
       });
 
       if (!res.ok) {
@@ -109,7 +136,7 @@ export default function ProviderBookingsPage() {
         throw new Error(text || "Failed to update booking status.");
       }
 
-      toast({ title: `Booking ${newStatus}` });
+      toast({ title: `Booking ${action}` });
       fetchBookings();
     } catch (err: unknown) {
       const message =
@@ -137,8 +164,17 @@ export default function ProviderBookingsPage() {
   }
 
   const requests = bookings.filter((b) => b.status === "pending");
-  const upcoming = bookings.filter((b) => ["confirmed", "paid"].includes(b.status));
-  const history = bookings.filter((b) => ["completed", "canceled"].includes(b.status));
+  const upcoming = bookings.filter((b) => ["accepted", "paid"].includes(b.status));
+  const history = bookings.filter((b) =>
+    [
+      "completed",
+      "canceled_provider",
+      "canceled_customer",
+      "declined",
+      "disputed",
+      "refunded",
+    ].includes(b.status),
+  );
 
   const BookingCard = ({ booking }: { booking: ProviderBooking }) => {
     const isProcessing = actionLoading === booking.id;
@@ -193,7 +229,7 @@ export default function ProviderBookingsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleUpdateStatus(booking.id, "canceled")}
+                  onClick={() => handleUpdateStatus(booking.id, "decline")}
                   disabled={isProcessing}
                   className="text-destructive hover:text-destructive"
                 >
@@ -201,7 +237,7 @@ export default function ProviderBookingsPage() {
                 </Button>
                 <Button
                   size="sm"
-                  onClick={() => handleUpdateStatus(booking.id, "confirmed")}
+                  onClick={() => handleUpdateStatus(booking.id, "accept")}
                   disabled={isProcessing}
                 >
                   {isProcessing ? (
@@ -213,10 +249,27 @@ export default function ProviderBookingsPage() {
               </>
             )}
 
+            {booking.status === "accepted" && (
+              <>
+                <p className="text-xs text-muted-foreground italic self-center">
+                  Waiting for customer payment...
+                </p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleUpdateStatus(booking.id, "cancel")}
+                  disabled={isProcessing}
+                  className="text-destructive hover:text-destructive"
+                >
+                  Cancel Booking
+                </Button>
+              </>
+            )}
+
             {booking.status === "paid" && (
               <Button
                 size="sm"
-                onClick={() => handleUpdateStatus(booking.id, "completed")}
+                onClick={() => handleUpdateStatus(booking.id, "mark-completed")}
                 disabled={isProcessing}
                 className="bg-green-600 hover:bg-green-700"
               >
@@ -229,10 +282,9 @@ export default function ProviderBookingsPage() {
                 )}
               </Button>
             )}
-
-            {booking.status === "confirmed" && (
+            {booking.status === "disputed" && (
               <p className="text-xs text-muted-foreground italic self-center">
-                Waiting for customer payment...
+                This booking is disputed. Await resolution.
               </p>
             )}
           </CardFooter>

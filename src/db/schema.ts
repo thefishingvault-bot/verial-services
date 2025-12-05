@@ -103,11 +103,30 @@ export const serviceCategoryEnum = pgEnum("service_category", [
 ]);
 
 export const bookingStatusEnum = pgEnum("booking_status", [
-  "pending",    // Customer has requested
-  "confirmed",  // Provider has accepted
-  "paid",       // Customer has paid (via Stripe)
-  "completed",  // Provider has marked complete
-  "canceled"    // Canceled by user or provider
+  "pending",             // Customer has requested
+  "accepted",            // Provider has accepted
+  "declined",            // Provider has declined
+  "paid",                // Customer has paid (via Stripe)
+  "completed",           // Provider has marked complete
+  "canceled_customer",   // Customer canceled
+  "canceled_provider",   // Provider canceled
+  "disputed",            // Customer disputed after payment
+  "refunded"             // Platform processed refund
+]);
+
+export const earningStatusEnum = pgEnum("earning_status", [
+  "pending",           // Booking not yet paid
+  "awaiting_payout",   // Paid and waiting for payout
+  "paid_out",          // Included in a payout
+  "refunded"           // Refunded after payout
+]);
+
+export const payoutStatusEnum = pgEnum("payout_status", [
+  "pending",       // Created but not yet in transit
+  "in_transit",    // Stripe processing / on the way
+  "paid",          // Paid to bank
+  "canceled",      // Canceled in Stripe
+  "failed"         // Failed payout
 ]);
 
 // --- NEW TABLES ---
@@ -166,6 +185,72 @@ export const bookings = pgTable("bookings", {
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Provider Earnings
+ * One row per paid booking capturing gross, fees, GST, and net to provider.
+ */
+/**
+ * Provider Payouts
+ * Mirrors Stripe payouts for reconciliation.
+ */
+export const providerPayouts = pgTable("provider_payouts", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., ppayout_...
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  stripePayoutId: varchar("stripe_payout_id", { length: 255 }).unique(),
+
+  amount: integer("amount").notNull(), // cents
+  currency: varchar("currency", { length: 10 }).default("nzd").notNull(),
+  status: payoutStatusEnum("status").default("pending").notNull(),
+  arrivalDate: timestamp("arrival_date"),
+  estimatedArrival: timestamp("estimated_arrival"),
+
+  failureCode: varchar("failure_code", { length: 255 }),
+  failureMessage: text("failure_message"),
+  balanceTransactionId: varchar("balance_transaction_id", { length: 255 }),
+
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Provider Earnings
+ * One row per paid booking capturing gross, fees, GST, and net to provider.
+ */
+export const providerEarnings = pgTable("provider_earnings", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., earn_...
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }).unique(),
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  serviceId: varchar("service_id", { length: 255 }).references(() => services.id, { onDelete: "set null" }),
+
+  grossAmount: integer("gross_amount").notNull(), // cents charged to customer
+  platformFeeAmount: integer("platform_fee_amount").notNull(), // platform fee in cents
+  gstAmount: integer("gst_amount").default(0).notNull(), // GST component retained/remitted
+  netAmount: integer("net_amount").notNull(), // net to provider in cents
+  currency: varchar("currency", { length: 10 }).default("nzd").notNull(),
+
+  status: earningStatusEnum("status").default("pending").notNull(),
+  stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", { length: 255 }),
+  payoutId: varchar("payout_id", { length: 255 }).references(() => providerPayouts.id, { onDelete: "set null" }),
+
+  paidAt: timestamp("paid_at"), // when booking was paid
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/**
+ * Financial Audit Logs
+ * Records inconsistencies detected by the financial consistency engine.
+ */
+export const financialAuditLogs = pgTable("financial_audit_logs", {
+  id: serial("id").primaryKey(),
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  bookingId: varchar("booking_id", { length: 255 }).references(() => bookings.id, { onDelete: "set null" }),
+  issue: text("issue").notNull(),
+  expectedValue: text("expected_value"),
+  actualValue: text("actual_value"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 
@@ -491,6 +576,9 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   timeOffs: many(providerTimeOffs),
   favoriteProviders: many(favoriteProviders),
   notes: many(providerNotes), // A provider can have many internal notes
+  payouts: many(providerPayouts),
+  earnings: many(providerEarnings),
+  financialAuditLogs: many(financialAuditLogs),
 }));
 
 export const favoriteProvidersRelations = relations(favoriteProviders, ({ one }) => ({
@@ -641,6 +729,44 @@ export const refundsRelations = relations(refunds, ({ one }) => ({
   }),
 }));
 
+export const providerPayoutsRelations = relations(providerPayouts, ({ one, many }) => ({
+  provider: one(providers, {
+    fields: [providerPayouts.providerId],
+    references: [providers.id],
+  }),
+  earnings: many(providerEarnings),
+}));
+
+export const providerEarningsRelations = relations(providerEarnings, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [providerEarnings.bookingId],
+    references: [bookings.id],
+  }),
+  provider: one(providers, {
+    fields: [providerEarnings.providerId],
+    references: [providers.id],
+  }),
+  service: one(services, {
+    fields: [providerEarnings.serviceId],
+    references: [services.id],
+  }),
+  payout: one(providerPayouts, {
+    fields: [providerEarnings.payoutId],
+    references: [providerPayouts.id],
+  }),
+}));
+
+export const financialAuditLogsRelations = relations(financialAuditLogs, ({ one }) => ({
+  provider: one(providers, {
+    fields: [financialAuditLogs.providerId],
+    references: [providers.id],
+  }),
+  booking: one(bookings, {
+    fields: [financialAuditLogs.bookingId],
+    references: [bookings.id],
+  }),
+}));
+
 export const providerCommunicationsRelations = relations(providerCommunications, ({ one }) => ({
   provider: one(providers, {
     fields: [providerCommunications.providerId],
@@ -698,6 +824,10 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
   provider: one(providers, {
     fields: [bookings.providerId],
     references: [providers.id],
+  }),
+  earning: one(providerEarnings, {
+    fields: [bookings.id],
+    references: [providerEarnings.bookingId],
   }),
 }));
 

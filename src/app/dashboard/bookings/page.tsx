@@ -9,9 +9,20 @@ import { Loader2, AlertTriangle, Package } from 'lucide-react';
 import { ReviewForm } from '@/components/reviews/review-form';
 
 // Define a type for our joined booking data
+type CustomerBookingStatus =
+  | 'pending'
+  | 'accepted'
+  | 'declined'
+  | 'paid'
+  | 'completed'
+  | 'canceled_customer'
+  | 'canceled_provider'
+  | 'disputed'
+  | 'refunded';
+
 interface CustomerBooking {
   id: string;
-  status: 'pending' | 'confirmed' | 'paid' | 'completed' | 'canceled';
+  status: CustomerBookingStatus;
   createdAt: string;
   priceAtBooking: number;
   service: { title: string; slug: string };
@@ -42,13 +53,18 @@ const getStatusBadgeVariant = (
   switch (status) {
     case 'paid':
     case 'completed':
-      return 'default'; // Blue/Default
-    case 'confirmed':
-      return 'secondary'; // Green (using secondary as a stand-in)
+      return 'default';
+    case 'accepted':
+      return 'secondary';
     case 'pending':
-      return 'outline'; // Yellow/Outline
-    case 'canceled':
-      return 'destructive'; // Red
+      return 'outline';
+    case 'declined':
+    case 'canceled_customer':
+    case 'canceled_provider':
+      return 'destructive';
+    case 'disputed':
+    case 'refunded':
+      return 'secondary';
     default:
       return 'secondary';
   }
@@ -185,10 +201,19 @@ export default function CustomerBookingsPage() {
                   Cancel Request
                 </Button>
               )}
-              {booking.status === 'confirmed' && (
-                <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
-                  Pay Now
-                </Button>
+              {booking.status === 'accepted' && (
+                <>
+                  <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
+                    Pay Now
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => handleCancel(booking.id)}
+                    className="w-full sm:w-auto"
+                  >
+                    Cancel
+                  </Button>
+                </>
               )}
               {booking.status === 'paid' && (
                 <Button variant="outline" disabled className="w-full sm:w-auto">

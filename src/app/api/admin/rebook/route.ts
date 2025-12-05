@@ -161,7 +161,7 @@ export async function POST(request: NextRequest) {
       serviceId: booking.serviceId,
       scheduledDate: new Date(newScheduledDateTime),
       priceAtBooking: booking.priceAtBooking,
-      status: 'confirmed',
+      status: 'accepted',
       createdAt: new Date(),
       updatedAt: new Date(),
     });

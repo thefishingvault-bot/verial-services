@@ -2,7 +2,7 @@ import { db } from "@/lib/db";
 import { bookings, conversations, messages, providers, users } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { and, asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, or, inArray, ne } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -124,6 +124,7 @@ export async function GET(
             where: and(
               eq(bookings.userId, customer.id),
               eq(bookings.providerId, provider.id),
+              inArray(bookings.status, ["pending", "accepted", "paid", "completed", "disputed"]),
             ),
             with: {
               service: {
@@ -141,6 +142,16 @@ export async function GET(
             },
           })
         : null;
+
+    if (!booking) {
+      return new NextResponse("Messaging requires an active booking", { status: 403 });
+    }
+
+    // Mark unread messages as read for this viewer
+    await db
+      .update(messages)
+      .set({ isRead: true })
+      .where(and(eq(messages.conversationId, conversationId), eq(messages.isRead, false), ne(messages.senderId, userId)));
 
     return NextResponse.json({
       messages: conversation.messages,

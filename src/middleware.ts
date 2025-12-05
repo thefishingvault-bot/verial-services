@@ -1,6 +1,7 @@
 export const runtime = "nodejs";
 
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
@@ -19,9 +20,30 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
 ]);
 
+const isAdminRoute = createRouteMatcher([
+  "/api/admin(.*)",
+  "/dashboard/admin(.*)",
+]);
+
 export default clerkMiddleware(async (auth, req) => {
-  if (!isPublicRoute(req)) {
-    await auth.protect(); // Protect all routes that are not public
+  if (isPublicRoute(req)) {
+    return;
+  }
+
+  const { userId } = await auth();
+  if (!userId) {
+    await auth.protect();
+    return;
+  }
+
+  if (isAdminRoute(req)) {
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const role = (user.publicMetadata as Record<string, unknown>)?.role;
+
+    if (role !== "admin") {
+      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
   }
 });
 

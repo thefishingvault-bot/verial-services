@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, inArray } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { conversations, messages, users } from "@/db/schema";
+import { bookings, conversations, messages, providers, users } from "@/db/schema";
 import { pusherServer } from "@/lib/pusher";
 import { createNotification } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
@@ -13,10 +13,70 @@ export const runtime = "nodejs";
 const generateId = () => `msg_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 const generateConvId = () => `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
+const RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const RATE_LIMIT_MAX = 20;
+const rateLimiter = new Map<string, number[]>();
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = rateLimiter.get(userId)?.filter((t) => now - t < RATE_LIMIT_WINDOW_MS) ?? [];
+  if (timestamps.length >= RATE_LIMIT_MAX) return false;
+  timestamps.push(now);
+  rateLimiter.set(userId, timestamps);
+  return true;
+}
+
+async function ensureBookingLink(userId: string, counterpartId: string) {
+  // Determine which party is the provider
+  const providerForSender = await db.query.providers.findFirst({
+    where: eq(providers.userId, userId),
+    columns: { id: true },
+  });
+
+  const providerForRecipient = await db.query.providers.findFirst({
+    where: eq(providers.userId, counterpartId),
+    columns: { id: true },
+  });
+
+  let providerId: string | null = null;
+  let customerId: string | null = null;
+
+  if (providerForSender) {
+    providerId = providerForSender.id;
+    customerId = counterpartId;
+  } else if (providerForRecipient) {
+    providerId = providerForRecipient.id;
+    customerId = userId;
+  }
+
+  if (!providerId || !customerId) {
+    throw new Error("Messaging is only allowed between providers and their customers.");
+  }
+
+  const existingBooking = await db.query.bookings.findFirst({
+    where: and(
+      eq(bookings.providerId, providerId),
+      eq(bookings.userId, customerId),
+      inArray(bookings.status, ["pending", "accepted", "paid", "completed", "disputed"]),
+    ),
+    columns: { id: true },
+  });
+
+  if (!existingBooking) {
+    throw new Error("A booking must exist between you and this user to send messages.");
+  }
+
+  return existingBooking.id;
+}
+
 export async function POST(req: Request) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+    if (!checkRateLimit(userId)) {
+      return new NextResponse("Rate limit exceeded", { status: 429 });
+    }
 
     const { recipientId, content, conversationId } = await req.json();
 
@@ -25,6 +85,7 @@ export async function POST(req: Request) {
     }
 
     let activeConversationId: string | null = conversationId ?? null;
+    let resolvedRecipientId = recipientId ?? null;
 
     if (!activeConversationId) {
       const existing = await db.query.conversations.findFirst({
@@ -36,7 +97,9 @@ export async function POST(req: Request) {
 
       if (existing) {
         activeConversationId = existing.id;
+        resolvedRecipientId = existing.user1Id === userId ? existing.user2Id : existing.user1Id;
       } else {
+        const bookingId = await ensureBookingLink(userId, recipientId);
         activeConversationId = generateConvId();
         await db.insert(conversations).values({
           id: activeConversationId,
@@ -44,11 +107,23 @@ export async function POST(req: Request) {
           user2Id: recipientId,
           lastMessageAt: new Date(),
         });
+        resolvedRecipientId = recipientId;
+        console.log(`[CHAT] conversation created for booking ${bookingId}`);
       }
     }
 
     if (!activeConversationId) {
       return new NextResponse("Failed to resolve conversation", { status: 500 });
+    }
+
+    // Ensure the conversation still maps to a booking
+    if (resolvedRecipientId) {
+      try {
+        await ensureBookingLink(userId, resolvedRecipientId);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unauthorized";
+        return new NextResponse(message, { status: 403 });
+      }
     }
 
     const newMessage = {
@@ -72,16 +147,16 @@ export async function POST(req: Request) {
     }
 
     // Notify recipient if provided
-    if (recipientId) {
+    if (resolvedRecipientId) {
       await createNotification({
-        userId: recipientId,
+        userId: resolvedRecipientId,
         message: "New message",
         href: `/dashboard/messages/${activeConversationId}`,
       });
 
       try {
         const recipient = await db.query.users.findFirst({
-          where: eq(users.id, recipientId),
+          where: eq(users.id, resolvedRecipientId),
           columns: { email: true },
         });
 

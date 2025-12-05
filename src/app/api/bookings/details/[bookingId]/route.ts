@@ -3,6 +3,7 @@ import { bookings } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
+import { normalizeStatus } from "@/lib/booking-state";
 
 export const runtime = "nodejs";
 
@@ -38,8 +39,9 @@ export async function GET(
       return new NextResponse("Booking not found or access denied", { status: 404 });
     }
 
-    // Only allow payment if the booking is 'confirmed'
-    if (booking.status !== 'confirmed') {
+    // Only allow payment if the booking is 'accepted'
+    const normalizedStatus = normalizeStatus(booking.status);
+    if (normalizedStatus !== 'accepted') {
       return new NextResponse(`Cannot pay for booking with status: ${booking.status}`, { status: 400 });
     }
 

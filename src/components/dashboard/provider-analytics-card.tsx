@@ -51,7 +51,15 @@ export async function ProviderAnalyticsCard() {
     .where(
       and(
         eq(bookings.providerId, provider.id),
-        inArray(bookings.status, ["pending", "confirmed", "paid", "completed"]),
+        inArray(bookings.status, [
+          "pending",
+          "accepted",
+          "declined",
+          "paid",
+          "completed",
+          "canceled_customer",
+          "canceled_provider",
+        ]),
         gte(bookings.createdAt, start),
       ),
     );
@@ -123,7 +131,7 @@ export async function ProviderAnalyticsCard() {
     : 0;
 
   const requested = funnelRows.length;
-  const confirmed = funnelRows.filter((r) => r.status === "confirmed").length;
+  const acceptedCount = funnelRows.filter((r) => r.status === "accepted").length;
   const paid = funnelRows.filter((r) => r.status === "paid").length;
   const completedLast30 = funnelRows.filter((r) => r.status === "completed").length;
 
@@ -158,8 +166,8 @@ export async function ProviderAnalyticsCard() {
             <span className="font-medium">{requested}</span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-muted-foreground">Confirmed</span>
-            <span className="font-medium">{confirmed}</span>
+            <span className="text-muted-foreground">Accepted</span>
+            <span className="font-medium">{acceptedCount}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground">Paid</span>

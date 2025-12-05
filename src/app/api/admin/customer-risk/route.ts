@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
         completedBookings: sql<number>`count(case when bookings.status = 'completed' then 1 end)`,
         cancelledBookings: sql<number>`count(case when bookings.status = 'canceled' then 1 end)`,
         pendingBookings: sql<number>`count(case when bookings.status = 'pending' then 1 end)`,
-        confirmedBookings: sql<number>`count(case when bookings.status = 'confirmed' then 1 end)`,
+        confirmedBookings: sql<number>`count(case when bookings.status = 'accepted' then 1 end)`,
         paidBookings: sql<number>`count(case when bookings.status = 'paid' then 1 end)`,
         totalSpent: sql<number>`sum(bookings.priceAtBooking)`,
         avgBookingValue: sql<number>`avg(bookings.priceAtBooking)`,

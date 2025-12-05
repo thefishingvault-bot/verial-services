@@ -7,10 +7,10 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // Helper to format currency
-export const formatPrice = (priceInCents: number) => {
+export const formatPrice = (priceInCents: number, currency: string = 'NZD') => {
   return new Intl.NumberFormat('en-NZ', {
     style: 'currency',
-    currency: 'NZD',
+    currency,
   }).format(priceInCents / 100);
 };
 
