@@ -1,4 +1,5 @@
 import { Metadata } from 'next';
+import { auth } from '@clerk/nextjs/server';
 import MarketingLayout from '../(marketing)/layout';
 import ServicesPageShell from '../../components/services/services-page-shell';
 import {
@@ -16,8 +17,9 @@ export default async function ServicesPage({
 }: {
   searchParams: Promise<ServicesSearchParams>;
 }) {
+  const { userId } = await auth();
   const resolvedSearchParams = await searchParams;
-  const data = await getServicesDataFromSearchParams(resolvedSearchParams);
+  const data = await getServicesDataFromSearchParams(resolvedSearchParams, userId);
 
   return (
     <MarketingLayout>

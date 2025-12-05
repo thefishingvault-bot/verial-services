@@ -4,7 +4,7 @@ import { useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import type {
   ServicesFilters,
-  ServiceWithProvider,
+  ServiceWithProviderAndFavorite,
   ServicesDataResult,
 } from "@/lib/services-data";
 import ServicesSearchAndFilters from "@/components/services/services-search-and-filters";
@@ -12,7 +12,7 @@ import { ServicesGridClient } from "@/components/services/services-grid-client";
 
 export type ServicesPageShellProps = {
   filters: ServicesFilters;
-  services: ServiceWithProvider[];
+  services: ServiceWithProviderAndFavorite[];
   totalCount: number;
   hasMore: boolean;
   kpi: ServicesDataResult["kpi"];

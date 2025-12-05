@@ -1,3 +1,5 @@
+"use client";
+
 import Link from 'next/link';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,12 +9,12 @@ import {
   Star,
   CheckCircle,
   MessageCircle,
-  Heart,
   DollarSign,
   Search,
 } from 'lucide-react';
 import { LoadMoreButton } from './load-more-button';
-import type { ServiceWithProvider, ServicesFilters } from '@/lib/services-data';
+import type { ServicesFilters, ServiceWithProviderAndFavorite } from '@/lib/services-data';
+import { FavoriteToggle } from './favorite-toggle';
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -50,7 +52,7 @@ function getTrustScoreLabel(score: number) {
   return 'New';
 }
 type ServicesGridProps = {
-  services: ServiceWithProvider[];
+  services: ServiceWithProviderAndFavorite[];
   totalCount: number;
   hasMore: boolean;
   filters: ServicesFilters;
@@ -103,9 +105,10 @@ export default function ServicesGrid({
                 )}
 
                 {/* Favorite Button */}
-                <button className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur-sm rounded-full hover:bg-white transition-colors">
-                  <Heart className="h-4 w-4 text-gray-600 hover:text-red-500" />
-                </button>
+                <FavoriteToggle
+                  serviceId={service.id}
+                  initialIsFavorite={service.isFavorite}
+                />
 
                 {/* Category Badge */}
                 <div className="absolute top-3 left-3">

@@ -9,12 +9,12 @@ import ServicesSearchAndFilters from '@/components/services/services-search-and-
 import { ServicesGridClient } from '@/components/services/services-grid-client';
 import { ServicesMap } from '@/components/services/services-map';
 // NOTE: Advanced sidebar filters are currently disabled on the services page.
-import type { ServiceWithProvider, ServicesFilters } from '@/lib/services-data';
+import type { ServiceWithProviderAndFavorite, ServicesFilters } from '@/lib/services-data';
 
 interface ServicesPageClientProps {
   initialFilters: ServicesFilters;
   initialServicesData: {
-    services: ServiceWithProvider[];
+    services: ServiceWithProviderAndFavorite[];
     hasMore: boolean;
     totalCount: number;
   };

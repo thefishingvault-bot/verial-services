@@ -1,5 +1,17 @@
 import { relations } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, boolean, pgEnum, integer, time } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  varchar,
+  timestamp,
+  boolean,
+  pgEnum,
+  integer,
+  time,
+  serial,
+  index,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
 export const userRoleEnum = pgEnum("user_role", ["user", "provider", "admin"]);
@@ -119,6 +131,21 @@ export const services = pgTable("services", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const serviceFavorites = pgTable(
+  "service_favorites",
+  {
+    id: serial("id").primaryKey(),
+    userId: varchar("user_id", { length: 255 }).notNull(),
+    serviceId: varchar("service_id", { length: 255 }).notNull().references(() => services.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: false }).defaultNow().notNull(),
+  },
+  (table) => ({
+    userServiceUnique: uniqueIndex("service_favorites_user_service_unique").on(table.userId, table.serviceId),
+    userIdx: index("service_favorites_user_idx").on(table.userId),
+    serviceIdx: index("service_favorites_service_idx").on(table.serviceId),
+  }),
+);
 
 /**
  * Bookings Table
@@ -477,12 +504,24 @@ export const favoriteProvidersRelations = relations(favoriteProviders, ({ one })
   }),
 }));
 
+export const serviceFavoritesRelations = relations(serviceFavorites, ({ one }) => ({
+  user: one(users, {
+    fields: [serviceFavorites.userId],
+    references: [users.id],
+  }),
+  service: one(services, {
+    fields: [serviceFavorites.serviceId],
+    references: [services.id],
+  }),
+}));
+
 export const servicesRelations = relations(services, ({ one, many }) => ({
   provider: one(providers, {
     fields: [services.providerId],
     references: [providers.id],
   }),
   bookings: many(bookings),
+  favorites: many(serviceFavorites),
 }));
 
 export const providerAvailabilitiesRelations = relations(providerAvailabilities, ({ one }) => ({

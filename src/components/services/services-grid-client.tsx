@@ -10,12 +10,12 @@ import {
   Clock,
   CheckCircle,
   MessageCircle,
-  Heart,
   DollarSign,
   Search,
 } from "lucide-react";
 import { LoadMoreButton } from "./load-more-button";
-import type { ServiceWithProvider } from "@/lib/services-data";
+import { FavoriteToggle } from "./favorite-toggle";
+import type { ServiceWithProviderAndFavorite } from "@/lib/services-data";
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -54,7 +54,7 @@ function getTrustScoreLabel(score: number) {
 }
 
 interface ServicesGridClientProps {
-  services: ServiceWithProvider[];
+  services: ServiceWithProviderAndFavorite[];
   searchParams: {
     q?: string;
     category?: string;
@@ -107,9 +107,10 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                 )}
 
                 {/* Favorite Button */}
-                <button className="absolute top-3 right-3 p-2 bg-white/80 backdrop-blur-sm rounded-full hover:bg-white transition-colors">
-                  <Heart className="h-4 w-4 text-gray-600 hover:text-red-500" />
-                </button>
+                <FavoriteToggle
+                  serviceId={service.id}
+                  initialIsFavorite={service.isFavorite}
+                />
 
                 {/* Category Badge */}
                 <div className="absolute top-3 left-3">

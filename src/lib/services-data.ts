@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { services, providers, users, reviews } from '@/db/schema';
+import { services, providers, users, reviews, serviceFavorites } from '@/db/schema';
 import { eq, and, or, like, sql, desc, asc, gte, lte, avg } from 'drizzle-orm';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
@@ -40,6 +40,10 @@ export interface ServiceWithProvider {
   reviewCount: number;
   distance?: number;
 }
+
+export type ServiceWithProviderAndFavorite = ServiceWithProvider & {
+  isFavorite: boolean;
+};
 export function parseServicesSearchParams(
   searchParams: ServicesSearchParams,
 ): ServicesFilters {
@@ -91,7 +95,7 @@ export function parseServicesSearchParams(
 
 export type ServicesDataResult = {
   filters: ServicesFilters;
-  services: ServiceWithProvider[];
+  services: ServiceWithProviderAndFavorite[];
   totalCount: number;
   hasMore: boolean;
   kpi: {
@@ -103,6 +107,7 @@ export type ServicesDataResult = {
 
 export async function getServicesDataFromSearchParams(
   searchParams: ServicesSearchParams,
+  userId?: string | null,
 ): Promise<ServicesDataResult> {
   const filters = parseServicesSearchParams(searchParams);
 
@@ -195,12 +200,25 @@ export async function getServicesDataFromSearchParams(
       avatarUrl: users.avatarUrl,
       firstName: users.firstName,
       lastName: users.lastName,
+      isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
     })
     .from(services)
     .innerJoin(providers, eq(services.providerId, providers.id))
     .innerJoin(users, eq(providers.userId, users.id))
+    .leftJoin(
+      serviceFavorites,
+      userId
+        ? and(
+            eq(serviceFavorites.serviceId, services.id),
+            eq(serviceFavorites.userId, userId),
+          )
+        : and(eq(serviceFavorites.serviceId, services.id), sql`1 = 0`),
+    )
     .where(and(...whereConditions))
-    .orderBy(orderBy)
+    .orderBy(
+      desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`),
+      orderBy,
+    )
     .limit(limit)
     .offset(offset);
 
@@ -208,7 +226,7 @@ export async function getServicesDataFromSearchParams(
   const providerStats: Record<string, { avgRating: number; reviewCount: number }> = {};
   const responseTimes: Record<string, string> = {};
 
-  let servicesWithProviders: ServiceWithProvider[] = servicesData.map((service) => {
+  let servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
     const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
     return {
       id: service.id,
@@ -235,6 +253,7 @@ export async function getServicesDataFromSearchParams(
       },
       avgRating: stats.avgRating,
       reviewCount: stats.reviewCount,
+      isFavorite: service.isFavorite ?? false,
     };
   });
 
