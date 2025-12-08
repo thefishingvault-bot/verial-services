@@ -1,7 +1,15 @@
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { services, providers, reviews, serviceCategoryEnum } from "@/db/schema";
+import {
+  services,
+  providers,
+  reviews,
+  serviceCategoryEnum,
+  serviceFavorites,
+} from "@/db/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -24,11 +32,26 @@ type ServiceSummary = {
   };
   avgRating: number;
   reviewCount: number;
+  favoriteCount: number;
+  isFavorited: boolean;
 };
 
-// This is a public route, no auth needed.
+// Public route; optional auth only to mark user favorites.
 export async function GET(req: NextRequest) {
   try {
+    const { userId } = await auth();
+
+    const rate = await enforceRateLimit(req, {
+      userId: userId ?? null,
+      resource: "services:search",
+      limit: 30,
+      windowSeconds: 60,
+    });
+
+    if (!rate.success) {
+      return rateLimitResponse(rate.retryAfter);
+    }
+
     const { searchParams } = req.nextUrl;
 
     const rawCategory = searchParams.get("category") ?? undefined;
@@ -112,6 +135,15 @@ export async function GET(req: NextRequest) {
         providerVerified: providers.isVerified,
         providerTrust: providers.trustLevel,
         providerBaseRegion: providers.baseRegion,
+        favoriteCount: sql<number>`(
+          SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
+        )`,
+        isFavorited: userId
+          ? sql<boolean>`EXISTS (
+              SELECT 1 FROM ${serviceFavorites} sf_user
+              WHERE sf_user.service_id = ${services.id} AND sf_user.user_id = ${userId}
+            )`
+          : sql<boolean>`false`,
       })
       .from(services)
       .leftJoin(providers, eq(services.providerId, providers.id))
@@ -166,6 +198,8 @@ export async function GET(req: NextRequest) {
         },
         avgRating,
         reviewCount: stats.count,
+        favoriteCount: Number(s.favoriteCount ?? 0),
+        isFavorited: Boolean(s.isFavorited),
       };
     });
 

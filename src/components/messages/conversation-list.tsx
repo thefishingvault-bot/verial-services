@@ -15,7 +15,7 @@ interface ConversationSummary {
 
 async function fetchConversations(): Promise<ConversationSummary[]> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
-  const res = await fetch(`${baseUrl}/api/chat/conversations`, {
+  const res = await fetch(`${baseUrl}/api/messages/threads`, {
     cache: "no-store",
   });
 
@@ -23,35 +23,18 @@ async function fetchConversations(): Promise<ConversationSummary[]> {
     return [];
   }
 
-  const data: {
-    conversations?: {
-      id: string;
-      counterpart: {
-        id: string;
-        name: string;
-        handle?: string;
-        avatarUrl: string | null;
-      };
-      lastMessage: string;
-      lastMessageAt: string;
-      unreadCount: number;
-      booking?: {
-        publicRef: string;
-        serviceTitle: string;
-      } | null;
-    }[];
-  } = await res.json();
+  const data: { threads?: any[] } = await res.json();
 
-  return (data.conversations ?? []).map((c) => ({
-    id: c.id,
-    counterpartName: c.counterpart?.name ?? "Unknown",
-    counterpartHandle: c.counterpart?.handle ?? "",
-    counterpartAvatarUrl: c.counterpart?.avatarUrl ?? null,
-    lastMessagePreview: c.lastMessage ?? "No messages yet",
-    lastMessageAt: c.lastMessageAt ?? new Date().toISOString(),
-    unreadCount: c.unreadCount ?? 0,
-    serviceTitle: c.booking?.serviceTitle ?? null,
-    bookingRef: c.booking?.publicRef ?? null,
+  return (data.threads ?? []).map((t) => ({
+    id: t.bookingId,
+    counterpartName: t.counterpart?.name ?? "Unknown",
+    counterpartHandle: "",
+    counterpartAvatarUrl: t.counterpart?.avatarUrl ?? null,
+    lastMessagePreview: t.lastMessage ?? "No messages yet",
+    lastMessageAt: (t.lastMessageAt ?? new Date()).toString(),
+    unreadCount: t.unreadCount ?? 0,
+    serviceTitle: t.serviceTitle ?? null,
+    bookingRef: t.bookingId ?? null,
   }));
 }
 

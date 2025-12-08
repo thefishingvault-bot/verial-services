@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { DisputeIdParamSchema, parseParamsOrNotFound } from "@/lib/validation/admin-loader-schemas";
 import {
   ArrowLeft,
   CheckCircle,
@@ -45,7 +46,7 @@ export default async function AdminDisputeDetailPage({
     redirect("/dashboard");
   }
 
-  const { disputeId } = await params;
+  const { disputeId } = parseParamsOrNotFound(DisputeIdParamSchema, await params);
 
   // Get basic dispute info
   const [disputeBase] = await db

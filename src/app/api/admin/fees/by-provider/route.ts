@@ -1,27 +1,19 @@
-import { currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin';
 import { getFeesByProvider } from '@/server/admin/fees';
+import { requireAdmin } from '@/lib/admin-auth';
+import { FeesByProviderQuerySchema, invalidResponse, parseQuery } from '@/lib/validation/admin';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {
-    const user = await currentUser();
-    if (!user?.id) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    await requireAdmin(user.id);
-
-    const { searchParams } = new URL(request.url);
-    const yearParam = searchParams.get('year');
-    const format = searchParams.get('format');
-    const year = yearParam ? parseInt(yearParam, 10) : new Date().getUTCFullYear();
-
-    if (Number.isNaN(year)) {
-      return new NextResponse('Invalid year', { status: 400 });
-    }
+    const parsedQuery = parseQuery(FeesByProviderQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const year = parsedQuery.data.year ?? new Date().getUTCFullYear();
+    const format = parsedQuery.data.format;
 
     const rows = await getFeesByProvider(year);
 

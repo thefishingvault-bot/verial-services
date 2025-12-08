@@ -24,19 +24,14 @@ import {
   TrendingUp,
   ArrowUpDown
 } from "lucide-react";
-
-interface SearchParams {
-  status?: string;
-  search?: string;
-  tab?: string;
-}
+import { AdminBookingsSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
 
 type BookingStatusValue = (typeof bookingStatusEnum.enumValues)[number];
 
 export default async function AdminBookingsPage({
   searchParams,
 }: {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await currentUser();
   if (!user?.id) {
@@ -49,10 +44,10 @@ export default async function AdminBookingsPage({
     redirect("/dashboard");
   }
 
-  const params = await searchParams;
-  const statusFilter = params.status || "all";
-  const searchQuery = params.search || "";
-  const activeTab = params.tab || "all";
+  const params = parseSearchParams(AdminBookingsSearchSchema, await searchParams);
+  const statusFilter = params.status;
+  const searchQuery = params.search;
+  const activeTab = params.tab;
 
   // Build where conditions
   const whereConditions = [];

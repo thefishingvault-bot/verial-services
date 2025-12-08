@@ -1,12 +1,10 @@
 import { db } from '@/lib/db';
-import { bookings, conversations, providers, users } from '@/db/schema';
+import { bookings, providers, users } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { eq, and, or, inArray } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
-
-const generateConvId = () => `conv_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
 
 export async function POST(req: Request) {
   try {
@@ -78,26 +76,7 @@ export async function POST(req: Request) {
       return new NextResponse('A booking is required to start messaging.', { status: 403 });
     }
 
-    const existing = await db.query.conversations.findFirst({
-      where: or(
-        and(eq(conversations.user1Id, userId), eq(conversations.user2Id, recipientId)),
-        and(eq(conversations.user1Id, recipientId), eq(conversations.user2Id, userId))
-      ),
-    });
-
-    if (existing) {
-      return NextResponse.json({ conversationId: existing.id });
-    }
-
-    const newId = generateConvId();
-    await db.insert(conversations).values({
-      id: newId,
-      user1Id: userId,
-      user2Id: recipientId,
-      lastMessageAt: new Date(),
-    });
-
-    return NextResponse.json({ conversationId: newId });
+    return NextResponse.json({ bookingId: existingBooking.id });
   } catch (error) {
     console.error('[API_CHAT_INITIATE]', error);
     return new NextResponse('Internal Server Error', { status: 500 });

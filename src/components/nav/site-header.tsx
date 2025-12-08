@@ -17,6 +17,7 @@ const guestLinks = [
 // --- Auth Links (Signed In) ---
 const authLinks = [
   { href: '/dashboard', label: 'Dashboard' },
+  { href: '/dashboard/favorites', label: 'Favorites' },
 ];
 
 export function SiteHeader() {
@@ -106,6 +107,15 @@ export function SiteHeader() {
                       onClick={() => setIsSheetOpen(false)}
                     >
                       Dashboard
+                    </Link>
+                  )}
+                  {isSignedIn && (
+                    <Link
+                      href="/dashboard/favorites"
+                      className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsSheetOpen(false)}
+                    >
+                      Favorites
                     </Link>
                   )}
                 </nav>

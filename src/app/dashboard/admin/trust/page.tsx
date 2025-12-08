@@ -12,18 +12,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, CheckCircle, Shield, Search, Settings } from "lucide-react";
-
-interface SearchParams {
-  status?: string;
-  type?: string;
-  severity?: string;
-  search?: string;
-}
+import { AdminTrustIncidentsSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
 
 export default async function AdminTrustIncidentsPage({
   searchParams,
 }: {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await currentUser();
   if (!user?.id) {
@@ -36,11 +30,11 @@ export default async function AdminTrustIncidentsPage({
     redirect("/dashboard");
   }
 
-  const params = await searchParams;
-  const statusFilter = params.status || "all";
-  const typeFilter = params.type || "all";
-  const severityFilter = params.severity || "all";
-  const searchQuery = params.search || "";
+  const params = parseSearchParams(AdminTrustIncidentsSearchSchema, await searchParams);
+  const statusFilter = params.status;
+  const typeFilter = params.type;
+  const severityFilter = params.severity;
+  const searchQuery = params.search;
 
   // Build where conditions
   const whereConditions = [];

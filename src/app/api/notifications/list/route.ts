@@ -1,25 +1,26 @@
-import { db } from '@/lib/db';
-import { notifications } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { eq, desc } from 'drizzle-orm';
+
+import { listNotifications } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
-      const userNotifications = await db.query.notifications.findMany({
-        where: eq(notifications.userId, userId),
-        orderBy: [desc(notifications.createdAt)],
-        limit: 20,
-      });
+    const url = new URL(request.url);
+    const limit = url.searchParams.get('limit');
+    const cursor = url.searchParams.get('cursor') || undefined;
 
-    return NextResponse.json(userNotifications);
+    const parsedLimit = limit ? Number(limit) : undefined;
+
+    const result = await listNotifications({ userId, limit: parsedLimit, cursor });
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error('[API_NOTIFICATIONS_LIST]', error);
     return new NextResponse('Internal Server Error', { status: 500 });

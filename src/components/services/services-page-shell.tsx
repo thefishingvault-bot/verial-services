@@ -52,6 +52,23 @@ export default function ServicesPageShell({
         nextFilters.rating != null ? String(nextFilters.rating) : null,
       );
       setOrDelete("sort", nextFilters.sort || null);
+      setOrDelete("region", nextFilters.region);
+
+      // pagination
+      const nextPage = nextFilters.page || 1;
+      const nextPageSize = nextFilters.pageSize || 12;
+
+      if (nextPage > 1) {
+        setOrDelete("page", String(nextPage));
+      } else {
+        params.delete("page");
+      }
+
+      if (nextPageSize !== 12) {
+        setOrDelete("pageSize", String(nextPageSize));
+      } else {
+        params.delete("pageSize");
+      }
 
       router.push(`/services?${params.toString()}`);
     },
@@ -110,6 +127,7 @@ export default function ServicesPageShell({
           searchParams={{
             q: filters.q || undefined,
             category: filters.category || undefined,
+            region: filters.region || undefined,
             minPrice:
               filters.minPrice != null ? String(filters.minPrice) : undefined,
             maxPrice:
@@ -117,9 +135,11 @@ export default function ServicesPageShell({
             rating:
               filters.rating != null ? String(filters.rating) : undefined,
             sort: filters.sort,
+            page: String(filters.page || 1),
+            pageSize: String(filters.pageSize || 12),
           }}
           hasMore={hasMore}
-          currentPage={1}
+          currentPage={filters.page || 1}
         />
       </section>
     </div>

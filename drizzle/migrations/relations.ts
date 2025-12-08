@@ -141,6 +141,18 @@ export const notificationsRelations = relations(notifications, ({one}) => ({
 		fields: [notifications.userId],
 		references: [users.id]
 	}),
+	booking: one(bookings, {
+		fields: [notifications.bookingId],
+		references: [bookings.id]
+	}),
+	service: one(services, {
+		fields: [notifications.serviceId],
+		references: [services.id]
+	}),
+	provider: one(providers, {
+		fields: [notifications.providerId],
+		references: [providers.id]
+	}),
 }));
 
 export const favoriteProvidersRelations = relations(favoriteProviders, ({one}) => ({
@@ -169,15 +181,15 @@ export const providerTimeOffsRelations = relations(providerTimeOffs, ({one}) => 
 }));
 
 export const conversationsRelations = relations(conversations, ({one, many}) => ({
-	user_user1Id: one(users, {
-		fields: [conversations.user1Id],
+	userA: one(users, {
+		fields: [conversations.userAId],
 		references: [users.id],
-		relationName: "conversations_user1Id_users_id"
+		relationName: "conversations_user_a_id_users_id"
 	}),
-	user_user2Id: one(users, {
-		fields: [conversations.user2Id],
+	userB: one(users, {
+		fields: [conversations.userBId],
 		references: [users.id],
-		relationName: "conversations_user2Id_users_id"
+		relationName: "conversations_user_b_id_users_id"
 	}),
 	messages: many(messages),
 }));

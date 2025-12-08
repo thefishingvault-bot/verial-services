@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AdminDisputesSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
 import {
   AlertTriangle,
   CheckCircle,
@@ -27,17 +28,10 @@ import {
   ArrowUpDown
 } from "lucide-react";
 
-interface SearchParams {
-  status?: string;
-  type?: string;
-  search?: string;
-  tab?: string;
-}
-
 export default async function AdminDisputesPage({
   searchParams,
 }: {
-  searchParams: Promise<SearchParams>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const user = await currentUser();
   if (!user?.id) {
@@ -50,11 +44,11 @@ export default async function AdminDisputesPage({
     redirect("/dashboard");
   }
 
-  const params = await searchParams;
-  const statusFilter = params.status || "all";
-  const typeFilter = params.type || "all";
-  const searchQuery = params.search || "";
-  const activeTab = params.tab || "all";
+  const params = parseSearchParams(AdminDisputesSearchSchema, await searchParams);
+  const statusFilter = params.status;
+  const typeFilter = params.type;
+  const searchQuery = params.search;
+  const activeTab = params.tab;
 
   // Build where conditions
   const whereConditions = [];

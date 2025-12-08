@@ -9,6 +9,7 @@ import { notFound, redirect } from 'next/navigation';
 import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-trust-button';
 import { AddProviderNote } from '@/components/admin/add-provider-note';
 import { AdminProviderModerationControls } from '@/components/admin/admin-provider-moderation-controls';
+import { parseParamsOrNotFound, ProviderIdParamSchema } from '@/lib/validation/admin-loader-schemas';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -34,7 +35,7 @@ export default async function AdminProviderDetailPage({
     redirect('/dashboard');
   }
 
-  const { providerId } = await params;
+  const { providerId } = parseParamsOrNotFound(ProviderIdParamSchema, await params);
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.id, providerId),

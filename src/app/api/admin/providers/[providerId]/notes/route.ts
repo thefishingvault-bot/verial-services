@@ -1,25 +1,16 @@
 import { db } from '@/lib/db';
 import { providerNotes } from '@/db/schema';
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
-
-    if (role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
     const { providerId } = await params;
     const { note } = await request.json();

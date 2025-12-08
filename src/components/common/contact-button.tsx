@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, MessageSquare } from 'lucide-react';
+import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@clerk/nextjs';
 import { toast } from 'sonner';
@@ -22,7 +21,6 @@ export function ContactButton({
 }: ContactButtonProps) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleContact = async () => {
     if (!isSignedIn) {
@@ -30,24 +28,9 @@ export function ContactButton({
       return;
     }
 
-    setIsLoading(true);
-    try {
-      const res = await fetch('/api/chat/initiate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ recipientId: providerUserId }),
-      });
-
-      if (!res.ok) throw new Error('Failed to start conversation');
-
-      const { conversationId } = await res.json();
-      router.push(`/dashboard/messages/${conversationId}`);
-    } catch {
-      toast.error('Error', {
-        description: 'Could not start chat. Please try again.',
-      });
-      setIsLoading(false);
-    }
+    toast.info('Book to message', {
+      description: 'You can message a provider once you have an active booking with them.',
+    });
   };
 
   return (
@@ -55,13 +38,8 @@ export function ContactButton({
       variant={variant}
       className={className}
       onClick={handleContact}
-      disabled={isLoading}
     >
-      {isLoading ? (
-        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-      ) : (
-        <MessageSquare className="mr-2 h-4 w-4" />
-      )}
+      <MessageSquare className="mr-2 h-4 w-4" />
       {label}
     </Button>
   );

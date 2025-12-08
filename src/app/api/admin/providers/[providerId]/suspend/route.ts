@@ -1,42 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, providerSuspensions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
+import { requireAdmin } from "@/lib/admin-auth";
+import { ProviderIdSchema, ProviderSuspensionSchema, invalidResponse, parseForm, parseParams } from "@/lib/validation/admin";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const user = await currentUser();
-    if (!isAdmin(user)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    const { providerId } = await params;
+    const parsedParams = parseParams(ProviderIdSchema, await params);
+    if (!parsedParams.ok) return invalidResponse(parsedParams.error);
 
-    // Parse form data
-    const formData = await request.formData();
-    const reason = formData.get("reason") as string;
-    const startDate = formData.get("startDate") as string;
-    const endDate = formData.get("endDate") as string;
-
-    if (!reason || !startDate) {
-      return NextResponse.json({ error: "Reason and start date are required" }, { status: 400 });
-    }
+    const parsedForm = await parseForm(ProviderSuspensionSchema, request);
+    if (!parsedForm.ok) return invalidResponse(parsedForm.error);
 
     // Check if provider exists and is not already suspended
     const provider = await db
       .select()
       .from(providers)
-      .where(eq(providers.id, providerId))
+      .where(eq(providers.id, parsedParams.data.providerId))
       .limit(1);
 
     if (provider.length === 0) {
@@ -52,22 +40,22 @@ export async function POST(
       .update(providers)
       .set({
         isSuspended: true,
-        suspensionReason: reason,
-        suspensionStartDate: new Date(startDate),
-        suspensionEndDate: endDate ? new Date(endDate) : null,
+        suspensionReason: parsedForm.data.reason,
+        suspensionStartDate: parsedForm.data.startDate,
+        suspensionEndDate: parsedForm.data.endDate,
         updatedAt: new Date(),
       })
-      .where(eq(providers.id, providerId));
+      .where(eq(providers.id, parsedParams.data.providerId));
 
     // Log the action
     await db.insert(providerSuspensions).values({
       id: `psusp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      providerId,
+      providerId: parsedParams.data.providerId,
       action: "suspend",
-      reason,
-      startDate: new Date(startDate),
-      endDate: endDate ? new Date(endDate) : null,
-      performedBy: user!.id,
+      reason: parsedForm.data.reason,
+      startDate: parsedForm.data.startDate,
+      endDate: parsedForm.data.endDate,
+      performedBy: userId!,
     });
 
     // Redirect back to the suspensions page

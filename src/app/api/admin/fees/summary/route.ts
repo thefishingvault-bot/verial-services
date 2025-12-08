@@ -1,18 +1,13 @@
-import { currentUser } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { requireAdmin } from '@/lib/admin';
 import { getFeesSummary } from '@/server/admin/fees';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 
 export async function GET(request: Request) {
   try {
-    const user = await currentUser();
-    if (!user?.id) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
-    await requireAdmin(user.id);
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(request.url);
     const yearParam = searchParams.get('year');

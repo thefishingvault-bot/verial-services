@@ -1,38 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { refunds, bookings, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { stripe } from "@/lib/stripe";
+import { requireAdmin } from "@/lib/admin-auth";
+import { BookingIdSchema, RefundCreateSchema, RefundQuerySchema, invalidResponse, parseBody, parseParams, parseQuery } from "@/lib/validation/admin";
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
-
-    if (role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const { bookingId, amount, reason, description } = await request.json();
-
-    if (!bookingId || !amount || !reason) {
-      return NextResponse.json({
-        error: "Missing required fields: bookingId, amount, reason"
-      }, { status: 400 });
-    }
-
-    // Validate amount
-    const refundAmount = parseInt(amount);
-    if (isNaN(refundAmount) || refundAmount <= 0) {
-      return NextResponse.json({ error: "Invalid refund amount" }, { status: 400 });
-    }
+    const parsedBody = await parseBody(RefundCreateSchema, request);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const { bookingId, amount: refundAmount, reason, description } = parsedBody.data;
 
     // Get booking details
     const booking = await db
@@ -159,25 +141,11 @@ export async function POST(request: NextRequest) {
 // GET endpoint to retrieve refunds for a booking
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
-
-    if (role !== "admin") {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const bookingId = searchParams.get("bookingId");
-
-    if (!bookingId) {
-      return NextResponse.json({ error: "bookingId parameter required" }, { status: 400 });
-    }
+    const parsedQuery = parseQuery(RefundQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
 
     const bookingRefunds = await db
       .select({
@@ -196,7 +164,7 @@ export async function GET(request: NextRequest) {
       })
       .from(refunds)
       .innerJoin(users, eq(refunds.processedBy, users.id))
-      .where(eq(refunds.bookingId, bookingId))
+      .where(eq(refunds.bookingId, parsedQuery.data.bookingId))
       .orderBy(refunds.createdAt);
 
     return NextResponse.json({ refunds: bookingRefunds });

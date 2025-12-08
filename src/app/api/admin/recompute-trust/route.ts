@@ -3,6 +3,7 @@ import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { calculateTrustScore } from "@/lib/trust";
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -15,18 +16,15 @@ const getTrustLevel = (score: number): "bronze" | "silver" | "gold" | "platinum"
 };
 
 export async function POST(req: Request) {
-  // 1. --- CRON SECURITY ---
-  const cronKey = req.headers.get("Authorization")?.split("Bearer ")[1];
-  const expectedKey = process.env.CRON_KEY;
-
-  if (!expectedKey) {
-    console.error("[API_CRON_TRUST] CRON_KEY is not set. Aborting.");
-    return new NextResponse("CRON_KEY not configured", { status: 500 });
-  }
-
-  if (cronKey !== expectedKey) {
-    console.warn(`[API_CRON_TRUST] Invalid cron key received.`);
-    return new NextResponse("Unauthorized", { status: 401 });
+  // 1. --- AUTH --- allow admin role or cron key
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) {
+    const cronKey = req.headers.get("Authorization")?.split("Bearer ")[1];
+    const expectedKey = process.env.CRON_KEY;
+    if (!expectedKey || cronKey !== expectedKey) {
+      console.warn(`[API_CRON_TRUST] Unauthorized caller`);
+      return new NextResponse("Unauthorized", { status: 401 });
+    }
   }
 
   console.log("[API_CRON_TRUST] Cron job started. Recomputing all provider trust scores...");

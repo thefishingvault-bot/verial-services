@@ -1,0 +1,89 @@
+import { db } from "@/lib/db";
+import { providers, reviews, services, serviceFavorites } from "@/db/schema";
+import { and, eq, ne, sql } from "drizzle-orm";
+import { sortServicesByScore } from "@/lib/ranking";
+
+export type SimilarService = {
+  id: string;
+  title: string;
+  slug: string;
+  description: string | null;
+  priceInCents: number;
+  category: (typeof services.category.enumValues)[number];
+  coverImageUrl: string | null;
+  createdAt: Date;
+  providerId: string;
+  providerHandle: string | null;
+  providerBusinessName: string | null;
+  providerTrustScore: number;
+  providerVerified: boolean;
+  providerRegion: string | null;
+  avgRating: number;
+  reviewCount: number;
+  favoriteCount: number;
+};
+
+export async function getSimilarServices(serviceId: string, client = db): Promise<SimilarService[] | null> {
+  const baseService = await client.query.services.findFirst({
+    where: eq(services.id, serviceId),
+    with: {
+      provider: {
+        columns: { baseRegion: true, status: true, isSuspended: true },
+      },
+    },
+  });
+
+  if (!baseService || !baseService.provider) return null;
+  if (baseService.provider.isSuspended || baseService.provider.status !== "approved") return [];
+
+  const predicates = [
+    eq(services.category, baseService.category),
+    ne(services.id, baseService.id),
+    eq(providers.status, "approved"),
+    eq(providers.isSuspended, false),
+  ];
+
+  if (baseService.provider.baseRegion) {
+    predicates.push(eq(providers.baseRegion, baseService.provider.baseRegion));
+  }
+
+  const rows = await client
+    .select({
+      id: services.id,
+      title: services.title,
+      slug: services.slug,
+      description: services.description,
+      priceInCents: services.priceInCents,
+      category: services.category,
+      coverImageUrl: services.coverImageUrl,
+      createdAt: services.createdAt,
+      providerId: providers.id,
+      providerHandle: providers.handle,
+      providerBusinessName: providers.businessName,
+      providerTrustScore: providers.trustScore,
+      providerVerified: providers.isVerified,
+      providerRegion: providers.baseRegion,
+      avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+      reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
+      favoriteCount: sql<number>`COUNT(${serviceFavorites.id})`,
+    })
+    .from(services)
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .leftJoin(reviews, eq(reviews.serviceId, services.id))
+    .leftJoin(serviceFavorites, eq(serviceFavorites.serviceId, services.id))
+    .where(and(...predicates))
+    .groupBy(services.id, providers.id)
+    .limit(12);
+
+  const ranked = sortServicesByScore(
+    rows.map((item) => ({
+      ...item,
+      avgRating: Number(item.avgRating ?? 0),
+      reviewCount: Number(item.reviewCount ?? 0),
+      favoriteCount: Number(item.favoriteCount ?? 0),
+      trustScore: item.providerTrustScore ?? 0,
+    })),
+  ).slice(0, 6);
+
+  return ranked;
+}

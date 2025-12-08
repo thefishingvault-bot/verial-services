@@ -1,23 +1,13 @@
 import { db } from '@/lib/db';
 import { providers, users, bookings, services, bookingStatusEnum } from '@/db/schema';
 import { eq, and, or, ilike, sql } from 'drizzle-orm';
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export async function GET(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
-
-    if (role !== 'admin') {
-      return new NextResponse('Forbidden', { status: 403 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(req.url);
     const type = searchParams.get('type') || 'providers';

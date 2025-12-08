@@ -1,31 +1,20 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
 import { riskRules } from "@/db/schema";
 import { nanoid } from "nanoid";
+import { requireAdmin } from "@/lib/admin-auth";
+import { TrustRuleSchema, invalidResponse, parseBody } from "@/lib/validation/admin";
 
 export async function POST(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    await requireAdmin(user.id);
+    const parsed = await parseBody(TrustRuleSchema, request);
+    if (!parsed.ok) return invalidResponse(parsed.error);
 
-    const body = await request.json();
-    const { name, incidentType, severity, trustScorePenalty, autoSuspend, suspendDurationDays } = body;
-
-    // Validate required fields
-    if (!name || !incidentType || !severity) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-    }
-
-    // Validate severity
-    if (!["low", "medium", "high", "critical"].includes(severity)) {
-      return NextResponse.json({ error: "Invalid severity level" }, { status: 400 });
-    }
+    const { name, incidentType, severity, trustScorePenalty, autoSuspend, suspendDurationDays } = parsed.data;
 
     // Create the rule
     const ruleId = `rrule_${nanoid()}`;
@@ -38,7 +27,7 @@ export async function POST(request: NextRequest) {
       autoSuspend: autoSuspend || false,
       suspendDurationDays: suspendDurationDays || null,
       enabled: true,
-      createdBy: user.id,
+      createdBy: userId!,
     });
 
     // Redirect back to the rules page

@@ -6,6 +6,13 @@ export const TRUST_WEIGHTS = {
   TENURE: 0.05,      // 5%
 };
 
+export const getTrustTier = (score: number): "bronze" | "silver" | "gold" | "platinum" => {
+  if (score >= 90) return "platinum";
+  if (score >= 75) return "gold";
+  if (score >= 55) return "silver";
+  return "bronze";
+};
+
 export const calculateTrustScore = async (providerId: string): Promise<number> => {
   console.log(`[TRUST_LIB] Calculating score for ${providerId}...`);
 
@@ -63,7 +70,7 @@ export const calculateTrustScore = async (providerId: string): Promise<number> =
     const totalBookings = bookingStats[0]?.totalBookings || 0;
     const completedBookings = bookingStats[0]?.completedBookings || 0;
     const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 100;
-    const completionScore = completionRate;
+    const completionScore = totalBookings > 0 ? completionRate : 80; // Provide a moderated baseline for new providers
 
     // 5. Calculate tenure score (5%)
     const createdDate = providerData.createdAt;
@@ -95,7 +102,9 @@ export const calculateTrustScore = async (providerId: string): Promise<number> =
     }
 
     // 8. Calculate final score (ensure it's between 0-100)
-    const finalScore = Math.max(0, Math.min(100, baseScore + totalPenalty));
+    // Apply a small floor to avoid zeroing brand-new but verified providers
+    const prelimScore = baseScore + totalPenalty;
+    const finalScore = Math.max(20, Math.min(100, prelimScore));
 
     console.log(`[TRUST_LIB] Provider ${providerId} score: ${finalScore} (base: ${baseScore}, penalty: ${totalPenalty})`);
 

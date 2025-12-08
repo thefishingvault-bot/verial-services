@@ -2,6 +2,7 @@ export const runtime = "nodejs";
 
 import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
@@ -43,6 +44,20 @@ export default clerkMiddleware(async (auth, req) => {
 
     if (role !== "admin") {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+    }
+
+    const method = req.method?.toUpperCase();
+    if (method === "POST" || method === "PATCH") {
+      const rate = await enforceRateLimit(req, {
+        userId,
+        resource: "admin",
+        limit: 10,
+        windowSeconds: 60,
+      });
+
+      if (!rate.success) {
+        return rateLimitResponse(rate.retryAfter);
+      }
     }
   }
 });

@@ -1,24 +1,15 @@
 import { db } from '@/lib/db';
 import { providers } from '@/db/schema';
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { and, desc, eq, ilike, or } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
 
-// Helper function to check for Admin role
-const isAdmin = async (userId: string): Promise<boolean> => {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  return user.publicMetadata.role === 'admin';
-};
-
 export async function GET(request: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId || !(await isAdmin(userId))) {
-      return new NextResponse('Forbidden: Requires admin role', { status: 403 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(request.url);
 

@@ -1,25 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
-import { requireAdmin } from '@/lib/admin';
 import { trustIncidents, providers, users } from '@/db/schema';
 import { eq, desc, gte, sql, and } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    try {
-      await requireAdmin(userId);
-    } catch (error) {
-      if (error instanceof Error && error.message === 'Forbidden') {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-      }
-      throw error;
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(request.url);
     const timeframe = searchParams.get('timeframe') || '30d';

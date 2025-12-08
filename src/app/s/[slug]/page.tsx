@@ -1,428 +1,428 @@
-"use client";
-
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
+import { Metadata } from "next";
 import Image from "next/image";
-import { useUser } from "@clerk/nextjs";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Separator } from "@/components/ui/separator";
-import { CheckCircle, Loader2 } from "lucide-react";
-import { formatPrice, getTrustBadge } from "@/lib/utils";
-import { Calendar } from "@/components/ui/calendar";
-import { Label } from "@/components/ui/label";
-import { format } from "date-fns";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { auth } from "@clerk/nextjs/server";
+import { and, desc, eq, sql } from "drizzle-orm";
+import { CheckCircle } from "lucide-react";
+
 import { ContactButton } from "@/components/common/contact-button";
-import { FavoriteButton } from "@/components/favorites/favorite-button";
+import { ServiceFavoriteButton } from "@/components/favorites/service-favorite-button";
+import { ProviderStatsCard } from "@/components/services/detail/provider-stats-card";
+import { ReviewList, type ReviewItem } from "@/components/services/detail/review-list";
+import { ReviewSummary, type ReviewBreakdown } from "@/components/services/detail/review-summary";
+import { ServiceBookingPanel } from "@/components/services/detail/service-booking-panel";
+import { SimilarServicesGrid } from "@/components/services/detail/similar-services-grid";
+import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardDescription, CardHeader } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { db } from "@/lib/db";
+import { getProviderStats } from "@/lib/provider-stats";
+import { getSimilarServices, type SimilarService } from "@/lib/similar-services";
+import { getTrustBadge } from "@/lib/utils";
+import { getTrustTier } from "@/lib/trust";
+import {
+  providers,
+  providerTimeOffs,
+  reviews,
+  serviceFavorites,
+  services,
+  users,
+} from "@/db/schema";
 
-interface ServiceDetails {
+type ServiceDetail = {
   id: string;
+  slug: string;
   title: string;
-  description: string;
+  description: string | null;
   priceInCents: number;
-  category: string;
-  chargesGst: boolean;
+  category: (typeof services.category.enumValues)[number];
   coverImageUrl: string | null;
-  providerId: string;
+  chargesGst: boolean;
+  createdAt: Date;
   provider: {
-		userId: string;
-    handle: string;
-    businessName: string;
+    id: string;
+    userId: string | null;
+    handle: string | null;
+    businessName: string | null;
+    bio: string | null;
+    trustLevel: (typeof providers.trustLevel.enumValues)[number];
+    trustScore: number;
     isVerified: boolean;
-    trustLevel: 'bronze' | 'silver' | 'gold' | 'platinum';
-    bio: string;
-		baseSuburb: string | null;
-		baseRegion: string | null;
-		serviceRadiusKm: number | null;
-    user: {
-      email: string;
-    };
+    baseSuburb: string | null;
+    baseRegion: string | null;
+    serviceRadiusKm: number | null;
   };
-}
+  avgRating: number;
+  reviewCount: number;
+  favoriteCount: number;
+  isFavorited: boolean;
+};
 
-interface ServiceReview {
-  id: string;
-  rating: number;
-  comment: string | null;
-  createdAt: string;
-  user?: {
-    firstName: string | null;
-    lastName: string | null;
-  } | null;
-}
+type ServiceDetailData = {
+  service: ServiceDetail;
+  reviewSummary: {
+    average: number;
+    total: number;
+    breakdown: ReviewBreakdown;
+  };
+  reviewItems: ReviewItem[];
+  blockedDays: { from: Date; to: Date }[];
+  similarServices: SimilarService[];
+  providerStats: Awaited<ReturnType<typeof getProviderStats>>;
+};
 
-export default function ServiceDetailPage() {
-  const params = useParams();
-  const slug = params.slug as string;
-  const router = useRouter();
-  const { isSignedIn } = useUser();
+type ServiceParams = {
+  params: { slug: string };
+};
 
-  const [service, setService] = useState<ServiceDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [reviewsData, setReviewsData] = useState<{ items: ServiceReview[]; avgRating: number; total: number }>({ items: [], avgRating: 0, total: 0 });
-
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [availableSlots, setAvailableSlots] = useState<string[]>([]);
-  const [isLoadingSlots, setIsLoadingSlots] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [isBooking, setIsBooking] = useState(false);
-  const [blockedDays, setBlockedDays] = useState<{ from: Date; to: Date }[]>([]);
-  const [customerRegion, setCustomerRegion] = useState<string>("");
-
-  useEffect(() => {
-    if (!slug) return;
-
-    setIsLoading(true);
-    setError(null);
-
-    fetch(`/api/services/by-slug/${slug}`)
-      .then((res) => {
-        if (res.status === 404) throw new Error('Service not found');
-        if (!res.ok) throw new Error('Failed to fetch service details.');
-        return res.json();
-      })
-      .then((data: ServiceDetails) => {
-        setService(data);
-        setIsLoading(false);
-      })
-      .catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : 'Failed to load service.';
-        setError(message);
-        setIsLoading(false);
-      });
-  }, [slug]);
-
-  useEffect(() => {
-    if (!service || !selectedDate) return;
-
-    setIsLoadingSlots(true);
-    setSelectedSlot(null);
-
-    fetch('/api/provider/availability/slots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        providerId: service.providerId,
-        date: format(selectedDate, 'yyyy-MM-dd'),
-      }),
+async function getReviewData(serviceId: string) {
+  const [summary] = await db
+    .select({
+      average: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+      total: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
     })
-      .then((res) => res.json())
-      .then((data: { availableSlots?: string[] }) => {
-        setAvailableSlots(data.availableSlots ?? []);
-        setIsLoadingSlots(false);
+    .from(reviews)
+    .where(eq(reviews.serviceId, serviceId));
+
+  const breakdownRows = await db
+    .select({ rating: reviews.rating, count: sql<number>`COUNT(${reviews.id})` })
+    .from(reviews)
+    .where(and(eq(reviews.serviceId, serviceId), eq(reviews.isHidden, false)))
+    .groupBy(reviews.rating);
+
+  const breakdown: ReviewBreakdown = {};
+  for (const row of breakdownRows) {
+    breakdown[String(row.rating)] = Number(row.count ?? 0);
+  }
+
+  const items = (
+    await db
+      .select({
+        id: reviews.id,
+        rating: reviews.rating,
+        comment: reviews.comment,
+        createdAt: reviews.createdAt,
+        isHidden: reviews.isHidden,
+        firstName: users.firstName,
+        lastName: users.lastName,
       })
-      .catch(() => {
-        setError('Failed to load availability.');
-        setIsLoadingSlots(false);
-      });
-  }, [service, selectedDate]);
-
-  useEffect(() => {
-    if (!service?.id) return;
-
-    fetch(`/api/reviews/service/${service.id}?pageSize=20`)
-      .then((res) => res.json())
-      .then((data) => {
-        setReviewsData({
-          items: data.items ?? [],
-          avgRating: data.avgRating ?? 0,
-          total: data.total ?? 0,
-        });
-      })
-      .catch(() => {
-        // silent fail for reviews
-      });
-  }, [service?.id]);
-
-  // Fetch blocked dates (time offs) for this provider
-  useEffect(() => {
-    if (!service?.providerId) return;
-
-    fetch(`/api/public/provider/time-offs?providerId=${service.providerId}`)
-      .then((res) => res.json())
-      .then((data: { startTime: string; endTime: string }[]) => {
-        const ranges = data.map((off) => ({
-          from: new Date(off.startTime),
-          to: new Date(off.endTime),
-        }));
-        setBlockedDays(ranges);
-      })
-      .catch((err) => {
-        console.error('[SERVICE_TIME_OFFS]', err);
-      });
-  }, [service?.providerId]);
-
-  const handleBookNow = async () => {
-    if (!selectedSlot) {
-      setError('Please select an available time slot.');
-      return;
-    }
-
-    setIsBooking(true);
-    setError(null);
-
-    if (!isSignedIn) {
-      router.push(`/sign-in?redirect_url=${window.location.href}`);
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/bookings/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceId: service!.id,
-          scheduledDate: selectedSlot,
-          customerRegion: customerRegion || undefined,
-        }),
-      });
-
-      if (!res.ok) {
-        let message = 'Failed to create booking.';
-        try {
-          const data = await res.json();
-          if (data?.error === 'OUT_OF_AREA' && data?.message) {
-            message = data.message;
-          } else if (typeof data === 'string') {
-            message = data;
+      .from(reviews)
+      .leftJoin(users, eq(users.id, reviews.userId))
+      .where(eq(reviews.serviceId, serviceId))
+      .orderBy(desc(reviews.createdAt))
+      .limit(10)
+  ).map((row): ReviewItem => ({
+    id: row.id,
+    rating: row.rating,
+    comment: row.comment,
+    createdAt: row.createdAt.toISOString(),
+    isHidden: row.isHidden ?? false,
+    user:
+      row.firstName || row.lastName
+        ? {
+            firstName: row.firstName,
+            lastName: row.lastName,
           }
-        } catch {
-          const errorText = await res.text();
-          if (errorText) message = errorText;
-        }
-        throw new Error(message);
-      }
+        : undefined,
+  }));
 
-      const newBooking = await res.json();
-      alert(`Booking request sent! Your booking ID is ${newBooking.id}.`);
-      router.push('/dashboard/bookings');
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : 'Something went wrong while creating your booking.';
-      setError(message);
-      setIsBooking(false);
-    }
+  return {
+    summary: {
+      average: Number(summary?.average ?? 0),
+      total: Number(summary?.total ?? 0),
+      breakdown,
+    },
+    items,
+  };
+}
+
+async function getBlockedDays(providerId: string) {
+  const rows = await db
+    .select({
+      start: providerTimeOffs.startTime,
+      end: providerTimeOffs.endTime,
+    })
+    .from(providerTimeOffs)
+    .where(eq(providerTimeOffs.providerId, providerId));
+
+  return rows.map((row) => ({ from: row.start, to: row.end }));
+}
+
+async function getServiceDetailData(slug: string, userId?: string | null): Promise<ServiceDetailData | null> {
+  const rows = await db
+    .select({
+      id: services.id,
+      slug: services.slug,
+      title: services.title,
+      description: services.description,
+      priceInCents: services.priceInCents,
+      category: services.category,
+      coverImageUrl: services.coverImageUrl,
+      chargesGst: services.chargesGst,
+      createdAt: services.createdAt,
+      providerId: providers.id,
+      providerUserId: providers.userId,
+      providerHandle: providers.handle,
+      providerBusinessName: providers.businessName,
+      providerBio: providers.bio,
+      providerTrustLevel: providers.trustLevel,
+      providerTrustScore: providers.trustScore,
+      providerVerified: providers.isVerified,
+      providerBaseSuburb: providers.baseSuburb,
+      providerBaseRegion: providers.baseRegion,
+      providerRadius: providers.serviceRadiusKm,
+      avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+      reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
+      favoriteCount: sql<number>`COUNT(${serviceFavorites.id})`,
+      isFavorited: userId
+        ? sql<boolean>`EXISTS (SELECT 1 FROM ${serviceFavorites} sf WHERE sf.service_id = ${services.id} AND sf.user_id = ${userId})`
+        : sql<boolean>`false`,
+    })
+    .from(services)
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .leftJoin(reviews, eq(reviews.serviceId, services.id))
+    .leftJoin(serviceFavorites, eq(serviceFavorites.serviceId, services.id))
+    .where(and(eq(services.slug, slug), eq(providers.status, "approved"), eq(providers.isSuspended, false)))
+    .groupBy(services.id, providers.id)
+    .limit(1);
+
+  const serviceRow = rows[0];
+  if (!serviceRow) return null;
+
+  const service: ServiceDetail = {
+    id: serviceRow.id,
+    slug: serviceRow.slug,
+    title: serviceRow.title,
+    description: serviceRow.description,
+    priceInCents: serviceRow.priceInCents,
+    category: serviceRow.category,
+    coverImageUrl: serviceRow.coverImageUrl,
+    chargesGst: serviceRow.chargesGst,
+    createdAt: serviceRow.createdAt,
+    provider: {
+      id: serviceRow.providerId,
+      userId: serviceRow.providerUserId,
+      handle: serviceRow.providerHandle,
+      businessName: serviceRow.providerBusinessName,
+      bio: serviceRow.providerBio,
+      trustLevel: serviceRow.providerTrustLevel,
+      trustScore: serviceRow.providerTrustScore ?? 0,
+      isVerified: serviceRow.providerVerified ?? false,
+      baseSuburb: serviceRow.providerBaseSuburb,
+      baseRegion: serviceRow.providerBaseRegion,
+      serviceRadiusKm: serviceRow.providerRadius,
+    },
+    avgRating: Number(serviceRow.avgRating ?? 0),
+    reviewCount: Number(serviceRow.reviewCount ?? 0),
+    favoriteCount: Number(serviceRow.favoriteCount ?? 0),
+    isFavorited: Boolean(serviceRow.isFavorited),
   };
 
-  if (isLoading) return <div className="p-8">Loading service...</div>;
-  if (error && !service) return <div className="p-8 text-red-500">Error: {error}</div>;
-  if (!service) return <div className="p-8">Service not found.</div>;
+  const [reviewData, blockedDays, similarServices, providerStats] = await Promise.all([
+    getReviewData(service.id),
+    getBlockedDays(service.provider.id),
+    getSimilarServices(service.id).then((res) => res ?? []),
+    getProviderStats(service.provider.id),
+  ]);
 
-  const { Icon, color } = getTrustBadge(service.provider.trustLevel);
+  return {
+    service,
+    reviewSummary: reviewData.summary,
+    reviewItems: reviewData.items,
+    blockedDays,
+    similarServices,
+    providerStats,
+  };
+}
+
+export async function generateMetadata({ params }: ServiceParams): Promise<Metadata> {
+  const { slug } = await params;
+  const service = await db.query.services.findFirst({
+    where: eq(services.slug, slug),
+    columns: { title: true, description: true },
+  });
+
+  if (!service) return {};
+
+  const title = `${service.title} | Verial`;
+  const description = service.description ?? "View service details on Verial.";
+
+  return {
+    title,
+    description,
+    openGraph: { title, description },
+  };
+}
+
+export default async function ServiceDetailPage({ params }: ServiceParams) {
+  const { slug } = await params;
+  const { userId } = await auth();
+  const data = await getServiceDetailData(slug, userId);
+
+  if (!data) notFound();
+
+  const { service, reviewSummary, reviewItems, blockedDays, similarServices, providerStats } = data;
+  const trustScore = service.provider.trustScore ?? 0;
+  const trustTier = getTrustTier(trustScore);
+  const { Icon, color } = getTrustBadge(trustTier);
+  const showAdminBadge = service.provider.isVerified && trustScore >= 85;
 
   return (
-    <div className="max-w-4xl mx-auto p-4 md:p-8">
+    <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
       <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2">
-          <div className="relative w-full aspect-video bg-gray-200 rounded-lg mb-6 overflow-hidden">
+        <div className="md:col-span-2 space-y-6">
+          <div className="relative w-full aspect-video bg-gray-200 rounded-lg overflow-hidden">
             {service.coverImageUrl ? (
-              <Image
-                src={service.coverImageUrl}
-                alt={service.title}
-                fill
-                className="object-cover"
-              />
+              <Image src={service.coverImageUrl} alt={service.title} fill className="object-cover" priority />
             ) : (
-              <div className="flex items-center justify-center h-full">
-                <span className="text-gray-500">No Image Provided</span>
-              </div>
+              <div className="flex h-full items-center justify-center text-gray-500">No image provided</div>
             )}
+            <div className="absolute top-3 left-3">
+              <Badge variant="secondary" className="bg-white/90 capitalize text-slate-900">
+                {service.category.replace(/_/g, " ")}
+              </Badge>
+            </div>
+            <div className="absolute top-3 right-3 sm:hidden">
+              <ServiceFavoriteButton
+                serviceId={service.id}
+                initialIsFavorite={service.isFavorited}
+                initialCount={service.favoriteCount}
+              />
+            </div>
           </div>
 
-          <h1 className="text-3xl font-bold mb-2">{service.title}</h1>
-          <div className="flex flex-wrap items-center gap-2 mb-4">
-            <Badge variant="outline" className="capitalize">
-              {service.category}
-            </Badge>
-            {service.provider.serviceRadiusKm &&
-              (service.provider.baseSuburb || service.provider.baseRegion) && (
-                <Badge variant="secondary" className="rounded-full text-xs font-normal">
-                  Travels up to {service.provider.serviceRadiusKm} km{' '}
-                  {service.provider.baseSuburb
-                    ? `from ${service.provider.baseSuburb}`
-                    : `in ${service.provider.baseRegion}`}
-                </Badge>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold text-slate-900">{service.title}</h1>
+                <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+                  <Badge variant="outline" className="capitalize">{service.category.replace(/_/g, " ")}</Badge>
+                  {service.provider.baseSuburb || service.provider.baseRegion ? (
+                    <span className="text-slate-600">
+                      {service.provider.baseSuburb ?? service.provider.baseRegion}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="hidden sm:block">
+                <ServiceFavoriteButton
+                  serviceId={service.id}
+                  initialIsFavorite={service.isFavorited}
+                  initialCount={service.favoriteCount}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
+              <span className="font-semibold">
+                {service.reviewCount > 0 ? `${service.avgRating.toFixed(1)} / 5` : "No reviews yet"}
+              </span>
+              <span className="text-slate-500">
+                {service.reviewCount} review{service.reviewCount === 1 ? "" : "s"}
+              </span>
+              <Separator orientation="vertical" className="h-5" />
+              <span className="flex items-center gap-2 text-slate-600">
+                <Icon className={`h-4 w-4 ${color}`} />
+                {trustTier} trust · {Math.round(trustScore)}/100
+              </span>
+              {service.provider.isVerified && (
+                <span className="flex items-center gap-1 text-emerald-600">
+                  <CheckCircle className="h-4 w-4" />
+                  Verified provider
+                </span>
               )}
+              {showAdminBadge && (
+                <span className="flex items-center gap-1 text-blue-600 font-semibold">
+                  <CheckCircle className="h-4 w-4" /> Admin trusted
+                </span>
+              )}
+            </div>
           </div>
 
-          <Separator className="my-4" />
+          <Separator />
 
-          <h2 className="text-xl font-semibold mb-2">About this service</h2>
-          <p className="text-gray-700 whitespace-pre-wrap">
-            {service.description || 'No description provided.'}
-          </p>
+          <section className="space-y-3">
+            <h2 className="text-xl font-semibold text-slate-900">About this service</h2>
+            <p className="text-slate-700 whitespace-pre-wrap">
+              {service.description || "No description provided."}
+            </p>
+          </section>
 
-          <Card className="mt-6">
-            <CardHeader className="flex flex-row items-start justify-between space-y-0">
-              <div className="flex flex-col space-y-1.5">
-                <Link href={`/p/${service.provider.handle}`} className="hover:underline">
-                  <CardTitle className="text-lg">{service.provider.businessName}</CardTitle>
-                  <CardDescription>@{service.provider.handle}</CardDescription>
-                </Link>
-              </div>
-              <div className="flex flex-col items-end gap-2">
-                <ContactButton providerUserId={service.provider.userId} />
-                {isSignedIn && (
-                  <FavoriteButton providerId={service.providerId} />
+          <Card>
+            <CardHeader className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="space-y-1.5">
+                {service.provider.handle ? (
+                  <Link href={`/p/${service.provider.handle}`} className="hover:underline font-semibold text-slate-900">
+                    {service.provider.businessName ?? "Provider"}
+                  </Link>
+                ) : (
+                  <p className="font-semibold text-slate-900">{service.provider.businessName ?? "Provider"}</p>
                 )}
+                {service.provider.handle ? (
+                  <CardDescription>@{service.provider.handle}</CardDescription>
+                ) : null}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-col space-y-2">
+              <div className="flex flex-col items-start sm:items-end gap-2">
                 {service.provider.isVerified && (
-                  <Badge variant="secondary" className="w-fit">
-                    <CheckCircle className="h-4 w-4 mr-1 text-green-500" />
-                    Verified Provider
+                  <Badge variant="secondary" className="gap-1">
+                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Verified Provider
                   </Badge>
                 )}
-                <Badge variant="secondary" className={`w-fit ${color}`}>
-                  <Icon className="h-4 w-4 mr-1" />
-                  {service.provider.trustLevel.charAt(0).toUpperCase() +
-                    service.provider.trustLevel.slice(1)}{' '}
-                  Trust
+                <Badge variant="secondary" className={`gap-1 ${color}`}>
+                  <Icon className="h-4 w-4" />
+                  {trustTier} trust · {Math.round(trustScore)}
                 </Badge>
+                {showAdminBadge && (
+                  <Badge variant="secondary" className="gap-1 text-blue-700">
+                    <CheckCircle className="h-4 w-4" /> Admin trusted
+                  </Badge>
+                )}
+                {service.provider.userId && <ContactButton providerUserId={service.provider.userId} />}
               </div>
-              <p className="text-sm text-gray-600 mt-4">
-                {service.provider.bio || 'No bio provided.'}
-              </p>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-slate-700">
+              <p>{service.provider.bio || "No bio provided."}</p>
+              {service.provider.serviceRadiusKm && (
+                <div className="text-slate-600">
+                  Travels up to {service.provider.serviceRadiusKm} km
+                  {service.provider.baseSuburb
+                    ? ` from ${service.provider.baseSuburb}`
+                    : service.provider.baseRegion
+                      ? ` in ${service.provider.baseRegion}`
+                      : ""}
+                </div>
+              )}
             </CardContent>
           </Card>
 
-              <Card className="mt-6">
-                <CardHeader>
-                  <CardTitle>What customers are saying</CardTitle>
-                  <CardDescription>
-                    {reviewsData.total > 0
-                      ? `${reviewsData.avgRating.toFixed(1)} / 5 from ${reviewsData.total} review${reviewsData.total === 1 ? '' : 's'}`
-                      : 'No reviews yet.'}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {reviewsData.items.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No reviews yet.</p>
-                  ) : (
-                    reviewsData.items.map((review) => {
-                      const name = [review.user?.firstName, review.user?.lastName?.charAt(0)].filter(Boolean).join(' ') || 'Customer';
-                      return (
-                        <div key={review.id} className="rounded-md border p-3 space-y-1">
-                          <div className="flex items-center justify-between text-sm">
-                            <span className="font-medium">{name}</span>
-                            <span className="text-yellow-500 font-semibold">{review.rating} ★</span>
-                          </div>
-                          {review.comment && <p className="text-sm text-muted-foreground">{review.comment}</p>}
-                          <span className="text-[11px] text-muted-foreground">
-                            {new Date(review.createdAt).toLocaleDateString('en-NZ')}
-                          </span>
-                        </div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
+          <section className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-slate-900">Reviews</h2>
+              <span className="text-sm text-slate-500">{reviewSummary.total} total</span>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <ReviewSummary
+                averageRating={reviewSummary.average}
+                totalReviews={reviewSummary.total}
+                breakdown={reviewSummary.breakdown}
+              />
+              <ReviewList serviceId={service.id} initialItems={reviewItems} initialTotal={reviewSummary.total} />
+            </div>
+          </section>
+
+          <SimilarServicesGrid services={similarServices} />
         </div>
 
-        <div className="md:col-span-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-2xl">{formatPrice(service.priceInCents)}</CardTitle>
-              <CardDescription>
-                {service.chargesGst ? 'Price includes GST (15%)' : 'Price excludes GST'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div>
-                  <Label className="mb-2 block">Select a date</Label>
-                  <div className="flex justify-center w-full">
-                    <Calendar
-                      mode="single"
-                      selected={selectedDate}
-                      onSelect={setSelectedDate}
-                      disabled={[
-                        (date) => date < new Date(new Date().setHours(0, 0, 0, 0)),
-                        ...blockedDays,
-                      ]}
-                      className="rounded-md border shadow-sm"
-                      classNames={{
-                        head_cell:
-                          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
-                        cell:
-                          "h-8 w-8 text-center text-sm p-0 relative [&:has([aria-selected])]:bg-accent first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md focus-within:relative focus-within:z-20",
-                        day: "h-8 w-8 p-0 font-normal aria-selected:opacity-100 hover:bg-accent hover:text-accent-foreground rounded-md",
-                        day_selected:
-                          "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
-                        day_today: "bg-accent text-accent-foreground",
-                        day_outside: "text-muted-foreground opacity-50",
-                        day_disabled: "text-muted-foreground opacity-50",
-                        day_range_middle:
-                          "aria-selected:bg-accent aria-selected:text-accent-foreground",
-                        day_hidden: "invisible",
-                      }}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="mb-2 block">Select a time</Label>
-                  {isLoadingSlots && (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      <span>Loading available slots...</span>
-                    </div>
-                  )}
-                  {!isLoadingSlots && availableSlots.length === 0 && (
-                    <p className="text-sm text-muted-foreground">
-                      No available slots on this day.
-                    </p>
-                  )}
-                  <div className="grid grid-cols-3 gap-2 mt-2">
-                    {availableSlots.map((slot) => (
-                      <Button
-                        key={slot}
-                        type="button"
-                        variant={selectedSlot === slot ? 'default' : 'outline'}
-                        onClick={() => setSelectedSlot(slot)}
-                      >
-                        {format(new Date(slot), 'h:mm a')}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <Label className="mb-2 block">Your region</Label>
-                  <input
-                    type="text"
-                    value={customerRegion}
-                    onChange={(e) => setCustomerRegion(e.target.value)}
-                    placeholder="e.g. Auckland, Waikato, Wellington"
-                    className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-                  />
-                </div>
-
-                {error && service && (
-                  <p className="text-red-500 text-sm mt-2">{error}</p>
-                )}
-
-                <Button
-                  type="button"
-                  onClick={handleBookNow}
-                  disabled={isBooking || !selectedSlot}
-                  className="w-full"
-                >
-                  {isBooking ? 'Booking...' : 'Book Now'}
-                </Button>
-              </div>
-            </CardContent>
-            <CardFooter>
-              <p className="text-xs text-gray-500">
-                You won&apos;t be charged until the provider accepts your request.
-              </p>
-            </CardFooter>
-          </Card>
+        <div className="space-y-4">
+          <ServiceBookingPanel
+            serviceId={service.id}
+            providerId={service.provider.id}
+            priceInCents={service.priceInCents}
+            chargesGst={service.chargesGst}
+            blockedDays={blockedDays}
+          />
+          <ProviderStatsCard stats={providerStats} />
         </div>
       </div>
     </div>

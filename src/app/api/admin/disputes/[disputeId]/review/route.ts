@@ -1,29 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
 import { disputes } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "@/lib/admin-auth";
+import { DisputeIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
 
 export async function POST(
   request: NextRequest,
   { params }: { params: Promise<{ disputeId: string }> }
 ) {
   try {
-    const user = await currentUser();
-    if (!user?.id) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    await requireAdmin(user.id);
-
-    const { disputeId } = await params;
+    const parsedParams = parseParams(DisputeIdSchema, await params);
+    if (!parsedParams.ok) return invalidResponse(parsedParams.error);
 
     // Check if dispute exists and is open
     const dispute = await db
       .select()
       .from(disputes)
-      .where(eq(disputes.id, disputeId))
+      .where(eq(disputes.id, parsedParams.data.disputeId))
       .limit(1);
 
     if (dispute.length === 0) {
@@ -41,7 +38,7 @@ export async function POST(
         status: "under_review",
         updatedAt: new Date(),
       })
-      .where(eq(disputes.id, disputeId));
+      .where(eq(disputes.id, parsedParams.data.disputeId));
 
     // Redirect back to the disputes page
     return NextResponse.redirect(new URL("/dashboard/admin/disputes", request.url));

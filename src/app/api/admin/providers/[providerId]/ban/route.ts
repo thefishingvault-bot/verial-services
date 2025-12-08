@@ -1,32 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, providerSuspensions } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-const isAdmin = async (userId: string): Promise<boolean> => {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  return user.publicMetadata.role === "admin";
-};
+import { requireAdmin } from "@/lib/admin-auth";
+import { ProviderBanSchema, ProviderIdSchema, invalidResponse, parseBody, parseParams } from "@/lib/validation/admin";
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId || !(await isAdmin(userId))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const userId = admin.userId!;
 
-    const { providerId } = await params;
-    const { reason } = (await req.json().catch(() => ({}))) as { reason?: string };
+    const parsedParams = parseParams(ProviderIdSchema, await params);
+    if (!parsedParams.ok) return invalidResponse(parsedParams.error);
+
+    const parsedBody = await parseBody(ProviderBanSchema, req);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
 
     const provider = await db
       .select()
       .from(providers)
-      .where(eq(providers.id, providerId))
+      .where(eq(providers.id, parsedParams.data.providerId))
       .limit(1);
 
     if (provider.length === 0) {
@@ -38,7 +36,7 @@ export async function POST(
     }
 
     const now = new Date();
-    const suspensionReason = reason?.trim() || "Banned by admin";
+    const suspensionReason = parsedBody.data.reason;
 
     const [updated] = await db
       .update(providers)
@@ -49,12 +47,12 @@ export async function POST(
         suspensionEndDate: null,
         updatedAt: now,
       })
-      .where(eq(providers.id, providerId))
+      .where(eq(providers.id, parsedParams.data.providerId))
       .returning();
 
     await db.insert(providerSuspensions).values({
       id: `psusp_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
-      providerId,
+      providerId: parsedParams.data.providerId,
       action: "suspend",
       reason: suspensionReason,
       startDate: now,

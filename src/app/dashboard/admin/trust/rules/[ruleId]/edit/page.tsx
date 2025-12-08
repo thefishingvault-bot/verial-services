@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Save } from "lucide-react";
+import { parseParamsOrNotFound, RuleIdParamSchema } from "@/lib/validation/admin-loader-schemas";
 
 interface EditRiskRulePageProps {
   params: Promise<{ ruleId: string }>;
@@ -29,7 +30,7 @@ export default async function EditRiskRulePage({ params }: EditRiskRulePageProps
     redirect("/dashboard");
   }
 
-  const { ruleId } = await params;
+  const { ruleId } = parseParamsOrNotFound(RuleIdParamSchema, await params);
 
   // Fetch the rule
   const rule = await db

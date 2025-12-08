@@ -1,23 +1,13 @@
 import { db } from '@/lib/db';
 import { providers, bookings } from '@/db/schema';
 import { inArray } from 'drizzle-orm';
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { requireAdmin } from '@/lib/admin-auth';
 
 export async function POST(req: Request) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse('Unauthorized', { status: 401 });
-    }
-
-    const client = await clerkClient();
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
-
-    if (role !== 'admin') {
-      return new NextResponse('Forbidden', { status: 403 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { type, action, ids } = await req.json();
 

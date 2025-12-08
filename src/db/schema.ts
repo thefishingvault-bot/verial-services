@@ -11,6 +11,7 @@ import {
   serial,
   index,
   uniqueIndex,
+  jsonb,
 } from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
@@ -39,11 +40,9 @@ export const users = pgTable("users", {
   lastName: text("last_name"),
   avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").default("user").notNull(),
+  providerId: varchar("provider_id", { length: 255 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-
-  // Foreign key to Provider table (if they are one)
-  providerId: varchar("provider_id", { length: 255 }).unique(),
 });
 
 /**
@@ -74,6 +73,7 @@ export const providers = pgTable("providers", {
   chargesEnabled: boolean("charges_enabled").default(false).notNull(),
   payoutsEnabled: boolean("payouts_enabled").default(false).notNull(),
   chargesGst: boolean("charges_gst").default(true).notNull(), // Default to inclusive
+  gstNumber: varchar("gst_number", { length: 50 }),
 
   // KYC / Identity
   kycStatus: kycStatusEnum("kyc_status").default("not_started").notNull(),
@@ -87,6 +87,30 @@ export const providers = pgTable("providers", {
   suspensionStartDate: timestamp("suspension_start_date"),
   suspensionEndDate: timestamp("suspension_end_date"),
 
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Booking Cancellations
+export const bookingCancellations = pgTable("booking_cancellations", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  actor: varchar("actor", { length: 20 }).notNull(), // 'customer' | 'provider'
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Booking Reschedules
+export const bookingReschedules = pgTable("booking_reschedules", {
+  id: varchar("id", { length: 255 }).primaryKey(),
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }),
+  requesterId: varchar("requester_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
+  proposedDate: timestamp("proposed_date").notNull(),
+  responderId: varchar("responder_id", { length: 255 }).references(() => users.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 20 }).default("pending").notNull(), // pending | approved | declined
+  providerNote: text("provider_note"),
+  customerNote: text("customer_note"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -286,11 +310,22 @@ export const reviews = pgTable("reviews", {
 export const notifications = pgTable("notifications", {
   id: varchar("id", { length: 255 }).primaryKey(), // e.g., notif_...
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // The user who receives it
-  message: text("message").notNull(),
-  href: text("href").notNull(), // The link to go to (e.g., /dashboard/bookings/provider)
+  type: varchar("type", { length: 50 }).default("system").notNull(),
+  title: text("title").default("Notification").notNull(),
+  body: text("body"),
+  actionUrl: text("action_url").default("/dashboard").notNull(),
+  message: text("message").default("Notification").notNull(), // legacy field kept for backwards compatibility
+  href: text("href").default("/dashboard").notNull(), // legacy field kept for backwards compatibility
   isRead: boolean("is_read").default(false).notNull(),
+  readAt: timestamp("read_at"),
+  bookingId: varchar("booking_id", { length: 255 }).references(() => bookings.id, { onDelete: "set null" }),
+  serviceId: varchar("service_id", { length: 255 }).references(() => services.id, { onDelete: "set null" }),
+  providerId: varchar("provider_id", { length: 255 }).references(() => providers.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  userIdx: index("notifications_user_idx").on(table.userId),
+  createdIdx: index("notifications_created_idx").on(table.createdAt),
+}));
 
 // --- NEW ENUMS ---
 export const dayOfWeekEnum = pgEnum("day_of_week", [
@@ -362,26 +397,82 @@ export const favoriteProviders = pgTable("favorite_providers", {
  * Conversations Table
  * Links two users (customer and provider) in a chat thread.
  */
-export const conversations = pgTable("conversations", {
-  id: varchar("id", { length: 255 }).primaryKey(), // e.g., conv_...
-  user1Id: varchar("user1_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
-  user2Id: varchar("user2_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
-  lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const conversations = pgTable(
+  "conversations",
+  {
+    id: varchar("id", { length: 255 }).primaryKey(), // e.g., conv_...
+    userAId: varchar("user_a_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    userBId: varchar("user_b_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    userPairUnique: uniqueIndex("conversations_user_pair_unique").on(table.userAId, table.userBId),
+    lastMessageIdx: index("conversations_last_message_idx").on(table.lastMessageAt),
+  }),
+);
 
 /**
  * Messages Table
  * Individual messages within a conversation.
  */
-export const messages = pgTable("messages", {
-  id: varchar("id", { length: 255 }).primaryKey(), // e.g., msg_...
-  conversationId: varchar("conversation_id", { length: 255 }).notNull().references(() => conversations.id, { onDelete: "cascade" }),
-  senderId: varchar("sender_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  isRead: boolean("is_read").default(false).notNull(),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+export const messageThreads = pgTable(
+  "message_threads",
+  {
+    id: varchar("id", { length: 255 }).primaryKey(), // e.g., mthread_...
+    bookingId: varchar("booking_id", { length: 255 })
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" })
+      .unique(),
+    lastMessageAt: timestamp("last_message_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+    unreadCount: integer("unread_count").notNull().default(0),
+  },
+  (table) => ({
+    bookingIdx: index("message_threads_booking_idx").on(table.bookingId),
+    lastMessageIdx: index("message_threads_last_message_idx").on(table.lastMessageAt),
+  }),
+);
+
+export const messages = pgTable(
+  "messages",
+  {
+    serverMessageId: varchar("server_message_id", { length: 255 }).primaryKey(), // canonical UUID message id
+    id: varchar("id", { length: 255 }).notNull().unique(), // legacy id kept for backward compatibility
+    bookingId: varchar("booking_id", { length: 255 })
+      .notNull()
+      .references(() => bookings.id, { onDelete: "cascade" }),
+    threadId: varchar("thread_id", { length: 255 }).references(() => messageThreads.id, { onDelete: "cascade" }),
+    senderId: varchar("sender_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    recipientId: varchar("recipient_id", { length: 255 })
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    isSystem: boolean("is_system").default(false).notNull(),
+    attachments: jsonb("attachments"),
+    clientTempId: varchar("client_temp_id", { length: 255 }),
+    deliveredAt: timestamp("delivered_at"),
+    seenAt: timestamp("seen_at"),
+    readAt: timestamp("read_at"),
+    deletedAt: timestamp("deleted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    bookingIdx: index("messages_booking_idx").on(table.bookingId),
+    senderCreatedIdx: index("messages_sender_created_idx").on(table.senderId, table.createdAt),
+    unreadIdx: index("messages_unread_idx").on(table.recipientId, table.readAt),
+    threadCreatedIdx: index("messages_thread_created_idx").on(table.threadId, table.createdAt),
+    bookingCreatedIdx: index("messages_booking_created_idx").on(table.bookingId, table.createdAt),
+  }),
+);
 
 /**
  * Provider Changes Table
@@ -461,8 +552,8 @@ export const providerNotes = pgTable("provider_notes", {
   id: varchar("id", { length: 255 }).primaryKey(), // e.g., pnote_...
   providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
   note: text("note").notNull(),
-  isInternal: boolean("is_internal").default(true).notNull(), // Always true for admin notes
-  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // Admin who created the note
+  isInternal: boolean("is_internal").default(true).notNull(),
+  createdBy: varchar("created_by", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -635,27 +726,29 @@ export const providerTimeOffsRelations = relations(providerTimeOffs, ({ one }) =
   }),
 }));
 
-export const conversationsRelations = relations(conversations, ({ one, many }) => ({
-  user1: one(users, {
-    fields: [conversations.user1Id],
-    references: [users.id],
-    relationName: "user1",
-  }),
-  user2: one(users, {
-    fields: [conversations.user2Id],
-    references: [users.id],
-    relationName: "user2",
+export const messageThreadsRelations = relations(messageThreads, ({ one, many }) => ({
+  booking: one(bookings, {
+    fields: [messageThreads.bookingId],
+    references: [bookings.id],
   }),
   messages: many(messages),
 }));
 
 export const messagesRelations = relations(messages, ({ one }) => ({
-  conversation: one(conversations, {
-    fields: [messages.conversationId],
-    references: [conversations.id],
+  booking: one(bookings, {
+    fields: [messages.bookingId],
+    references: [bookings.id],
+  }),
+  thread: one(messageThreads, {
+    fields: [messages.threadId],
+    references: [messageThreads.id],
   }),
   sender: one(users, {
     fields: [messages.senderId],
+    references: [users.id],
+  }),
+  recipient: one(users, {
+    fields: [messages.recipientId],
     references: [users.id],
   }),
 }));
@@ -821,7 +914,7 @@ export const disputesRelations = relations(disputes, ({ one }) => ({
   }),
 }));
 
-export const bookingsRelations = relations(bookings, ({ one }) => ({
+export const bookingsRelations = relations(bookings, ({ one, many }) => ({
   user: one(users, {
     fields: [bookings.userId],
     references: [users.id],
@@ -837,6 +930,34 @@ export const bookingsRelations = relations(bookings, ({ one }) => ({
   earning: one(providerEarnings, {
     fields: [bookings.id],
     references: [providerEarnings.bookingId],
+  }),
+  cancellations: many(bookingCancellations),
+  reschedules: many(bookingReschedules),
+}));
+
+export const bookingCancellationsRelations = relations(bookingCancellations, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [bookingCancellations.bookingId],
+    references: [bookings.id],
+  }),
+  user: one(users, {
+    fields: [bookingCancellations.userId],
+    references: [users.id],
+  }),
+}));
+
+export const bookingReschedulesRelations = relations(bookingReschedules, ({ one }) => ({
+  booking: one(bookings, {
+    fields: [bookingReschedules.bookingId],
+    references: [bookings.id],
+  }),
+  requester: one(users, {
+    fields: [bookingReschedules.requesterId],
+    references: [users.id],
+  }),
+  responder: one(users, {
+    fields: [bookingReschedules.responderId],
+    references: [users.id],
   }),
 }));
 

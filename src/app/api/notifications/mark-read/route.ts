@@ -1,8 +1,7 @@
-import { db } from '@/lib/db';
-import { notifications } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { eq, and, inArray } from 'drizzle-orm';
+
+import { markNotificationsRead } from '@/lib/notifications';
 
 export const runtime = 'nodejs';
 
@@ -18,15 +17,7 @@ export async function POST(req: Request) {
       return new NextResponse('Missing notificationIds', { status: 400 });
     }
 
-    await db
-      .update(notifications)
-      .set({ isRead: true })
-      .where(
-        and(
-          eq(notifications.userId, userId),
-          inArray(notifications.id, notificationIds),
-        ),
-      );
+    await markNotificationsRead({ userId, ids: notificationIds });
 
     return NextResponse.json({ success: true });
   } catch (error) {

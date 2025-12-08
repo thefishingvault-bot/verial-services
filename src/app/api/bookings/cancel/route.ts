@@ -3,8 +3,10 @@ import { bookings } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq, and } from 'drizzle-orm';
-import { createNotification } from '@/lib/notifications';
+import { createNotificationOnce } from '@/lib/notifications';
 import { assertTransition } from '@/lib/booking-state';
+import { bookingIdempotencyKey, withIdempotency } from '@/lib/idempotency';
+import { enforceRateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -20,45 +22,71 @@ export async function PATCH(req: Request) {
       return new NextResponse('Missing bookingId', { status: 400 });
     }
 
-    // 1. Verify the booking belongs to the user AND capture current status
-    const booking = await db.query.bookings.findFirst({
-      where: and(
-        eq(bookings.id, bookingId),
-        eq(bookings.userId, userId),
-      ),
-      with: {
-        service: { columns: { title: true } },
-        provider: { columns: { userId: true } },
-      },
+    const rate = await enforceRateLimit(req, {
+      userId,
+      resource: 'bookings:cancel',
+      limit: 5,
+      windowSeconds: 60,
     });
 
-    if (!booking) {
-      return new NextResponse('Booking not found or cannot be canceled', { status: 404 });
+    if (!rate.success) {
+      return rateLimitResponse(rate.retryAfter);
     }
 
-    try {
-      assertTransition(booking.status, 'canceled_customer');
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Invalid transition';
-      return new NextResponse(message, { status: 400 });
-    }
+    const idemKey = bookingIdempotencyKey('cancel', userId, bookingId);
 
-    // 2. Update status to 'canceled_customer'
-    await db
-      .update(bookings)
-      .set({ status: 'canceled_customer', updatedAt: new Date() })
-      .where(eq(bookings.id, bookingId));
+    const result = await withIdempotency(idemKey, 6 * 60 * 60, async () => {
+      const booking = await db.query.bookings.findFirst({
+        where: and(
+          eq(bookings.id, bookingId),
+          eq(bookings.userId, userId),
+        ),
+        with: {
+          service: { columns: { title: true } },
+          provider: { columns: { userId: true } },
+        },
+      });
 
-    // 3. Notify the Provider (in-app notification only for MVP)
-    await createNotification({
-      userId: booking.provider.userId,
-      message: `Booking canceled by customer: ${booking.service.title}`,
-      href: '/dashboard/bookings/provider',
+      if (!booking) {
+        throw new Error('NOT_FOUND');
+      }
+
+      try {
+        assertTransition(booking.status, 'canceled_customer');
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid transition';
+        throw new Error(message);
+      }
+
+      await db
+        .update(bookings)
+        .set({ status: 'canceled_customer', updatedAt: new Date() })
+        .where(eq(bookings.id, bookingId));
+
+      await createNotificationOnce({
+        event: 'booking_cancelled_customer',
+        bookingId,
+        userId: booking.provider.userId,
+        payload: {
+          userId: booking.provider.userId,
+          message: `Booking canceled by customer: ${booking.service.title}`,
+          href: '/dashboard/bookings/provider',
+        },
+      });
+
+      return { success: true };
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json(result);
   } catch (error) {
     console.error('[API_BOOKING_CANCEL]', error);
+    const message = error instanceof Error ? error.message : 'Internal Server Error';
+    if (message === 'NOT_FOUND') {
+      return new NextResponse('Booking not found or cannot be canceled', { status: 404 });
+    }
+    if (message === 'Invalid transition') {
+      return new NextResponse(message, { status: 400 });
+    }
     return new NextResponse('Internal Server Error', { status: 500 });
   }
 }

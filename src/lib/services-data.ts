@@ -7,14 +7,18 @@ export type ServicesSearchParams = Record<string, string | string[] | undefined>
 export type ServicesFilters = {
   q: string;
   category: string | null;
+  region: string | null;
   minPrice: number | null;
   maxPrice: number | null;
   rating: number | null;
   sort: 'relevance' | 'price_asc' | 'price_desc' | 'rating_desc' | 'newest';
+  page: number;
+  pageSize: number;
 };
 
 export interface ServiceWithProvider {
   id: string;
+  slug: string;
   title: string;
   description: string | null;
   priceInCents: number;
@@ -38,6 +42,7 @@ export interface ServiceWithProvider {
   };
   avgRating: number;
   reviewCount: number;
+  favoriteCount: number;
   distance?: number;
 }
 
@@ -55,11 +60,14 @@ export function parseServicesSearchParams(
 
   const q = getSingle('q')?.trim() ?? '';
   const category = getSingle('category')?.trim() || null;
+  const region = getSingle('region')?.trim() || null;
 
   const minPriceRaw = getSingle('minPrice');
   const maxPriceRaw = getSingle('maxPrice');
   const ratingRaw = getSingle('rating');
   const sortRaw = getSingle('sort');
+  const pageRaw = getSingle('page');
+  const pageSizeRaw = getSingle('pageSize');
 
   const toNumber = (value?: string | null): number | null => {
     if (!value) return null;
@@ -70,6 +78,8 @@ export function parseServicesSearchParams(
   const minPrice = toNumber(minPriceRaw);
   const maxPrice = toNumber(maxPriceRaw);
   const rating = toNumber(ratingRaw);
+  const page = Math.max(Number(pageRaw ?? 1) || 1, 1);
+  const pageSize = Math.min(Math.max(Number(pageSizeRaw ?? 12) || 12, 1), 50);
 
   const allowedSorts = new Set<ServicesFilters['sort']>([
     'relevance',
@@ -86,10 +96,13 @@ export function parseServicesSearchParams(
   return {
     q,
     category,
+    region,
     minPrice,
     maxPrice,
     rating,
     sort,
+    page,
+    pageSize,
   };
 }
 
@@ -140,6 +153,10 @@ export async function getServicesDataFromSearchParams(
     }
   }
 
+  if (filters.region) {
+    whereConditions.push(sql`LOWER(${providers.baseRegion}) = LOWER(${filters.region})`);
+  }
+
   if (filters.minPrice != null) {
     whereConditions.push(gte(services.priceInCents, filters.minPrice * 100));
   }
@@ -167,9 +184,9 @@ export async function getServicesDataFromSearchParams(
       break;
   }
 
-  const page = 1; // TODO: wire up pagination if needed
-  const limit = 12;
-  const offset = 0;
+  const page = filters.page || 1;
+  const limit = filters.pageSize || 12;
+  const offset = (page - 1) * limit;
 
   const totalCountResult = await db
     .select({ count: sql<number>`count(*)` })
@@ -183,6 +200,7 @@ export async function getServicesDataFromSearchParams(
   const servicesData = await db
     .select({
       id: services.id,
+      slug: services.slug,
       title: services.title,
       description: services.description,
       priceInCents: services.priceInCents,
@@ -201,6 +219,9 @@ export async function getServicesDataFromSearchParams(
       firstName: users.firstName,
       lastName: users.lastName,
       isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
+      favoriteCount: sql<number>`(
+        SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
+      )`,
     })
     .from(services)
     .innerJoin(providers, eq(services.providerId, providers.id))
@@ -230,12 +251,14 @@ export async function getServicesDataFromSearchParams(
     const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
     return {
       id: service.id,
+      slug: service.slug,
       title: service.title,
       description: service.description,
       priceInCents: service.priceInCents,
       category: service.category,
       coverImageUrl: service.coverImageUrl,
       createdAt: service.createdAt,
+      favoriteCount: Number(service.favoriteCount ?? 0),
       provider: {
         id: service.providerId,
         businessName: service.businessName,
@@ -274,7 +297,7 @@ export async function getServicesDataFromSearchParams(
     filters,
     services: servicesWithProviders,
     totalCount,
-    hasMore: servicesWithProviders.length === limit && page * limit < totalCount,
+    hasMore: page * limit < totalCount,
     kpi,
   };
 }

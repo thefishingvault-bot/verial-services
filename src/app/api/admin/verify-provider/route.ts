@@ -1,40 +1,23 @@
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { auth, clerkClient } from "@clerk/nextjs/server";
+import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { requireAdmin } from "@/lib/admin-auth";
+import { VerifyProviderSchema, invalidResponse, parseBody } from "@/lib/validation/admin";
 
 export const runtime = "nodejs";
 
-// Helper function to check for Admin role
-const isAdmin = async (userId: string): Promise<boolean> => {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  return user.publicMetadata.role === "admin";
-};
-
 export async function POST(req: Request) {
   try {
-    const { userId: adminUserId } = await auth();
-    if (!adminUserId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const adminUserId = admin.userId!;
 
-    if (!(await isAdmin(adminUserId))) {
-      return new NextResponse("Forbidden: Requires admin role", { status: 403 });
-    }
+    const parsed = await parseBody(VerifyProviderSchema, req);
+    if (!parsed.ok) return invalidResponse(parsed.error);
 
-    const { providerId, newStatus } = await req.json();
-
-    if (!providerId || !newStatus) {
-      return new NextResponse("Missing providerId or newStatus", { status: 400 });
-    }
-
-    // Validate the new status
-    const validStatuses = ["pending", "approved", "rejected"];
-    if (!validStatuses.includes(newStatus)) {
-      return new NextResponse(`Invalid status: ${newStatus}`, { status: 400 });
-    }
+    const { providerId, newStatus } = parsed.data;
 
     // Update the provider's status
     const [updatedProvider] = await db.update(providers)

@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, CreditCard } from 'lucide-react';
 import { requireAdmin } from '@/lib/admin';
+import { BookingIdParamSchema, parseParamsOrNotFound } from '@/lib/validation/admin-loader-schemas';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -32,7 +33,7 @@ export default async function AdminBookingDetailPage({
     redirect('/dashboard');
   }
 
-  const { bookingId } = await params;
+  const { bookingId } = parseParamsOrNotFound(BookingIdParamSchema, await params);
 
   // Get booking details with related data
   const bookingData = await db

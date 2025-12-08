@@ -1,22 +1,34 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { reviews, users } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { parseQuery, ProviderIdSchema, ReviewsListQuerySchema } from "@/lib/validation/reviews";
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request, { params }: { params: Promise<{ providerId: string }> }) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ providerId: string }> }) {
   const { providerId } = await params;
-  if (!providerId) {
-    return new NextResponse("providerId is required", { status: 400 });
+
+  const paramResult = ProviderIdSchema.safeParse({ providerId });
+  if (!paramResult.success) {
+    return NextResponse.json(
+      { error: "Invalid request", details: paramResult.error.flatten() },
+      { status: 400 }
+    );
   }
 
-  const url = new URL(req.url);
-  const page = Number(url.searchParams.get("page") ?? 1);
-  const pageSize = Number(url.searchParams.get("pageSize") ?? 10);
+  const queryResult = parseQuery(ReviewsListQuerySchema, req);
+  if (!queryResult.ok) {
+    return NextResponse.json(
+      { error: "Invalid request", details: queryResult.error },
+      { status: 400 }
+    );
+  }
+
+  const { page, pageSize } = queryResult.data;
   const offset = Math.max(0, (page - 1) * pageSize);
 
-  const baseWhere = and(eq(reviews.providerId, providerId), eq(reviews.isHidden, false));
+  const baseWhere = and(eq(reviews.providerId, paramResult.data.providerId), eq(reviews.isHidden, false));
 
   const [items, [stats]] = await Promise.all([
     db

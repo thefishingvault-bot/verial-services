@@ -1,24 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, users, bookings, reviews, trustIncidents, providerSuspensions, disputes, refunds, riskRules } from "@/db/schema";
 import { eq, desc, asc, sql, inArray, and } from "drizzle-orm";
 import { RiskScoringEngine } from "@/lib/risk-scoring";
-
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
-}
+import { requireAdmin } from "@/lib/admin-auth";
 
 type SortOption = "bookings" | "cancellations" | "reviews" | "trust" | "risk" | "created";
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await currentUser();
-    if (!isAdmin(user)) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(request.url);
     const sortBy = (searchParams.get("sort") as SortOption) || "risk";

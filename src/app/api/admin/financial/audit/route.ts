@@ -1,11 +1,10 @@
-import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { and, eq, isNull } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { calculateEarnings } from "@/lib/earnings";
 import { logFinancialAudit } from "@/lib/financial-consistency";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
@@ -14,11 +13,8 @@ const GST_BPS = parseInt(process.env.GST_BPS || "1500", 10);
 
 export async function POST() {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return new NextResponse("Unauthorized", { status: 401 });
-    }
-    await requireAdmin(userId);
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
     let issues = 0;
 

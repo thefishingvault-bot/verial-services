@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
 import { useToast } from "@/components/ui/use-toast";
+import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
 
 const ACTIONS = {
   accept: "Accept",
@@ -139,7 +140,7 @@ export default function ProviderBookingDetailPage() {
         <CardContent className="space-y-3 text-sm">
           <div className="flex items-center gap-2">
             <span className="text-muted-foreground">Status</span>
-            <Badge>{booking.status.toUpperCase()}</Badge>
+            <Badge variant={getBookingStatusVariant(booking.status)}>{getBookingStatusLabel(booking.status)}</Badge>
           </div>
           <div>
             <span className="text-muted-foreground">Scheduled</span>

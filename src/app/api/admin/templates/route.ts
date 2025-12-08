@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
-import { db } from '@/lib/db';
-import { users } from '@/db/schema';
-import { eq } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/admin-auth';
+import {
+  TemplatesQuerySchema,
+  TemplateCreateSchema,
+  TemplateUpdateSchema,
+  TemplateDeleteSchema,
+  invalidResponse,
+  parseBody,
+  parseQuery,
+} from '@/lib/validation/admin';
 
 // In-memory storage for templates (in production, this would be a database table)
 interface MessageTemplate {
@@ -66,25 +72,12 @@ const messageTemplates: MessageTemplate[] = [
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const category = searchParams.get('category');
-    const search = searchParams.get('search');
+    const parsedQuery = parseQuery(TemplatesQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { category, search } = parsedQuery.data;
 
     let filteredTemplates = messageTemplates;
 
@@ -125,31 +118,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { name, category, subject, content, variables } = body;
-
-    if (!name || !category || !subject || !content) {
-      return NextResponse.json(
-        { error: 'Name, category, subject, and content are required' },
-        { status: 400 }
-      );
-    }
+    const parsedBody = await parseBody(TemplateCreateSchema, request);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const { name, category, subject, content, variables } = parsedBody.data;
 
     const newTemplate = {
       id: `template_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -180,31 +155,12 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { id, name, category, subject, content, variables } = body;
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      );
-    }
+    const parsedBody = await parseBody(TemplateUpdateSchema, request);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const { id, name, category, subject, content, variables } = parsedBody.data;
 
     const templateIndex = messageTemplates.findIndex(template => template.id === id);
     if (templateIndex === -1) {
@@ -241,31 +197,12 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json(
-        { error: 'Template ID is required' },
-        { status: 400 }
-      );
-    }
+    const parsedQuery = parseQuery(TemplateDeleteSchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { id } = parsedQuery.data;
 
     const templateIndex = messageTemplates.findIndex(template => template.id === id);
     if (templateIndex === -1) {

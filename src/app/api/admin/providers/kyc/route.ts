@@ -1,32 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
 import { eq, desc, asc } from "drizzle-orm";
 import { providers, users, bookings, reviews } from "@/db/schema";
+import { requireAdmin } from "@/lib/admin-auth";
+import { ProvidersKycQuerySchema, invalidResponse, parseQuery } from "@/lib/validation/admin";
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";
 
 export async function GET(request: NextRequest) {
   try {
-    // Check authentication and admin authorization
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    try {
-      await requireAdmin(userId);
-    } catch (error) {
-      if (error instanceof Error && error.message === "Forbidden") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-      throw error;
-    }
+    const queryResult = parseQuery(ProvidersKycQuerySchema, request);
+    if (!queryResult.ok) return invalidResponse(queryResult.error);
 
-    const { searchParams } = new URL(request.url);
-    const sort = (searchParams.get("sort") as SortOption) || "kyc_status";
-    const order = searchParams.get("order") === "asc" ? "asc" : "desc";
+    const sort = queryResult.data.sort as SortOption;
+    const order = queryResult.data.order as "asc" | "desc";
 
     // Build sort clause
     let orderBy;

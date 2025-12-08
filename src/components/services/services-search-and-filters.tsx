@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Search, X } from "lucide-react";
 import type { ServicesFilters } from "@/lib/services-data";
 
@@ -36,8 +37,17 @@ const sortOptions = [
   { value: 'rating_desc', label: 'Highest Rated' },
   { value: 'price_asc', label: 'Price: Low to High' },
   { value: 'price_desc', label: 'Price: High to Low' },
-  { value: 'distance', label: 'Distance' },
   { value: 'newest', label: 'Recently Added' },
+];
+
+const regions = [
+  'Auckland',
+  'Waikato',
+  'Bay of Plenty',
+  'Wellington',
+  'Canterbury',
+  'Otago',
+  'Other / NZ-wide',
 ];
 
 const ServicesSearchAndFilters = ({
@@ -48,34 +58,48 @@ const ServicesSearchAndFilters = ({
 
   const searchQuery = filters.q || "";
   const selectedCategory = filters.category ?? "";
+  const selectedRegion = filters.region ?? "";
   const priceRange: [number, number] = [
     filters.minPrice ?? 0,
     filters.maxPrice ?? 500,
   ];
+  const minPriceValue = filters.minPrice ?? "";
+  const maxPriceValue = filters.maxPrice ?? "";
   const minRating = filters.rating ?? 0;
   const sortBy = filters.sort || "relevance";
+  const pageSize = filters.pageSize ?? 12;
 
   const handleFiltersChange = (next: ServicesFilters, debounce = false) => {
+    const normalized: ServicesFilters = {
+      ...filters,
+      ...next,
+      page: next.page ?? 1,
+      pageSize: next.pageSize ?? pageSize,
+    };
+
     if (debounce) {
       if (debounceTimeout.current) {
         clearTimeout(debounceTimeout.current);
       }
       debounceTimeout.current = setTimeout(() => {
-        onFiltersChange(next);
+        onFiltersChange(normalized);
       }, 300);
       return;
     }
-    onFiltersChange(next);
+    onFiltersChange(normalized);
   };
 
   const clearFilters = () => {
     const cleared: ServicesFilters = {
       q: "",
       category: null,
+      region: null,
       minPrice: null,
       maxPrice: null,
       rating: null,
       sort: "relevance",
+      page: 1,
+      pageSize,
     };
     handleFiltersChange(cleared);
   };
@@ -83,6 +107,7 @@ const ServicesSearchAndFilters = ({
   const activeFiltersCount = [
     searchQuery,
     selectedCategory,
+    selectedRegion,
     minRating > 0 ? minRating : "",
     priceRange[0] > 0 || priceRange[1] < 500 ? "price" : "",
   ].filter(Boolean).length;
@@ -122,6 +147,7 @@ const ServicesSearchAndFilters = ({
                   handleFiltersChange({
                     ...filters,
                     category: value === "all" ? null : value,
+                    page: 1,
                   });
                 }}
               >
@@ -147,6 +173,7 @@ const ServicesSearchAndFilters = ({
                   handleFiltersChange({
                     ...filters,
                     sort: value as ServicesFilters["sort"],
+                    page: 1,
                   })
                 }
               >
@@ -196,6 +223,7 @@ const ServicesSearchAndFilters = ({
                 handleFiltersChange({
                   ...filters,
                   category: value === "all" ? null : value,
+                  page: 1,
                 });
               }}
             >
@@ -222,6 +250,7 @@ const ServicesSearchAndFilters = ({
                 handleFiltersChange({
                   ...filters,
                   sort: value as ServicesFilters["sort"],
+                  page: 1,
                 })
               }
             >
@@ -240,6 +269,101 @@ const ServicesSearchAndFilters = ({
               </SelectContent>
             </Select>
           </div>
+        </div>
+      </div>
+
+      {/* Secondary filters */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Region</span>
+          <Select
+            value={selectedRegion || "all"}
+            onValueChange={(value) =>
+              handleFiltersChange({
+                ...filters,
+                region: value === "all" ? null : value,
+                page: 1,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700">
+              <SelectValue placeholder="All regions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All regions</SelectItem>
+              {regions.map((region) => (
+                <SelectItem key={region} value={region}>
+                  {region}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Min price (NZD)</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            value={minPriceValue}
+            onChange={(e) => {
+              const next = e.target.value;
+              const parsed = next === "" ? null : Number(next);
+              handleFiltersChange({
+                ...filters,
+                minPrice: Number.isFinite(parsed) ? parsed : null,
+                page: 1,
+              });
+            }}
+            placeholder="Any"
+            className="h-10 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Max price (NZD)</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min={0}
+            value={maxPriceValue}
+            onChange={(e) => {
+              const next = e.target.value;
+              const parsed = next === "" ? null : Number(next);
+              handleFiltersChange({
+                ...filters,
+                maxPrice: Number.isFinite(parsed) ? parsed : null,
+                page: 1,
+              });
+            }}
+            placeholder="Any"
+            className="h-10 text-sm"
+          />
+        </div>
+
+        <div className="flex flex-col gap-1">
+          <span className="text-xs font-medium text-slate-600">Minimum rating</span>
+          <Select
+            value={minRating ? String(minRating) : "all"}
+            onValueChange={(value) =>
+              handleFiltersChange({
+                ...filters,
+                rating: value === "all" ? null : Number(value),
+                page: 1,
+              })
+            }
+          >
+            <SelectTrigger className="h-10 rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700">
+              <SelectValue placeholder="Any rating" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Any rating</SelectItem>
+              <SelectItem value="3">3.0+ stars</SelectItem>
+              <SelectItem value="4">4.0+ stars</SelectItem>
+              <SelectItem value="4.5">4.5+ stars</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -273,6 +397,22 @@ const ServicesSearchAndFilters = ({
                   handleFiltersChange({
                     ...filters,
                     category: null,
+                    page: 1,
+                  })
+                }
+              />
+            </Badge>
+          )}
+          {selectedRegion && (
+            <Badge variant="secondary" className="flex items-center gap-1">
+              {selectedRegion}
+              <X
+                className="h-3 w-3 cursor-pointer"
+                onClick={() =>
+                  handleFiltersChange({
+                    ...filters,
+                    region: null,
+                    page: 1,
                   })
                 }
               />
@@ -287,6 +427,7 @@ const ServicesSearchAndFilters = ({
                   handleFiltersChange({
                     ...filters,
                     rating: 0,
+                    page: 1,
                   })
                 }
               />
@@ -300,8 +441,9 @@ const ServicesSearchAndFilters = ({
                 onClick={() =>
                   handleFiltersChange({
                     ...filters,
-                    minPrice: 0,
-                    maxPrice: 500,
+                    minPrice: null,
+                    maxPrice: null,
+                    page: 1,
                   })
                 }
               />

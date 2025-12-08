@@ -17,12 +17,9 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { AdminProvidersFiltersBar } from '@/components/admin/admin-providers-filters-bar';
 import { AdminVerificationActions } from '@/components/admin/admin-verification-actions';
+import { AdminVerificationsSearchSchema, parseSearchParams } from '@/lib/validation/admin-loader-schemas';
 
-type SearchParams = Promise<{
-  q?: string;
-  status?: string;
-  region?: string;
-}>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const MAX_RECENT_DECISIONS = 30;
 
@@ -50,11 +47,11 @@ export default async function AdminVerificationsPage({
     redirect('/dashboard');
   }
 
-  const params = await searchParams;
+  const params = parseSearchParams(AdminVerificationsSearchSchema, await searchParams);
 
-  const q = (params.q ?? '').trim();
-  const statusFilter = params.status ?? 'all';
-  const regionFilter = params.region ?? 'all';
+  const q = params.q;
+  const statusFilter = params.status;
+  const regionFilter = params.region;
 
   const baseWhere = [
     or(eq(providers.status, 'pending'), eq(providers.status, 'approved'), eq(providers.status, 'rejected')),

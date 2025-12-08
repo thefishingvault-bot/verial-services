@@ -1,30 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
 import { db } from '@/lib/db';
 import { users, notifications } from '@/db/schema';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
+import { requireAdmin } from '@/lib/admin-auth';
+import { BroadcastCreateSchema, BroadcastQuerySchema, invalidResponse, parseBody, parseQuery } from '@/lib/validation/admin';
 
 export async function GET(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const parsedQuery = parseQuery(BroadcastQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { page, limit } = parsedQuery.data;
 
     // Get broadcast messages (notifications created by admin)
 
@@ -111,31 +100,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { userId } = await auth();
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
 
-    // Check if user is admin
-    const user = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (!user[0]?.role?.includes('admin')) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
-    }
-
-    const body = await request.json();
-    const { message, href, targetRoles, targetUsers } = body;
-
-    if (!message || message.trim().length === 0) {
-      return NextResponse.json(
-        { error: 'Message content is required' },
-        { status: 400 }
-      );
-    }
+    const parsedBody = await parseBody(BroadcastCreateSchema, request);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const { message, href, targetRoles, targetUsers } = parsedBody.data;
 
     // Build target user query
     let targetUserIds: string[] = [];

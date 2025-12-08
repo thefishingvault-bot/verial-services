@@ -60,10 +60,13 @@ interface ServicesGridClientProps {
   searchParams: {
     q?: string;
     category?: string;
+    region?: string;
     minPrice?: string;
     maxPrice?: string;
     rating?: string;
     sort?: string;
+    page?: string;
+    pageSize?: string;
   };
   hasMore: boolean;
   currentPage: number;
@@ -135,6 +138,8 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                 <FavoriteToggle
                   serviceId={service.id}
                   initialIsFavorite={service.isFavorite}
+                  initialCount={service.favoriteCount}
+                  showCount
                   onToggleOptimistic={(next) => handleFavoriteChange(service.id, next)}
                 />
 
@@ -151,7 +156,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
               {/* Service Title and Price */}
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                  <Link href={`/s/${service.id}`}>
+                  <Link href={`/s/${service.slug}`}>
                     {service.title}
                   </Link>
                 </h3>
@@ -223,7 +228,7 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
 
               {/* Action Buttons */}
               <div className="flex gap-2">
-                <Link href={`/s/${service.id}`} className="flex-1">
+                <Link href={`/s/${service.slug}`} className="flex-1">
                   <Button className="w-full" size="sm">
                     View Details
                   </Button>

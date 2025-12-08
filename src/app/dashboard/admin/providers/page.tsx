@@ -9,16 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AdminProvidersFiltersBar } from '@/components/admin/admin-providers-filters-bar';
+import { AdminProvidersSearchSchema, parseSearchParams } from '@/lib/validation/admin-loader-schemas';
 
-type SearchParams = Promise<{
-  q?: string;
-  status?: string;
-  region?: string;
-  stripe?: string;
-  verified?: string;
-  page?: string;
-  pageSize?: string;
-}>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const PAGE_SIZE_DEFAULT = 20;
 
@@ -44,16 +37,16 @@ export default async function AdminProvidersPage({
     redirect('/dashboard');
   }
 
-  const params = await searchParams;
+  const params = parseSearchParams(AdminProvidersSearchSchema, await searchParams);
 
-  const q = (params.q ?? '').trim();
-  const status = params.status ?? 'all';
-  const region = params.region ?? 'all';
-  const stripe = params.stripe ?? 'all';
-  const verified = params.verified === '1';
+  const q = params.q;
+  const status = params.status;
+  const region = params.region;
+  const stripe = params.stripe;
+  const verified = params.verified;
 
-  const page = Math.max(parseInt(params.page ?? '1', 10) || 1, 1);
-  const pageSize = Math.max(parseInt(params.pageSize ?? String(PAGE_SIZE_DEFAULT), 10) || PAGE_SIZE_DEFAULT, 1);
+  const page = Math.max(params.page, 1);
+  const pageSize = Math.max(params.pageSize || PAGE_SIZE_DEFAULT, 1);
 
   const whereClauses = [] as (ReturnType<typeof and> | ReturnType<typeof or> | ReturnType<typeof eq> | ReturnType<typeof ilike> | ReturnType<typeof isNotNull>)[];
 
@@ -216,7 +209,14 @@ export default async function AdminProvidersPage({
       </div>
 
       <AdminProvidersFiltersBar
-        searchParams={params}
+        searchParams={{
+          q,
+          status,
+          region,
+          stripe,
+          verified: verified ? '1' : undefined,
+          page: String(page),
+        }}
         regions={regions.map((r) => r.region!).filter(Boolean)}
       />
 

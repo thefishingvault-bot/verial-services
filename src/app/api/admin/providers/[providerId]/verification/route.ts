@@ -1,36 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth, clerkClient } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-
-const isAdmin = async (userId: string): Promise<boolean> => {
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  return user.publicMetadata.role === "admin";
-};
+import { requireAdmin } from "@/lib/admin-auth";
+import { ProviderIdSchema, ProviderVerificationSchema, invalidResponse, parseBody, parseParams } from "@/lib/validation/admin";
 
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ providerId: string }> }
 ) {
   try {
-    const { userId } = await auth();
-    if (!userId || !(await isAdmin(userId))) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
+    const admin = await requireAdmin();
+    if (!admin.isAdmin) return admin.response;
 
-    const { providerId } = await params;
-    const body = (await req.json().catch(() => ({}))) as { isVerified?: boolean };
+    const parsedParams = parseParams(ProviderIdSchema, await params);
+    if (!parsedParams.ok) return invalidResponse(parsedParams.error);
 
-    if (typeof body.isVerified !== "boolean") {
-      return NextResponse.json({ error: "isVerified boolean is required" }, { status: 400 });
-    }
+    const parsedBody = await parseBody(ProviderVerificationSchema, req);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
 
     const [updated] = await db
       .update(providers)
-      .set({ isVerified: body.isVerified, updatedAt: new Date() })
-      .where(eq(providers.id, providerId))
+      .set({ isVerified: parsedBody.data.isVerified, updatedAt: new Date() })
+      .where(eq(providers.id, parsedParams.data.providerId))
       .returning();
 
     if (!updated) {

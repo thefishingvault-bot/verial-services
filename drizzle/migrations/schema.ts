@@ -1,4 +1,4 @@
-import { pgTable, unique, varchar, text, timestamp, foreignKey, boolean, integer, time, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, unique, varchar, text, timestamp, foreignKey, boolean, integer, time, pgEnum, index } from "drizzle-orm/pg-core"
 
 export const bookingStatus = pgEnum("booking_status", ['pending', 'confirmed', 'paid', 'completed', 'canceled'])
 export const dayOfWeek = pgEnum("day_of_week", ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'])
@@ -229,9 +229,17 @@ export const reviews = pgTable("reviews", {
 export const notifications = pgTable("notifications", {
 	id: varchar({ length: 255 }).primaryKey().notNull(),
 	userId: varchar("user_id", { length: 255 }).notNull(),
-	message: text().notNull(),
-	href: text().notNull(),
+	type: varchar({ length: 50 }).default("system").notNull(),
+	title: text().default("Notification").notNull(),
+	body: text(),
+	actionUrl: text("action_url").default("/dashboard").notNull(),
+	message: text().default("Notification").notNull(),
+	href: text().default("/dashboard").notNull(),
 	isRead: boolean("is_read").default(false).notNull(),
+	readAt: timestamp("read_at", { mode: 'string' }),
+	bookingId: varchar("booking_id", { length: 255 }),
+	serviceId: varchar("service_id", { length: 255 }),
+	providerId: varchar("provider_id", { length: 255 }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
@@ -239,6 +247,23 @@ export const notifications = pgTable("notifications", {
 			foreignColumns: [users.id],
 			name: "notifications_user_id_users_id_fk"
 		}).onDelete("cascade"),
+	foreignKey({
+			columns: [table.bookingId],
+			foreignColumns: [bookings.id],
+			name: "notifications_booking_id_bookings_id_fk"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.serviceId],
+			foreignColumns: [services.id],
+			name: "notifications_service_id_services_id_fk"
+		}).onDelete("set null"),
+	foreignKey({
+			columns: [table.providerId],
+			foreignColumns: [providers.id],
+			name: "notifications_provider_id_providers_id_fk"
+		}).onDelete("set null"),
+	index("notifications_user_idx").on(table.userId),
+	index("notifications_created_idx").on(table.createdAt),
 ]);
 
 export const favoriteProviders = pgTable("favorite_providers", {
@@ -290,21 +315,24 @@ export const providerTimeOffs = pgTable("provider_time_offs", {
 
 export const conversations = pgTable("conversations", {
 	id: varchar({ length: 255 }).primaryKey().notNull(),
-	user1Id: varchar("user1_id", { length: 255 }).notNull(),
-	user2Id: varchar("user2_id", { length: 255 }).notNull(),
+	userAId: varchar("user_a_id", { length: 255 }).notNull(),
+	userBId: varchar("user_b_id", { length: 255 }).notNull(),
 	lastMessageAt: timestamp("last_message_at", { mode: 'string' }).defaultNow().notNull(),
+	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
-			columns: [table.user1Id],
+			columns: [table.userAId],
 			foreignColumns: [users.id],
-			name: "conversations_user1_id_users_id_fk"
+			name: "conversations_user_a_id_users_id_fk"
 		}).onDelete("cascade"),
 	foreignKey({
-			columns: [table.user2Id],
+			columns: [table.userBId],
 			foreignColumns: [users.id],
-			name: "conversations_user2_id_users_id_fk"
+			name: "conversations_user_b_id_users_id_fk"
 		}).onDelete("cascade"),
+	unique("conversations_user_pair_unique").on(table.userAId, table.userBId),
+	index("conversations_last_message_idx").on(table.lastMessageAt),
 ]);
 
 export const messages = pgTable("messages", {
@@ -312,7 +340,7 @@ export const messages = pgTable("messages", {
 	conversationId: varchar("conversation_id", { length: 255 }).notNull(),
 	senderId: varchar("sender_id", { length: 255 }).notNull(),
 	content: text().notNull(),
-	isRead: boolean("is_read").default(false).notNull(),
+	readAt: timestamp("read_at", { mode: 'string' }),
 	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
 }, (table) => [
 	foreignKey({
@@ -325,6 +353,7 @@ export const messages = pgTable("messages", {
 			foreignColumns: [users.id],
 			name: "messages_sender_id_users_id_fk"
 		}).onDelete("cascade"),
+	index("messages_conversation_created_idx").on(table.conversationId, table.createdAt),
 ]);
 
 export const providerChanges = pgTable("provider_changes", {

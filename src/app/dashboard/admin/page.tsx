@@ -1,11 +1,11 @@
-import { auth } from '@clerk/nextjs/server';
-import { redirect } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { db } from '@/lib/db';
 import { users } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import Link from 'next/link';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { assertAdminOrThrow } from '@/lib/admin-auth';
 import {
   Shield,
   Users,
@@ -24,22 +24,12 @@ import {
 } from 'lucide-react';
 
 export default async function AdminDashboardPage() {
-  const { userId } = await auth();
+  const admin = await assertAdminOrThrow().catch((res) => {
+    if (res instanceof Response) notFound();
+    throw res;
+  });
 
-  if (!userId) {
-    redirect('/sign-in');
-  }
-
-  // Check if user is admin
-  const user = await db
-    .select()
-    .from(users)
-    .where(eq(users.id, userId))
-    .limit(1);
-
-  if (!user[0]?.role?.includes('admin')) {
-    redirect('/dashboard');
-  }
+  const userId = admin.userId;
 
   // Get some quick stats for the dashboard
   const pendingVerifications = await db

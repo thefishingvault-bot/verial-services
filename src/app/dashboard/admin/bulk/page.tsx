@@ -3,13 +3,9 @@ import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdminBulkOperationsFiltersBar } from '@/components/admin/admin-bulk-operations-filters-bar';
 import { BulkOperationsClient } from '@/components/admin/bulk-operations-client';
+import { AdminBulkSearchSchema, parseSearchParams } from '@/lib/validation/admin-loader-schemas';
 
-type SearchParams = Promise<{
-  type?: 'providers' | 'bookings';
-  status?: string;
-  region?: string;
-  q?: string;
-}>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 export default async function AdminBulkOperationsPage({
   searchParams,
@@ -29,11 +25,11 @@ export default async function AdminBulkOperationsPage({
     redirect('/dashboard');
   }
 
-  const params = await searchParams;
-  const operationType = params.type ?? 'providers';
-  const statusFilter = params.status ?? 'all';
-  const regionFilter = params.region ?? 'all';
-  const searchQuery = params.q ?? '';
+  const params = parseSearchParams(AdminBulkSearchSchema, await searchParams);
+  const operationType = params.type;
+  const statusFilter = params.status;
+  const regionFilter = params.region;
+  const searchQuery = params.q;
 
   return (
     <div className="space-y-6">

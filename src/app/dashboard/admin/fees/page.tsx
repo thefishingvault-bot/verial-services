@@ -7,6 +7,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
 import { requireAdmin } from '@/lib/admin';
+import { AdminFeesSearchSchema, parseSearchParams } from '@/lib/validation/admin-loader-schemas';
 import {
   getAdminFeesReport,
   type FeeReportRow,
@@ -26,11 +27,7 @@ import {
   ArrowUpDown
 } from 'lucide-react';
 
-type SearchParams = Promise<{
-  range?: string;
-  from?: string;
-  to?: string;
-}>;
+type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 interface DailyBucket {
   date: string;
@@ -58,14 +55,15 @@ export default async function AdminFeesPage({
     redirect('/dashboard');
   }
 
-  const params = await searchParams;
+  const params = parseSearchParams(AdminFeesSearchSchema, await searchParams);
 
-  const range = params.range ?? '30d';
+  const range = params.range;
   const fromParam = params.from;
   const toParam = params.to;
 
   const today = new Date();
-  const endDate = toParam ? new Date(toParam) : today;
+  const parsedEnd = toParam ? new Date(toParam) : today;
+  const endDate = Number.isNaN(parsedEnd.getTime()) ? today : parsedEnd;
   let startDate: Date;
 
   switch (range) {
@@ -91,8 +89,13 @@ export default async function AdminFeesPage({
       startDate = fromParam ? new Date(fromParam) : new Date(endDate);
   }
 
+  if (Number.isNaN(startDate.getTime())) {
+    startDate = new Date(endDate);
+  }
+
   if (fromParam && toParam) {
-    startDate = new Date(fromParam);
+    const fromDate = new Date(fromParam);
+    startDate = Number.isNaN(fromDate.getTime()) ? startDate : fromDate;
   }
 
   const fromIso = startDate.toISOString().split('T')[0];
@@ -144,7 +147,7 @@ export default async function AdminFeesPage({
     dailyMap.set(dateKey, existingDay);
   }
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const providerFilter = (params as { provider?: string }).provider?.toLowerCase() ?? '';
+  const providerFilter = params.provider?.toLowerCase() ?? '';
 
   const providers = providersByYear
     .map((p) => ({

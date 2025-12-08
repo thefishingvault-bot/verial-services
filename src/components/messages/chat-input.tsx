@@ -24,25 +24,25 @@ export function ChatInput({ conversationId, onMessageSent }: ChatInputProps) {
 
 		try {
 			setIsSending(true);
-			const res = await fetch("/api/chat/send", {
+			const res = await fetch(`/api/messages/send`, {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ conversationId, content: trimmed }),
+				body: JSON.stringify({ threadId: conversationId, content: trimmed }),
 			});
 
 			if (!res.ok) {
 				throw new Error("Failed to send message");
 			}
 
-			const json = (await res.json()) as {
-				id: string;
-				content: string;
-				senderId: string;
-				createdAt: string;
-			};
+			const json = await res.json();
 
 			setValue("");
-			onMessageSent?.(json);
+			onMessageSent?.({
+				id: json.serverMessageId ?? json.id,
+				content: json.content,
+				senderId: json.senderId,
+				createdAt: json.createdAt,
+			});
 		} catch (error) {
 			if (process.env.NODE_ENV !== "production") {
 				console.error("[CHAT_INPUT_SEND]", error);

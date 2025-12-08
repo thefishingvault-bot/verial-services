@@ -11,7 +11,10 @@ import { cn } from "@/lib/utils";
 
 interface Notification {
   id: string;
+  title: string;
+  body: string | null;
   message: string;
+  actionUrl: string;
   href: string;
   isRead: boolean;
   createdAt: string;
@@ -25,10 +28,10 @@ export function NotificationBell() {
 
   const fetchNotifications = () => {
     setIsLoading(true);
-    fetch("/api/notifications/list")
+    fetch("/api/notifications/list?limit=10")
       .then((res) => res.json())
-      .then((data: Notification[]) => {
-        setNotifications(data);
+      .then((data: { items: Notification[] }) => {
+        setNotifications(data.items || []);
         setIsLoading(false);
       })
       .catch(() => setIsLoading(false));
@@ -61,16 +64,15 @@ export function NotificationBell() {
     if (!notification.isRead) {
       await markAsRead([notification.id]);
     }
-    if (notification.href) {
-      window.location.href = notification.href;
+    const target = notification.actionUrl || notification.href;
+    if (target) {
+      window.location.href = target;
     }
   };
 
   const handleMarkAllRead = async () => {
-    const unreadIds = notifications.filter((n) => !n.isRead).map((n) => n.id);
-    if (unreadIds.length > 0) {
-      await markAsRead(unreadIds);
-    }
+    await fetch("/api/notifications/mark-all", { method: "POST" });
+    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
   };
 
   if (!isSignedIn) return null;
@@ -99,16 +101,26 @@ export function NotificationBell() {
       <PopoverContent className="w-80 p-0" align="end">
         <div className="flex items-center justify-between border-b bg-gray-50/50 px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
-          {unreadCount > 0 && (
+          <div className="flex items-center gap-2">
             <Button
               variant="ghost"
               size="sm"
               className="h-auto p-0 text-xs text-muted-foreground hover:text-primary"
-              onClick={handleMarkAllRead}
+              onClick={fetchNotifications}
             >
-              Mark all read
+              Refresh
             </Button>
-          )}
+            {unreadCount > 0 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto p-0 text-xs text-muted-foreground hover:text-primary"
+                onClick={handleMarkAllRead}
+              >
+                Mark all read
+              </Button>
+            )}
+          </div>
         </div>
         <div className="max-h-[300px] overflow-y-auto">
           {isLoading && (
@@ -131,14 +143,19 @@ export function NotificationBell() {
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
-                  <p
-                    className={cn(
-                      "leading-tight",
-                      !notif.isRead && "font-medium text-foreground",
+                  <div className="flex flex-col gap-0.5">
+                    <p
+                      className={cn(
+                        "leading-tight",
+                        !notif.isRead && "font-medium text-foreground",
+                      )}
+                    >
+                      {notif.title || notif.message}
+                    </p>
+                    {notif.body && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{notif.body}</p>
                     )}
-                  >
-                    {notif.message}
-                  </p>
+                  </div>
                   {!notif.isRead && (
                     <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
                   )}
@@ -146,8 +163,17 @@ export function NotificationBell() {
                 <p className="text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
                 </p>
+                {notif.body && (
+                  <p className="text-xs text-muted-foreground">{notif.body}</p>
+                )}
               </div>
             ))}
+        </div>
+        <div className="border-t bg-gray-50/50 px-4 py-2 text-right">
+          <Button variant="link" size="sm" className="px-0 text-xs" onClick={() => (window.location.href = "/dashboard/notifications")}
+          >
+            View all
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

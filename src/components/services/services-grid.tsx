@@ -112,6 +112,8 @@ export default function ServicesGrid({
                 <FavoriteToggle
                   serviceId={service.id}
                   initialIsFavorite={service.isFavorite}
+                  initialCount={service.favoriteCount}
+                  showCount
                 />
 
                 {/* Category Badge */}
@@ -127,7 +129,7 @@ export default function ServicesGrid({
               {/* Service Title and Price */}
               <div className="flex items-start justify-between mb-2">
                 <h3 className="font-semibold text-gray-900 line-clamp-2 group-hover:text-blue-600 transition-colors">
-                  <Link href={`/s/${service.id}`}>
+                  <Link href={`/s/${service.slug}`}>
                     {service.title}
                   </Link>
                 </h3>
@@ -190,7 +192,7 @@ export default function ServicesGrid({
 
               {/* Action Buttons */}
               <div className="mt-auto flex gap-2">
-                <Link href={`/s/${service.id}`} className="flex-1">
+                <Link href={`/s/${service.slug}`} className="flex-1">
                   <Button className="w-full" size="sm">
                     View Details
                   </Button>
@@ -209,14 +211,17 @@ export default function ServicesGrid({
         searchParams={{
           q: filters.q || undefined,
           category: filters.category || undefined,
+          region: filters.region || undefined,
           minPrice:
             filters.minPrice != null ? String(filters.minPrice) : undefined,
           maxPrice:
             filters.maxPrice != null ? String(filters.maxPrice) : undefined,
           rating: filters.rating != null ? String(filters.rating) : undefined,
           sort: filters.sort,
+          page: String(filters.page || 1),
+          pageSize: String(filters.pageSize || 12),
         }}
-        currentPage={1}
+        currentPage={filters.page || 1}
         hasMore={hasMore}
       />
     </div>

@@ -161,3 +161,15 @@
     background-color: color-mix(in oklab, oklch(1 0 0) 80%, transparent);
   }
 }
+
+@media print {
+  body {
+    background: white;
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  .print\:break-inside-avoid {
+    page-break-inside: avoid;
+  }
+}

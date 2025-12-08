@@ -1,0 +1,201 @@
+import { NextResponse } from "next/server";
+import { auth } from "@clerk/nextjs/server";
+import { eq } from "drizzle-orm";
+import type Stripe from "stripe";
+
+import { db } from "@/lib/db";
+import { bookings, bookingCancellations } from "@/db/schema";
+import { assertTransition } from "@/lib/booking-state";
+import { stripe } from "@/lib/stripe";
+import { createNotificationOnce } from "@/lib/notifications";
+import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+
+export const runtime = "nodejs";
+
+const cancellableStatuses = ["pending", "accepted", "paid"] as const;
+
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ bookingId: string }> },
+) {
+  const { userId } = await auth();
+  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  const { bookingId } = await params;
+  if (!bookingId) return new NextResponse("Missing bookingId", { status: 400 });
+
+  const rate = await enforceRateLimit(req, {
+    userId,
+    resource: "bookings:cancel",
+    limit: 5,
+    windowSeconds: 60,
+  });
+
+  if (!rate.success) {
+    return rateLimitResponse(rate.retryAfter);
+  }
+
+  const body = await req.json().catch(() => ({} as { reason?: string | null }));
+  const reason = typeof body?.reason === "string" ? body.reason.trim() : null;
+  const idemKey = bookingIdempotencyKey("cancel", userId, bookingId);
+
+  try {
+    const result = await withIdempotency(idemKey, 6 * 60 * 60, async () => {
+      const booking = await db.query.bookings.findFirst({
+        where: eq(bookings.id, bookingId),
+        with: {
+          provider: { columns: { id: true, userId: true, businessName: true } },
+          user: { columns: { id: true, firstName: true, lastName: true, email: true } },
+        },
+      });
+
+      if (!booking) throw new Error("NOT_FOUND");
+
+      const actor = booking.userId === userId
+        ? "customer"
+        : booking.provider?.userId === userId
+        ? "provider"
+        : null;
+
+      if (!actor) throw new Error("FORBIDDEN");
+
+      if (!cancellableStatuses.includes(booking.status as (typeof cancellableStatuses)[number])) {
+        throw new Error("INVALID_STATE");
+      }
+
+      const nextStatus = actor === "customer" ? "canceled_customer" : "canceled_provider";
+
+      try {
+        assertTransition(booking.status, nextStatus);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Invalid status transition";
+        throw new Error(message);
+      }
+
+      if (booking.status === "paid" && actor === "provider" && booking.scheduledDate) {
+        if (booking.scheduledDate < new Date()) {
+          throw new Error("Providers cannot cancel after the scheduled start time");
+        }
+      }
+
+      let refund: Stripe.Response<Stripe.Refund> | null = null;
+      if (booking.status === "paid" && booking.paymentIntentId) {
+        try {
+          refund = await stripe.refunds.create({ payment_intent: booking.paymentIntentId });
+        } catch (error) {
+          console.error("[BOOKING_CANCEL_REFUND_ERROR]", error);
+          throw new Error("REFUND_FAILED");
+        }
+      }
+
+      const cancellationId = `bc_${crypto.randomUUID()}`;
+      const now = new Date();
+
+      await db.transaction(async (tx) => {
+        await tx
+          .update(bookings)
+          .set({ status: nextStatus, updatedAt: now })
+          .where(eq(bookings.id, bookingId));
+
+        await tx.insert(bookingCancellations).values({
+          id: cancellationId,
+          bookingId,
+          userId,
+          actor,
+          reason,
+          createdAt: now,
+        });
+      });
+
+      const bookingUrl = `/dashboard/bookings/${bookingId}`;
+
+      if (actor === "customer" && booking.provider?.userId) {
+        await createNotificationOnce({
+          event: "booking_cancelled_customer",
+          bookingId,
+          userId: booking.provider.userId,
+          payload: {
+            title: "Booking cancelled by customer",
+            body: reason ? `Reason: ${reason}` : "A customer cancelled a booking.",
+            actionUrl: bookingUrl,
+            bookingId,
+            providerId: booking.provider.id,
+          },
+        });
+      }
+
+      if (actor === "provider") {
+        await createNotificationOnce({
+          event: "booking_cancelled_provider",
+          bookingId,
+          userId: booking.userId,
+          payload: {
+            title: "Booking cancelled by provider",
+            body: reason ? `Reason: ${reason}` : "Your provider cancelled this booking.",
+            actionUrl: bookingUrl,
+            bookingId,
+            providerId: booking.provider?.id,
+          },
+        });
+      }
+
+      if (refund) {
+        const refundMessage = `Refund initiated (${refund.status}).`;
+        if (booking.userId) {
+          await createNotificationOnce({
+            event: "refund_processed",
+            bookingId,
+            userId: booking.userId,
+            payload: {
+              title: "Refund processed",
+              body: refundMessage,
+              actionUrl: bookingUrl,
+              bookingId,
+            },
+          });
+        }
+        if (booking.provider?.userId) {
+          await createNotificationOnce({
+            event: "booking_refunded",
+            bookingId,
+            userId: booking.provider.userId,
+            payload: {
+              title: "Booking refunded",
+              body: refundMessage,
+              actionUrl: bookingUrl,
+              bookingId,
+              providerId: booking.provider.id,
+            },
+          });
+        }
+      }
+
+      return {
+        bookingId,
+        status: nextStatus,
+        cancellationId,
+        refunded: !!refund,
+        refundId: refund?.id ?? null,
+      };
+    });
+
+    return NextResponse.json(result);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Internal Server Error";
+
+    if (message === "NOT_FOUND") return new NextResponse("Booking not found", { status: 404 });
+    if (message === "FORBIDDEN") return new NextResponse("Unauthorized", { status: 403 });
+    if (message === "INVALID_STATE") {
+      return new NextResponse("Booking cannot be cancelled in its current state", { status: 400 });
+    }
+    if (message === "REFUND_FAILED") return new NextResponse("Failed to refund payment", { status: 502 });
+    if (message === "Invalid status transition") return new NextResponse(message, { status: 400 });
+    if (message === "Providers cannot cancel after the scheduled start time") {
+      return new NextResponse(message, { status: 400 });
+    }
+
+    console.error("[BOOKING_CANCEL]", error);
+    return new NextResponse("Internal Server Error", { status: 500 });
+  }
+}

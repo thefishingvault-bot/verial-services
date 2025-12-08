@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { createNotification } from "@/lib/notifications";
 import { calculateTrustScore } from "@/lib/trust";
+import { ReviewCreateSchema, parseBody } from "@/lib/validation/reviews";
 
 export const runtime = "nodejs";
 
@@ -14,23 +15,22 @@ const generateReviewId = () =>
 
 export async function POST(req: Request) {
   try {
+    const parsed = await parseBody(ReviewCreateSchema, req);
+    if (!parsed.ok) {
+      return NextResponse.json(
+        { error: "Invalid request", details: parsed.error },
+        { status: 400 }
+      );
+    }
+
+    const { bookingId, rating, comment, tipAmount } = parsed.data;
+
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { bookingId, rating, comment, tipAmount } = await req.json();
-    if (!bookingId || !rating) {
-      return new NextResponse("Missing bookingId or rating", { status: 400 });
-    }
-    if (rating < 1 || rating > 5) {
-      return new NextResponse("Rating must be between 1 and 5", { status: 400 });
-    }
-
-    const sanitizedComment = typeof comment === "string" ? comment.trim() : undefined;
-    if (sanitizedComment && sanitizedComment.length > 2000) {
-      return new NextResponse("Comment is too long", { status: 400 });
-    }
+    const sanitizedComment = comment;
     if (sanitizedComment && /(http:\/\/|https:\/\/)/i.test(sanitizedComment)) {
       return new NextResponse("Links are not allowed in reviews", { status: 400 });
     }
@@ -82,9 +82,9 @@ export async function POST(req: Request) {
         providerId: booking.providerId,
         bookingId: booking.id,
         rating,
-        comment: sanitizedComment,
+        comment: sanitizedComment || null,
         serviceId: booking.serviceId,
-        tipAmount: typeof tipAmount === "number" ? Math.max(0, Math.floor(tipAmount)) : null,
+        tipAmount: tipAmount ?? 0,
       })
       .returning();
 

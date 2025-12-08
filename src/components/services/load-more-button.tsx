@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 interface SearchParams {
   q?: string;
   category?: string;
+  region?: string;
   location?: string;
   minPrice?: string;
   maxPrice?: string;
@@ -14,6 +15,7 @@ interface SearchParams {
   sort?: string;
   view?: 'grid' | 'map';
   page?: string;
+  pageSize?: string;
 }
 
 interface LoadMoreButtonProps {

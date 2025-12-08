@@ -1,0 +1,679 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useUser } from "@clerk/nextjs";
+import { ArrowLeft, Check, CheckCheck, Clock, Loader2, Paperclip, Send, Smile } from "lucide-react";
+import { format, formatDistanceToNow } from "date-fns";
+
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { applyDeliveryStatus, normalizeMessage, replaceTempMessage, UiMessage, upsertMessages } from "@/lib/messaging-client";
+import type { PresenceRecord } from "@/lib/presence";
+import { pusherClient } from "@/lib/pusher-client";
+import { cn } from "@/lib/utils";
+
+interface ThreadSummary {
+	id: string;
+	threadId: string;
+	serviceTitle?: string | null;
+	counterpart: { id: string; name: string; avatarUrl: string | null };
+	lastMessage: string | null;
+	lastMessageAt: string | Date | null;
+	unreadCount: number;
+	status?: string;
+}
+
+interface ThreadState {
+	messages: UiMessage[];
+	nextCursor: string | null;
+	counterpart: ThreadSummary["counterpart"] | null;
+	isLoading: boolean;
+	isAppending: boolean;
+}
+
+interface ThreadResponse {
+	messages: any[];
+	counterpart: ThreadSummary["counterpart"] | null;
+	nextCursor: string | null;
+}
+
+interface Props {
+	initialConversationId?: string | null;
+}
+
+const PAGE_SIZE = 50;
+const HEARTBEAT_MS = 25000;
+
+const presenceStale = (p?: PresenceRecord | undefined | null) => {
+	if (!p) return true;
+	return Date.now() - p.lastActive > 5 * 60 * 1000;
+};
+
+export function MessagesShell({ initialConversationId = null }: Props) {
+	const router = useRouter();
+	const { user } = useUser();
+	const viewerId = user?.id ?? null;
+	const [threads, setThreads] = useState<ThreadSummary[]>([]);
+	const [activeId, setActiveId] = useState<string | null>(initialConversationId ?? null);
+	const [threadState, setThreadState] = useState<Record<string, ThreadState>>({});
+	const [isLoadingThreads, setIsLoadingThreads] = useState(true);
+	const [isSending, setIsSending] = useState(false);
+	const [isMobile, setIsMobile] = useState(false);
+	const [presence, setPresence] = useState<Record<string, PresenceRecord>>({});
+	const [typing, setTyping] = useState<Record<string, boolean>>({});
+	const [draft, setDraft] = useState("");
+	const listRef = useRef<HTMLDivElement | null>(null);
+	const scrollRef = useRef<HTMLDivElement | null>(null);
+
+	const activeState = activeId ? threadState[activeId] : undefined;
+	const orderedMessages = useMemo(() => {
+		if (!activeState) return [] as UiMessage[];
+		return [...activeState.messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+	}, [activeState]);
+
+	const fetchPresence = useCallback(async (userIds: string[]) => {
+		if (!userIds.length) return;
+		const params = new URLSearchParams();
+		userIds.forEach((id) => params.append("userId", id));
+		const res = await fetch(`/api/presence?${params.toString()}`, { cache: "no-store" });
+		if (!res.ok) return;
+		const data = (await res.json()) as { presence: Record<string, PresenceRecord> };
+		setPresence((prev) => ({ ...prev, ...(data.presence || {}) }));
+	}, []);
+
+	const heartbeat = useCallback(async () => {
+		await fetch("/api/presence", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ status: "online" }),
+		});
+	}, []);
+
+	const loadThreads = useCallback(async () => {
+		setIsLoadingThreads(true);
+		try {
+			const res = await fetch("/api/messages/threads", { cache: "no-store" });
+			if (!res.ok) throw new Error("Failed to load threads");
+			const data = await res.json();
+			const mapped: ThreadSummary[] = (data.threads || []).map((t: any) => ({
+				id: t.bookingId,
+				threadId: t.bookingId,
+				serviceTitle: t.serviceTitle,
+				counterpart: t.counterpart,
+				lastMessage: t.lastMessage,
+				lastMessageAt: t.lastMessageAt,
+				unreadCount: t.unreadCount ?? 0,
+				status: t.status,
+			}));
+			setThreads(mapped);
+			void fetchPresence(mapped.map((t) => t.counterpart.id));
+		} catch (error) {
+			console.error("[MESSAGES_THREADS]", error);
+			setThreads([]);
+		} finally {
+			setIsLoadingThreads(false);
+		}
+	}, [fetchPresence]);
+
+	const loadThread = useCallback(
+		async (threadId: string, cursor?: string | null, append = false) => {
+			setThreadState((prev) => ({
+				...prev,
+				[threadId]: {
+					messages: prev[threadId]?.messages ?? [],
+					nextCursor: prev[threadId]?.nextCursor ?? null,
+					counterpart: prev[threadId]?.counterpart ?? null,
+					isLoading: !append,
+					isAppending: append,
+				},
+			}));
+
+			const url = new URL(`/api/messages/${threadId}`, window.location.origin);
+			url.searchParams.set("limit", String(PAGE_SIZE));
+			if (cursor) url.searchParams.set("cursor", cursor);
+
+			const res = await fetch(url.toString(), { cache: "no-store" });
+			if (!res.ok) {
+				setThreadState((prev) => ({
+					...prev,
+					[threadId]: {
+						messages: prev[threadId]?.messages ?? [],
+						nextCursor: prev[threadId]?.nextCursor ?? null,
+						counterpart: prev[threadId]?.counterpart ?? null,
+						isLoading: false,
+						isAppending: false,
+					},
+				}));
+				return;
+			}
+			const data = (await res.json()) as ThreadResponse;
+			setThreadState((prev) => {
+				const existing = prev[threadId]?.messages ?? [];
+				const merged = upsertMessages(existing, data.messages || [], viewerId ?? undefined, undefined);
+				return {
+					...prev,
+					[threadId]: {
+						messages: merged,
+						nextCursor: data.nextCursor,
+						counterpart: data.counterpart ?? prev[threadId]?.counterpart ?? null,
+						isLoading: false,
+						isAppending: false,
+					},
+				};
+			});
+
+			const last = data.messages?.[data.messages.length - 1];
+			if (last) {
+				await fetch("/api/messages/mark-read", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ threadId, lastMessageId: last.serverMessageId }),
+				}).catch(() => undefined);
+				setThreads((prev) => prev.map((t) => (t.threadId === threadId ? { ...t, unreadCount: 0 } : t)));
+			}
+		},
+		[viewerId],
+	);
+
+	const handleSelectConversation = useCallback(
+		(id: string) => {
+			setActiveId(id);
+			router.replace(`/dashboard/messages/${id}`);
+			setThreadState((prev) => ({
+				...prev,
+				[id]: {
+					messages: prev[id]?.messages ?? [],
+					nextCursor: prev[id]?.nextCursor ?? null,
+					counterpart: prev[id]?.counterpart ?? threads.find((t) => t.threadId === id)?.counterpart ?? null,
+					isLoading: prev[id]?.isLoading ?? false,
+					isAppending: prev[id]?.isAppending ?? false,
+				},
+			}));
+			const current = threadState[id];
+			if (!current || !current.messages.length) {
+				void loadThread(id);
+			}
+		},
+		[router, threadState, loadThread, threads],
+	);
+
+	const scrollToBottom = useCallback(() => {
+		requestAnimationFrame(() => {
+			if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+		});
+	}, []);
+
+	const sendMessage = useCallback(
+		async (content: string) => {
+			if (!activeId) return false;
+			const trimmed = content.trim();
+			if (!trimmed) return false;
+			let success = false;
+			const tempId = `temp-${crypto.randomUUID()}`;
+			const optimistic = normalizeMessage(
+				{
+					serverMessageId: tempId,
+					clientTempId: tempId,
+					bookingId: activeId,
+					threadId: activeId,
+					senderId: viewerId ?? "me",
+					recipientId: "counterpart",
+					content: trimmed,
+					createdAt: new Date().toISOString(),
+				},
+				viewerId ?? "me",
+				{ status: "sending" },
+			);
+
+			setThreadState((prev) => ({
+				...prev,
+				[activeId]: {
+					messages: [...(prev[activeId]?.messages ?? []), optimistic],
+					nextCursor: prev[activeId]?.nextCursor ?? null,
+					counterpart: prev[activeId]?.counterpart ?? null,
+					isLoading: false,
+					isAppending: false,
+				},
+			}));
+			scrollToBottom();
+
+			setIsSending(true);
+			try {
+				const res = await fetch("/api/messages/send", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ threadId: activeId, content: trimmed, tempId }),
+				});
+				if (!res.ok) throw new Error("Failed to send message");
+				const serverMsg = await res.json();
+				setThreadState((prev) => ({
+					...prev,
+					[activeId]: {
+						...prev[activeId],
+						messages: replaceTempMessage(prev[activeId]?.messages ?? [], serverMsg, viewerId ?? undefined),
+						isLoading: false,
+						isAppending: false,
+					},
+				}));
+				setThreads((prev) =>
+					prev.map((t) =>
+						t.threadId === activeId
+							? { ...t, lastMessage: serverMsg.content, lastMessageAt: serverMsg.createdAt, unreadCount: 0 }
+							: t,
+					),
+				);
+				scrollToBottom();
+				success = true;
+			} catch (error) {
+				console.error("[MESSAGE_SEND]", error);
+				setThreadState((prev) => ({
+					...prev,
+					[activeId]: {
+						...prev[activeId],
+						messages: applyDeliveryStatus(prev[activeId]?.messages ?? [], tempId, "failed"),
+						isLoading: false,
+						isAppending: false,
+					},
+				}));
+			} finally {
+				setIsSending(false);
+			}
+			return success;
+		},
+		[activeId, scrollToBottom, viewerId],
+	);
+
+	const handleSendAction = useCallback(async () => {
+		const ok = await sendMessage(draft);
+		if (ok) setDraft("");
+	}, [draft, sendMessage]);
+
+	const handleIncoming = useCallback(
+		(threadId: string, payload: any) => {
+			setThreadState((prev) => {
+				const existing = prev[threadId]?.messages ?? [];
+				const merged = upsertMessages(existing, [payload], viewerId ?? undefined);
+				return {
+					...prev,
+					[threadId]: {
+						messages: merged,
+						nextCursor: prev[threadId]?.nextCursor ?? null,
+						counterpart: prev[threadId]?.counterpart ?? null,
+						isLoading: false,
+						isAppending: false,
+					},
+				};
+			});
+			setThreads((prev) => {
+				const found = prev.find((t) => t.threadId === threadId);
+				if (!found) return prev;
+				const isActive = activeId === threadId;
+				return prev.map((t) =>
+					t.threadId === threadId
+						? {
+								...t,
+								lastMessage: payload.content,
+								lastMessageAt: payload.createdAt,
+								unreadCount: isActive ? 0 : (t.unreadCount ?? 0) + 1,
+							}
+						: t,
+				);
+			});
+			if (threadId === activeId) {
+				scrollToBottom();
+				void fetch("/api/messages/mark-read", {
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ threadId, lastMessageId: payload.serverMessageId }),
+				}).catch(() => undefined);
+			}
+		},
+		[activeId, scrollToBottom, viewerId],
+	);
+
+	const bindPusher = useCallback(
+		(threadId: string) => {
+			if (!pusherClient) return;
+			const channel = pusherClient.subscribe(`private-thread-${threadId}`);
+			channel.bind("message:new", (data: any) => handleIncoming(threadId, data));
+			channel.bind("message:delivered", (data: any) => {
+				setThreadState((prev) => ({
+					...prev,
+					[threadId]: {
+						...prev[threadId],
+						messages: applyDeliveryStatus(prev[threadId]?.messages ?? [], data.serverMessageId, "delivered"),
+						nextCursor: prev[threadId]?.nextCursor ?? null,
+						counterpart: prev[threadId]?.counterpart ?? null,
+						isLoading: false,
+						isAppending: false,
+					},
+				}));
+			});
+			channel.bind("message:seen", (data: any) => {
+				setThreadState((prev) => ({
+					...prev,
+					[threadId]: {
+						...prev[threadId],
+						messages: applyDeliveryStatus(prev[threadId]?.messages ?? [], data.serverMessageId, "seen"),
+						nextCursor: prev[threadId]?.nextCursor ?? null,
+						counterpart: prev[threadId]?.counterpart ?? null,
+						isLoading: false,
+						isAppending: false,
+					},
+				}));
+			});
+			channel.bind("thread:unread", (data: any) => {
+				setThreads((prev) => prev.map((t) => (t.threadId === threadId ? { ...t, unreadCount: data.unreadCount } : t)));
+			});
+			channel.bind("typing", (data: any) => {
+				setTyping((prev) => ({ ...prev, [threadId]: data.isTyping }));
+				setTimeout(() => setTyping((prev) => ({ ...prev, [threadId]: false })), 3000);
+			});
+			return () => {
+				channel.unbind_all();
+				pusherClient?.unsubscribe(`private-thread-${threadId}`);
+			};
+		},
+		[handleIncoming],
+	);
+
+	const bindPresence = useCallback(() => {
+		if (!pusherClient) return;
+		const channel = pusherClient.subscribe("presence-global");
+		channel.bind("presence:update", (data: { userId: string; status: PresenceRecord["status"]; lastActive: number }) => {
+			setPresence((prev) => ({ ...prev, [data.userId]: { status: data.status, lastActive: data.lastActive } }));
+		});
+		return () => {
+			channel.unbind_all();
+			pusherClient?.unsubscribe("presence-global");
+		};
+	}, []);
+
+	useEffect(() => {
+		void loadThreads();
+	}, [loadThreads]);
+
+	useEffect(() => {
+		const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth < 1024);
+		check();
+		window.addEventListener("resize", check);
+		return () => window.removeEventListener("resize", check);
+	}, []);
+
+	useEffect(() => {
+		if (activeId) void loadThread(activeId);
+	}, [activeId, loadThread]);
+
+	useEffect(() => {
+		const cleanup = activeId ? bindPusher(activeId) : undefined;
+		return () => {
+			if (cleanup) cleanup();
+		};
+	}, [activeId, bindPusher]);
+
+	useEffect(() => {
+		const cleanup = bindPresence();
+		return () => {
+			if (cleanup) cleanup();
+		};
+	}, [bindPresence]);
+
+	useEffect(() => {
+		void heartbeat();
+		const id = setInterval(() => void heartbeat(), HEARTBEAT_MS);
+		return () => clearInterval(id);
+	}, [heartbeat]);
+
+	useEffect(() => {
+		const el = scrollRef.current;
+		if (!el) return;
+		const onScroll = () => {
+			if (!activeId) return;
+			if (!activeState?.nextCursor || activeState.isAppending) return;
+			if (el.scrollTop < 60) {
+				void loadThread(activeId, activeState.nextCursor, true);
+			}
+		};
+		el.addEventListener("scroll", onScroll);
+		return () => el.removeEventListener("scroll", onScroll);
+	}, [activeId, activeState?.nextCursor, activeState?.isAppending, loadThread]);
+
+	const activeThread = threads.find((t) => t.threadId === activeId) ?? null;
+	const counterpartName = activeState?.counterpart?.name || activeThread?.counterpart.name;
+	const counterpartId = activeState?.counterpart?.id || activeThread?.counterpart.id;
+	const counterpartPresence = counterpartId ? presence[counterpartId] : null;
+
+	return (
+		<div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
+			<Card
+				ref={listRef}
+				className={cn("border-r lg:w-80 lg:flex-shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
+			>
+				<div className="flex items-center justify-between border-b px-4 py-3">
+					<div>
+						<p className="text-xs uppercase tracking-wide text-muted-foreground">Inbox</p>
+						<h2 className="text-lg font-semibold">Messages</h2>
+					</div>
+				</div>
+				<div className="h-full overflow-y-auto">
+					{isLoadingThreads ? (
+						<div className="space-y-3 p-4">
+							{Array.from({ length: 5 }).map((_, i) => (
+								<div key={i} className="animate-pulse rounded-lg bg-muted/50 p-4" />
+							))}
+						</div>
+					) : threads.length === 0 ? (
+						<div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground">
+							<p className="font-medium text-foreground">No conversations yet</p>
+							<p className="text-xs text-muted-foreground">Book a provider to start messaging securely.</p>
+						</div>
+					) : (
+						<ul className="divide-y">
+							{threads.map((conv) => {
+								const userPresence = presence[conv.counterpart.id];
+								const isOnline = userPresence && !presenceStale(userPresence) && userPresence.status !== "offline";
+								return (
+									<li key={conv.threadId}>
+										<button
+											className={cn(
+												"flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-muted/60",
+												conv.threadId === activeId && "bg-muted/80",
+											)}
+											onClick={() => handleSelectConversation(conv.threadId)}
+										>
+											<div className="relative">
+												<Avatar className="h-10 w-10">
+													{conv.counterpart.avatarUrl && (
+														<AvatarImage src={conv.counterpart.avatarUrl} alt={conv.counterpart.name} />
+													)}
+													<AvatarFallback>{conv.counterpart.name.charAt(0).toUpperCase()}</AvatarFallback>
+												</Avatar>
+												<span
+													className={cn(
+														"absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border border-background",
+														isOnline ? "bg-emerald-500" : "bg-muted-foreground/40",
+													)}
+												/>
+											</div>
+											<div className="min-w-0 flex-1">
+												<div className="flex items-center justify-between gap-2">
+													<p className="truncate text-sm font-medium">{conv.counterpart.name}</p>
+													<span className="whitespace-nowrap text-[11px] text-muted-foreground">
+														{conv.lastMessageAt
+															? formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })
+															: ""}
+													</span>
+												</div>
+												<p className="truncate text-[12px] text-muted-foreground">{conv.lastMessage || "No messages yet"}</p>
+												{conv.serviceTitle && <p className="truncate text-[11px] text-muted-foreground">{conv.serviceTitle}</p>}
+											</div>
+											{conv.unreadCount > 0 && (
+												<Badge className="ml-1 bg-primary text-primary-foreground">{conv.unreadCount}</Badge>
+											)}
+										</button>
+									</li>
+								);
+							})}
+						</ul>
+					)}
+				</div>
+			</Card>
+
+			<div className={cn("flex min-h-0 flex-1 flex-col", activeId || !isMobile ? "block" : "hidden")}>
+				{!activeId ? (
+					<div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground">
+						<p className="mb-2 text-base font-semibold text-foreground">Select a conversation</p>
+						<p className="max-w-sm text-xs text-muted-foreground">
+							Conversations are limited to customers and providers with an active or completed booking.
+						</p>
+					</div>
+				) : activeState?.isLoading && !activeState.messages.length ? (
+					<div className="flex h-full items-center justify-center text-muted-foreground">
+						<Loader2 className="h-6 w-6 animate-spin" />
+					</div>
+				) : !activeState ? (
+					<div className="flex h-full items-center justify-center text-red-500 text-sm">Unable to load conversation.</div>
+				) : (
+					<div className="flex h-full flex-col">
+						<div className="flex items-center gap-3 border-b px-4 py-3">
+							{isMobile && (
+								<Button variant="ghost" size="icon" onClick={() => setActiveId(null)}>
+									<ArrowLeft className="h-5 w-5" />
+								</Button>
+							)}
+							<div className="relative">
+								<Avatar className="h-9 w-9">
+									{activeState.counterpart?.avatarUrl && (
+										<AvatarImage src={activeState.counterpart.avatarUrl} alt={counterpartName || "User"} />
+									)}
+									<AvatarFallback>{counterpartName?.charAt(0).toUpperCase() ?? "?"}</AvatarFallback>
+								</Avatar>
+								<span
+									className={cn(
+										"absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full border border-background",
+										counterpartPresence && !presenceStale(counterpartPresence)
+											? "bg-emerald-500"
+											: "bg-muted-foreground/40",
+									)}
+								/>
+							</div>
+							<div className="min-w-0">
+								<p className="truncate text-sm font-semibold">{counterpartName ?? "Conversation"}</p>
+								<p className="text-xs text-muted-foreground">
+									{counterpartPresence && !presenceStale(counterpartPresence)
+										? "Online"
+										: counterpartPresence
+											? `Last active ${formatDistanceToNow(new Date(counterpartPresence.lastActive))} ago`
+											: "Secure, booking-only messaging"}
+								</p>
+							</div>
+							{typing[activeId] && <span className="text-[11px] text-muted-foreground">Typing…</span>}
+						</div>
+
+						<div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/10 px-4 py-4">
+							{activeState.isAppending && (
+								<div className="flex justify-center py-2 text-xs text-muted-foreground">
+									<Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading older messages…
+								</div>
+							)}
+							{orderedMessages.length === 0 ? (
+								<div className="flex h-full flex-col items-center justify-center text-sm text-muted-foreground">
+									No messages yet. Start the conversation!
+								</div>
+							) : (
+								orderedMessages.map((msg, idx) => {
+									const prev = orderedMessages[idx - 1];
+									const sameDay = prev
+										? format(new Date(prev.createdAt), "yyyy-MM-dd") === format(new Date(msg.createdAt), "yyyy-MM-dd")
+										: false;
+									const showDay = !sameDay;
+									const isMe = viewerId ? msg.senderId === viewerId : msg.senderId !== activeState.counterpart?.id;
+									const statusIcon =
+										msg.status === "sending" ? (
+											<Clock className="h-3 w-3" />
+										) : msg.status === "delivered" ? (
+											<Check className="h-3 w-3" />
+										) : msg.status === "seen" ? (
+											<CheckCheck className="h-3 w-3" />
+										) : (
+											<Check className="h-3 w-3" />
+										);
+									return (
+										<div key={msg.serverMessageId || msg.clientTempId}>
+											{showDay && (
+												<div className="mb-2 text-center text-[11px] text-muted-foreground">
+													{format(new Date(msg.createdAt), "PPP")}
+												</div>
+											)}
+											<div className={cn("flex w-full", isMe ? "justify-end" : "justify-start")}>
+												<div
+													className={cn(
+														"max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
+														isMe ? "bg-primary text-primary-foreground" : "bg-white text-foreground",
+													)}
+												>
+													<p className="whitespace-pre-wrap break-words">{msg.content}</p>
+													<div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/90">
+														<span>{format(new Date(msg.createdAt), "p")}</span>
+														{isMe && statusIcon}
+													</div>
+												</div>
+											</div>
+										</div>
+									);
+								})
+							)}
+						</div>
+
+						<div className="border-t bg-white px-4 py-3">
+							<div className="flex items-end gap-2 rounded-xl border bg-muted/40 px-3 py-2">
+								<button
+									className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+									title="Add attachment (coming soon)"
+									disabled
+								>
+									<Paperclip className="h-4 w-4" />
+								</button>
+								<button
+									className="rounded-md p-1 text-muted-foreground hover:text-foreground"
+									title="Emoji (coming soon)"
+									disabled
+								>
+									<Smile className="h-4 w-4" />
+								</button>
+								<textarea
+									className="max-h-32 min-h-[44px] flex-1 resize-none border-none bg-transparent text-sm shadow-none outline-none focus-visible:ring-0"
+									placeholder="Type a message…"
+									value={draft}
+									onChange={(e) => setDraft(e.target.value)}
+									onKeyDown={(e) => {
+										if (e.key === "Enter" && !e.shiftKey) {
+											e.preventDefault();
+											void handleSendAction();
+										}
+									}}
+									disabled={isSending}
+								/>
+								<Button
+									size="sm"
+									onClick={() => void handleSendAction()}
+									disabled={isSending || !activeId || !draft.trim()}
+								>
+									{isSending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Send className="mr-1 h-4 w-4" />}
+									Send
+								</Button>
+							</div>
+							<p className="mt-1 text-[11px] text-muted-foreground">
+								Messaging is limited to users with an active or completed booking. Attachments and emoji coming soon.
+							</p>
+						</div>
+					</div>
+				)}
+			</div>
+		</div>
+	);
+}
+

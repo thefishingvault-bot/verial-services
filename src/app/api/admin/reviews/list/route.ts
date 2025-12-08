@@ -1,16 +1,14 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { reviews, providers, services, users } from "@/db/schema";
 import { desc, eq, sql } from "drizzle-orm";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
 export async function GET(req: Request) {
-  const { userId } = await auth();
-  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
-  await requireAdmin(userId);
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) return admin.response;
 
   const url = new URL(req.url);
   const page = Number(url.searchParams.get("page") ?? 1);

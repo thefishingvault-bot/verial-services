@@ -1,17 +1,15 @@
 import { NextResponse } from "next/server";
-import { auth } from "@clerk/nextjs/server";
-import { requireAdmin } from "@/lib/admin";
 import { db } from "@/lib/db";
 import { reviews } from "@/db/schema";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 
 export async function PATCH(req: Request, { params }: { params: Promise<{ reviewId: string }> }) {
-  const { userId } = await auth();
-  if (!userId) return new NextResponse("Unauthorized", { status: 401 });
-
-  await requireAdmin(userId);
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) return admin.response;
+  const { userId } = admin;
 
   const { reviewId } = await params;
   const { action, reason } = await req.json();

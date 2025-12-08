@@ -127,6 +127,48 @@
       "when": 1765032000000,
       "tag": "0017_review_enhancements",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1765100000000,
+      "tag": "0018_notifications_expansion",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1765200000000,
+      "tag": "0019_messaging_schema",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1765372800000,
+      "tag": "0020_booking_cancellations",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1765459200000,
+      "tag": "0021_booking_reschedules",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1765564800000,
+      "tag": "0022_provider_gst_number",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1765651200000,
+      "tag": "0023_messaging2",
+      "breakpoints": true
     }
   ]
 }

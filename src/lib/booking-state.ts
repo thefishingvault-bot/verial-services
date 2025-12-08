@@ -21,10 +21,10 @@ export function normalizeStatus(status: string): BookingStatus {
 
 // Allowed state transitions for the booking lifecycle.
 const ALLOWED_TRANSITIONS: Record<BookingStatus, BookingStatus[]> = {
-  pending: ["accepted", "declined", "canceled_customer"],
+  pending: ["accepted", "declined", "canceled_customer", "canceled_provider"],
   accepted: ["paid", "canceled_provider", "canceled_customer"],
   declined: [],
-  paid: ["completed", "disputed", "refunded"],
+  paid: ["completed", "disputed", "refunded", "canceled_customer", "canceled_provider"],
   completed: [],
   canceled_customer: [],
   canceled_provider: [],
