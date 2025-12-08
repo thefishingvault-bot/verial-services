@@ -270,8 +270,8 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 space-y-8">
-      <div className="grid md:grid-cols-3 gap-8">
-        <div className="md:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="lg:col-span-2 space-y-6">
           <div className="relative w-full aspect-video bg-gray-200 rounded-lg overflow-hidden">
             {service.coverImageUrl ? (
               <Image src={service.coverImageUrl} alt={service.title} fill className="object-cover" priority />
@@ -396,6 +396,8 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
             </CardContent>
           </Card>
 
+          <ProviderStatsCard stats={providerStats} />
+
           <section className="space-y-4">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold text-slate-900">Reviews</h2>
@@ -422,7 +424,6 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
             chargesGst={service.chargesGst}
             blockedDays={blockedDays}
           />
-          <ProviderStatsCard stats={providerStats} />
         </div>
       </div>
     </div>
