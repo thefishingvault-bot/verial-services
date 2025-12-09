@@ -64,8 +64,8 @@ export default async function BookingInvoicePage({ params }: { params: Promise<{
            <div className="grid gap-4 md:grid-cols-2">
              <ReceiptProviderInfo
                businessName={provider.businessName}
-               region={provider.baseRegion}
-               suburb={provider.baseSuburb}
+               region={provider.region}
+               suburb={provider.suburb}
                gstNumber={provider.gstNumber}
                chargesGst={true}
              />

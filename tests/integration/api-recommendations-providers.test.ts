@@ -15,7 +15,7 @@ describe("/api/recommendations/providers", () => {
 
   it("returns recommendations for authenticated user", async () => {
     const { GET } = await import("@/app/api/recommendations/providers/route");
-    const res = await GET(new NextRequest("http://localhost/api/recommendations/providers"));
+      const res = await GET();
     expect(res.status).toBe(200);
     const json = await res.json();
     expect(json.items[0].serviceId).toBe("svc_1");
@@ -25,7 +25,7 @@ describe("/api/recommendations/providers", () => {
   it("rejects unauthenticated", async () => {
     authMock.mockResolvedValue({ userId: null });
     const { GET } = await import("@/app/api/recommendations/providers/route");
-    const res = await GET(new NextRequest("http://localhost/api/recommendations/providers"));
+      const res = await GET();
     expect(res.status).toBe(401);
   });
 });

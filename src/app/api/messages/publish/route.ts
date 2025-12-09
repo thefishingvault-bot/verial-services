@@ -17,7 +17,8 @@ export async function POST(req: Request) {
     if (!pusherServer) return new NextResponse("Realtime not configured", { status: 503 });
 
     const { threadId, event, payload } = parsed.data;
-    await pusherServer.trigger(`private-messages-${threadId}`, event, { ...payload, actor: userId });
+    const basePayload = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    await pusherServer.trigger(`private-messages-${threadId}`, event, { ...basePayload, actor: userId });
 
     return NextResponse.json({ success: true });
   } catch (error) {

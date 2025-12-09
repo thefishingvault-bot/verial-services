@@ -32,7 +32,8 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    // @ts-ignore Zod v4 resolver typing mismatch
+    resolver: zodResolver(formSchema as any) as any,
     defaultValues: {
       firstName: "",
       lastName: "",

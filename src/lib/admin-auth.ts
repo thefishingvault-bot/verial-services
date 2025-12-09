@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 
 export async function requireAdmin() {
   const { userId, sessionClaims } = await auth();
-  if (!userId || sessionClaims?.publicMetadata?.role !== "admin") {
+  const role = (sessionClaims as Record<string, any> | null | undefined)?.publicMetadata?.role as string | undefined;
+  if (!userId || role !== "admin") {
     return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
   }
   return { isAdmin: true as const, userId, sessionClaims };

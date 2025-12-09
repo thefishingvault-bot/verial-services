@@ -57,9 +57,10 @@ export default async function AdminBookingsPage({
   if (statusFilter === "canceled") {
     whereConditions.push(inArray(bookings.status, canceledStatuses));
   } else {
-    const normalizedStatus = statusFilter === "confirmed" ? "accepted" : statusFilter;
+    const normalizedStatus = statusFilter;
     if (
       normalizedStatus !== "all" &&
+      normalizedStatus &&
       bookingStatusEnum.enumValues.includes(normalizedStatus as BookingStatusValue)
     ) {
       whereConditions.push(eq(bookings.status, normalizedStatus as BookingStatusValue));

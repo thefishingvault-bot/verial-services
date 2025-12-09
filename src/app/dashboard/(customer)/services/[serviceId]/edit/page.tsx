@@ -67,8 +67,9 @@ export default function EditServicePage() {
   const [isSaving, setIsSaving] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
 
-  const form = useForm({
-    resolver: zodResolver(formSchema),
+  const form = useForm<FormValues>({
+    // @ts-ignore Zod v4 resolver typing mismatch
+    resolver: zodResolver(formSchema as any) as any,
     defaultValues: {
       title: '',
       category: 'cleaning',
@@ -172,7 +173,7 @@ export default function EditServicePage() {
         </CardHeader>
         <CardContent className="space-y-8">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="title"

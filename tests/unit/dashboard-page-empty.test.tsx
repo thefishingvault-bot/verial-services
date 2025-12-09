@@ -18,7 +18,7 @@ vi.mock("@/lib/dashboard/customer-dashboard", () => ({
 
 describe("/dashboard page empty states", () => {
   it("shows empty booking and favorites states and hides optional sections", async () => {
-    const Page = (await import("@/app/dashboard/page")).default;
+    const Page = (await import("@/app/dashboard/(customer)/page")).default;
     const ui = await Page();
     render(ui as any);
 

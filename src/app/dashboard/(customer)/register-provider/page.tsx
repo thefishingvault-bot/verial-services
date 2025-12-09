@@ -40,7 +40,8 @@ export default function RegisterProviderPage() {
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
   const form = useForm<FormValues>({
-    resolver: zodResolver(formSchema),
+    // @ts-ignore Zod v4 resolver typing mismatch
+    resolver: zodResolver(formSchema as any) as any,
     defaultValues: {
       businessName: '',
       handle: '',

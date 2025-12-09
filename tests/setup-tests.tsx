@@ -1,4 +1,5 @@
 import "@testing-library/jest-dom";
+import { vi } from "vitest";
 
 // Default env values used by modules that throw when missing
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/db";
@@ -14,8 +15,8 @@ vi.mock("next/image", () => ({
 }));
 
 // Stub next/navigation notFound to throw, so tests can assert it
-vi.mock("next/navigation", async (importOriginal) => {
-  const actual = await importOriginal<any>();
+vi.mock("next/navigation", async (importOriginal: () => Promise<unknown>) => {
+  const actual = (await importOriginal()) as typeof import("next/navigation");
   return {
     ...actual,
     notFound: () => {

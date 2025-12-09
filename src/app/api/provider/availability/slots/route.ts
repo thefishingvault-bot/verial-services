@@ -51,7 +51,11 @@ export async function POST(req: Request) {
       columns: { scheduledDate: true },
     });
 
-    const busySlots = new Set(busyBookings.map((b) => new Date(b.scheduledDate).toISOString()));
+    const busySlots = new Set(
+      busyBookings
+        .filter((b) => b.scheduledDate)
+        .map((b) => new Date(b.scheduledDate as Date).toISOString()),
+    );
 
     const computeSlotsForDate = (target: Date) => {
       const dayIndex = getDay(target);

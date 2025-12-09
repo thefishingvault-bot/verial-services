@@ -41,7 +41,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   const { userId } = await auth();
   if (!userId) {
-    return await auth.protect();
+    return NextResponse.redirect(new URL("/sign-in", req.url));
   }
 
   // Fetch user role once if needed for guarded dashboard/admin routes

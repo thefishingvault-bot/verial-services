@@ -36,7 +36,7 @@ describe("Dashboard review reminders section", () => {
       ],
     });
 
-    const Page = (await import("@/app/dashboard/page")).default;
+    const Page = (await import("@/app/dashboard/(customer)/page")).default;
     const ui = await Page();
     render(ui as any);
 
@@ -50,7 +50,7 @@ describe("Dashboard review reminders section", () => {
       reviewsDue: [],
     });
 
-    const Page = (await import("@/app/dashboard/page")).default;
+    const Page = (await import("@/app/dashboard/(customer)/page")).default;
     const ui = await Page();
     render(ui as any);
 

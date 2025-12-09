@@ -92,7 +92,7 @@ describe("/dashboard page", () => {
   });
 
   it("renders navigation cards and sections", async () => {
-    const Page = (await import("@/app/dashboard/page")).default;
+    const Page = (await import("@/app/dashboard/(customer)/page")).default;
     const ui = await Page();
     render(ui as any);
 

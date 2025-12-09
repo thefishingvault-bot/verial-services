@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { providers, services, bookings, refunds } from '@/db/schema';
-import { and, gte, lte, desc, sql } from 'drizzle-orm';
+import { providers, services, bookings, refunds, users } from '@/db/schema';
+import { and, gte, lte, desc, sql, eq } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
 
 export async function GET(request: NextRequest) {

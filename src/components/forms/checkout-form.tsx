@@ -57,18 +57,16 @@ export function CheckoutForm() {
 
     setIsLoading(true);
 
-    const { error, paymentIntent } = await stripe.confirmPayment({
+    const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        // Make sure to change this to your payment completion page
         return_url: `${window.location.origin}/dashboard/bookings`,
       },
     });
 
-    // This point will only be reached if there is an immediate error
-    if (error) {
-      if (error.type === "card_error" || error.type === "validation_error") {
-        setMessage(error.message || 'An unexpected error occurred.');
+    if (result.error) {
+      if (result.error.type === "card_error" || result.error.type === "validation_error") {
+        setMessage(result.error.message || 'An unexpected error occurred.');
       } else {
         setMessage('An unexpected error occurred.');
       }
@@ -76,7 +74,7 @@ export function CheckoutForm() {
       return;
     }
 
-    const clientSecret = paymentIntent?.client_secret;
+    const clientSecret = (result as any).paymentIntent?.client_secret;
     if (clientSecret) {
       await pollPaymentIntent(clientSecret);
     }

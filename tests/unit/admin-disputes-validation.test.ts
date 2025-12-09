@@ -1,4 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
+import { NextRequest } from "next/server";
 
 vi.mock("@/lib/admin-auth", () => ({ requireAdmin: vi.fn().mockResolvedValue({ isAdmin: true, userId: "admin_1" }) }));
 vi.mock("@/db/schema", () => ({ disputes: {}, bookings: {} }));
@@ -20,7 +21,7 @@ beforeEach(() => {
 describe("admin disputes validation", () => {
   it("rejects invalid disputeId", async () => {
     const { POST } = await import("@/app/api/admin/disputes/[disputeId]/review/route");
-    const res = await POST(new Request("http://localhost/api/admin/disputes/not-uuid/review", { method: "POST" }), { params: Promise.resolve({ disputeId: "not-uuid" }) } as any);
+    const res = await POST(new NextRequest("http://localhost/api/admin/disputes/not-uuid/review", { method: "POST" }), { params: Promise.resolve({ disputeId: "not-uuid" }) } as any);
     expect(res.status).toBe(400);
   });
 
@@ -28,7 +29,7 @@ describe("admin disputes validation", () => {
     const { POST } = await import("@/app/api/admin/disputes/[disputeId]/resolve/route");
     const form = new FormData();
     form.set("adminNotes", "");
-    const res = await POST(new Request("http://localhost/api/admin/disputes/550e8400-e29b-41d4-a716-446655440000/resolve", { method: "POST", body: form }), { params: Promise.resolve({ disputeId: "550e8400-e29b-41d4-a716-446655440000" }) } as any);
+    const res = await POST(new NextRequest("http://localhost/api/admin/disputes/550e8400-e29b-41d4-a716-446655440000/resolve", { method: "POST", body: form as any }), { params: Promise.resolve({ disputeId: "550e8400-e29b-41d4-a716-446655440000" }) } as any);
     expect(res.status).toBe(400);
   });
 });

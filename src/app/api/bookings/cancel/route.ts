@@ -68,7 +68,6 @@ export async function PATCH(req: Request) {
         bookingId,
         userId: booking.provider.userId,
         payload: {
-          userId: booking.provider.userId,
           message: `Booking canceled by customer: ${booking.service.title}`,
           href: '/dashboard/bookings/provider',
         },

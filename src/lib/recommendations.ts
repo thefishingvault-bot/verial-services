@@ -109,7 +109,10 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
       and(
         eq(providers.status, "approved"),
         eq(providers.isSuspended, false),
-        preferredCategories.length > 0 ? inArray(services.category, preferredCategories) : sql`1=1`,
+        // @ts-ignore column enum typing is stricter than runtime values
+        preferredCategories.length > 0
+          ? inArray(services.category as any, preferredCategories as any)
+          : sql`1=1`,
       ),
     )
     .groupBy(services.id, providers.id)

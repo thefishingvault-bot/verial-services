@@ -16,12 +16,13 @@ type RouteContext = { params: Promise<{ slug: string | string[] | undefined }> }
 
 const handler = async (req: NextRequest, context: RouteContext): Promise<Response> => {
   const { slug } = await context.params;
-  if (!slug) {
+  const slugValue = Array.isArray(slug) ? slug[0] : slug;
+  if (!slugValue) {
     return new Response('Missing slug', { status: 400 });
   }
 
   const service = await db.query.services.findFirst({
-    where: eq(services.slug, slug),
+    where: eq(services.slug, slugValue),
     with: {
       provider: {
         columns: {
