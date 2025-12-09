@@ -36,13 +36,12 @@ const isCustomerDashboardRoute = createRouteMatcher([
 
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) {
-    return;
+    return NextResponse.next();
   }
 
   const { userId } = await auth();
   if (!userId) {
-    await auth.protect();
-    return;
+    return await auth.protect();
   }
 
   // Fetch user role once if needed for guarded dashboard/admin routes
@@ -78,7 +77,7 @@ export default clerkMiddleware(async (auth, req) => {
     if (role !== "provider" && role !== "admin") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
-    return;
+    return NextResponse.next();
   }
 
   // Customer dashboard guard (exclude provider paths handled above)
@@ -86,7 +85,7 @@ export default clerkMiddleware(async (auth, req) => {
     if (role === "provider") {
       return NextResponse.redirect(new URL("/dashboard/provider", req.url));
     }
-    return;
+    return NextResponse.next();
   }
 });
 

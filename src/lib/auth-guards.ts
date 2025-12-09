@@ -14,10 +14,8 @@ export const requireCustomer = async () => {
   }
 
   const role = await getUserRole(userId);
-  if (role === "provider") {
-    redirect("/dashboard/provider");
-  }
 
+  // We intentionally do NOT redirect providers here; middleware handles routing to avoid loops.
   return { userId, role: role ?? "user" };
 };
 
