@@ -128,7 +128,7 @@ export async function POST(req: Request) {
         throw new Error("SELF_BOOKING");
       }
 
-      // --- 4. NEW: Check Provider Availability ---
+      // --- 4. Availability check (soft) ---
       if (scheduledDate) {
         const requestedTime = new Date(scheduledDate);
 
@@ -153,27 +153,47 @@ export async function POST(req: Request) {
         });
 
         if (!providerSchedule) {
-          throw new Error(`Provider is not available on ${requestedDay}s.`);
-        }
+          console.warn("[BOOKING_AVAILABILITY_SOFT_NO_SCHEDULE]", {
+            providerId: service.providerId,
+            requestedDay,
+            scheduledDate,
+          });
+        } else {
+          const requestedTimeStr = requestedTime.toTimeString().substring(0, 5); // "HH:mm"
+          const startTimeStr = providerSchedule.startTime.toString().substring(0, 5);
+          const endTimeStr = providerSchedule.endTime.toString().substring(0, 5);
 
-        const requestedTimeStr = requestedTime.toTimeString().substring(0, 5); // "HH:mm"
-        const startTimeStr = providerSchedule.startTime.toString().substring(0, 5);
-        const endTimeStr = providerSchedule.endTime.toString().substring(0, 5);
+          const outsideWindow = requestedTimeStr < startTimeStr || requestedTimeStr > endTimeStr;
+          if (outsideWindow) {
+            console.warn("[BOOKING_AVAILABILITY_SOFT_WINDOW]", {
+              providerId: service.providerId,
+              requestedDay,
+              requestedTime: requestedTimeStr,
+              startTime: startTimeStr,
+              endTime: endTimeStr,
+              scheduledDate,
+            });
+          }
 
-        if (requestedTimeStr < startTimeStr || requestedTimeStr > endTimeStr) {
-          throw new Error(`Provider is only available between ${startTimeStr} and ${endTimeStr} on ${requestedDay}s.`);
-        }
+          const timeOff = await db.query.providerTimeOffs.findFirst({
+            where: and(
+              eq(providerTimeOffs.providerId, service.providerId),
+              lte(providerTimeOffs.startTime, requestedTime),
+              gte(providerTimeOffs.endTime, requestedTime),
+            ),
+          });
 
-        const timeOff = await db.query.providerTimeOffs.findFirst({
-          where: and(
-            eq(providerTimeOffs.providerId, service.providerId),
-            lte(providerTimeOffs.startTime, requestedTime),
-            gte(providerTimeOffs.endTime, requestedTime),
-          ),
-        });
-
-        if (timeOff) {
-          throw new Error(`Provider is unavailable on this date for: ${timeOff.reason || "Time Off"}.`);
+          if (timeOff) {
+            console.warn("[BOOKING_AVAILABILITY_SOFT_TIME_OFF]", {
+              providerId: service.providerId,
+              requestedDay,
+              requestedTime: requestedTimeStr,
+              startTime: startTimeStr,
+              endTime: endTimeStr,
+              scheduledDate,
+              timeOffReason: timeOff.reason,
+            });
+          }
         }
       }
       // --- End Availability Check ---
