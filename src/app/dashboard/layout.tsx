@@ -1,8 +1,10 @@
+"use client";
+
+import { usePathname } from "next/navigation";
 import { BottomNavigation } from "@/components/nav/bottom-navigation";
 import { SiteHeader } from "@/components/nav/site-header";
 import Link from "next/link";
 import { Home, Calendar, Heart, MessageSquare, Bell, User, Settings, Briefcase } from "lucide-react";
-import { requireCustomer } from "@/lib/auth-guards";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -15,12 +17,18 @@ const navLinks = [
   { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
-export default async function DashboardLayout({
+export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireCustomer();
+  const pathname = usePathname();
+  const isProvider = pathname.startsWith("/dashboard/provider");
+
+  // Provider dashboard uses its own layout; render children only to avoid double nav/sidebars.
+  if (isProvider) {
+    return <div className="min-h-screen bg-muted/20">{children}</div>;
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
