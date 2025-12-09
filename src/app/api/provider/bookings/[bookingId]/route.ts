@@ -34,16 +34,13 @@ export async function GET(
     where: and(eq(bookings.id, bookingId), eq(bookings.providerId, provider.id)),
     with: {
       user: { columns: { id: true, firstName: true, lastName: true, email: true } },
-      service: { columns: { title: true, slug: true } },
+      service: { columns: { title: true, slug: true, region: true, suburb: true } },
       provider: {
         columns: {
           id: true,
           businessName: true,
           handle: true,
           stripeConnectId: true,
-          baseRegion: true,
-          baseSuburb: true,
-          serviceRadiusKm: true,
         },
       },
     },

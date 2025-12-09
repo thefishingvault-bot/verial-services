@@ -29,8 +29,8 @@ export interface ServiceWithProvider {
     id: string;
     businessName: string | null;
     handle: string | null;
-    baseSuburb: string | null;
-    baseRegion: string | null;
+    region: string | null;
+    suburb: string | null;
     trustScore: number;
     isVerified: boolean;
     avatarUrl: string | null;
@@ -43,7 +43,6 @@ export interface ServiceWithProvider {
   avgRating: number;
   reviewCount: number;
   favoriteCount: number;
-  distance?: number;
 }
 
 export type ServiceWithProviderAndFavorite = ServiceWithProvider & {
@@ -154,7 +153,7 @@ export async function getServicesDataFromSearchParams(
   }
 
   if (filters.region) {
-    whereConditions.push(sql`LOWER(${providers.baseRegion}) = LOWER(${filters.region})`);
+    whereConditions.push(sql`LOWER(${services.region}) = LOWER(${filters.region})`);
   }
 
   if (filters.minPrice != null) {
@@ -210,8 +209,8 @@ export async function getServicesDataFromSearchParams(
       providerId: services.providerId,
       businessName: providers.businessName,
       handle: providers.handle,
-      baseSuburb: providers.baseSuburb,
-      baseRegion: providers.baseRegion,
+      region: services.region,
+      suburb: services.suburb,
       trustScore: providers.trustScore,
       trustLevel: providers.trustLevel,
       isVerified: providers.isVerified,
@@ -263,8 +262,8 @@ export async function getServicesDataFromSearchParams(
         id: service.providerId,
         businessName: service.businessName,
         handle: service.handle,
-        baseSuburb: service.baseSuburb,
-        baseRegion: service.baseRegion,
+        suburb: service.suburb,
+        region: service.region,
         trustScore: service.trustScore,
         isVerified: service.isVerified,
         avatarUrl: service.avatarUrl,

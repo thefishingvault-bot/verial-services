@@ -198,12 +198,16 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                         </div>
                       </>
                     )}
-                    {service.provider.baseSuburb && (
+                    {service.provider.suburb || service.provider.region ? (
                       <>
                         <span>•</span>
-                        <span>{service.provider.baseSuburb}</span>
+                        <span>
+                          {service.provider.suburb}
+                          {service.provider.suburb && service.provider.region ? ", " : ""}
+                          {service.provider.region}
+                        </span>
                       </>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

@@ -9,7 +9,6 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Loader2, Sparkles } from 'lucide-react';
-import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from '@/lib/data/nz-suburbs';
 
 interface ServiceBookingPanelProps {
   serviceId: string;
@@ -28,8 +27,6 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
   const [nextAvailableDate, setNextAvailableDate] = useState<string | null>(null);
   const [isLoadingSlots, setIsLoadingSlots] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [customerRegion, setCustomerRegion] = useState<string>('');
-  const [customerSuburb, setCustomerSuburb] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
 
@@ -78,11 +75,6 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
       return;
     }
 
-    if (!customerRegion || !customerSuburb) {
-      setError('Please select your region and suburb.');
-      return;
-    }
-
     setIsBooking(true);
     setError(null);
 
@@ -98,8 +90,6 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
         body: JSON.stringify({
           serviceId,
           scheduledDate: selectedSlot,
-          region: customerRegion || undefined,
-          suburb: customerSuburb || undefined,
         }),
       });
 
@@ -205,44 +195,6 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
           </div>
           {blockedSlots.length > 0 && (
             <p className="text-xs text-slate-500 mt-2">Blocked slots are hidden due to provider time-off.</p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <div>
-            <Label className="mb-1 block">Region</Label>
-            <select
-              value={customerRegion}
-              onChange={(e) => {
-                setCustomerRegion(e.target.value);
-                setCustomerSuburb('');
-              }}
-              className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-            >
-              <option value="">Select a region</option>
-              {NZ_REGIONS.map((region) => (
-                <option key={region} value={region}>{region}</option>
-              ))}
-            </select>
-          </div>
-
-          {customerRegion && (
-            <div>
-              <Label className="mb-1 block">Suburb</Label>
-              <select
-                value={customerSuburb}
-                onChange={(e) => setCustomerSuburb(e.target.value)}
-                className="file:text-foreground placeholder:text-muted-foreground selection:bg-primary selection:text-primary-foreground dark:bg-input/30 border-input h-9 w-full min-w-0 rounded-md border bg-transparent px-3 py-1 text-base shadow-xs transition-[color,box-shadow] outline-none file:inline-flex file:h-7 file:border-0 file:bg-transparent file:text-sm file:font-medium disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
-              >
-                <option value="">Select a suburb</option>
-                {(NZ_REGIONS_TO_SUBURBS[customerRegion] || []).map((suburb) => (
-                  <option key={suburb} value={suburb}>{suburb}</option>
-                ))}
-              </select>
-              {(NZ_REGIONS_TO_SUBURBS[customerRegion] || []).length === 0 && (
-                <p className="text-xs text-muted-foreground mt-1">Suburb list coming soon for {customerRegion}.</p>
-              )}
-            </div>
           )}
         </div>
 

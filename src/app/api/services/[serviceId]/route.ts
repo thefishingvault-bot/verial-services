@@ -3,6 +3,7 @@ import { services, providers, serviceCategoryEnum } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
+import { NZ_REGIONS } from "@/lib/data/nz-locations";
 
 export const runtime = "nodejs";
 
@@ -59,8 +60,10 @@ export async function PATCH(
       priceInCents?: number;
       category?: string;
       chargesGst?: boolean;
+      region?: string;
+      suburb?: string;
     };
-    const { title, description, priceInCents, category, chargesGst } = body;
+    const { title, description, priceInCents, category, chargesGst, region, suburb } = body;
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
@@ -77,6 +80,29 @@ export async function PATCH(
       categoryValue = category as (typeof serviceCategoryEnum.enumValues)[number];
     }
 
+    if (region !== undefined) {
+      if (!Object.keys(NZ_REGIONS).includes(region)) {
+        return new NextResponse("Invalid region", { status: 400 });
+      }
+      if (suburb === undefined) {
+        return new NextResponse("Suburb required when updating region", { status: 400 });
+      }
+      if (!NZ_REGIONS[region].includes(suburb)) {
+        return new NextResponse("Invalid suburb for region", { status: 400 });
+      }
+    }
+
+    if (suburb !== undefined && region === undefined) {
+      const existing = await db.query.services.findFirst({
+        where: and(eq(services.id, serviceId), eq(services.providerId, provider.id)),
+        columns: { region: true },
+      });
+      const effectiveRegion = region ?? existing?.region;
+      if (!effectiveRegion || !NZ_REGIONS[effectiveRegion] || !NZ_REGIONS[effectiveRegion].includes(suburb)) {
+        return new NextResponse("Invalid suburb", { status: 400 });
+      }
+    }
+
     const [updatedService] = await db
       .update(services)
       .set({
@@ -85,6 +111,8 @@ export async function PATCH(
         ...(priceInCents !== undefined && { priceInCents }),
         ...(categoryValue !== undefined && { category: categoryValue }),
         ...(chargesGst !== undefined && { chargesGst }),
+        ...(region !== undefined && { region }),
+        ...(suburb !== undefined && { suburb }),
         updatedAt: new Date(),
       })
       .where(

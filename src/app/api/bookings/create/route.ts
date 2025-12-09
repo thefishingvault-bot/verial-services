@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { bookings, services, providers, users, providerAvailabilities, providerTimeOffs, providerSuburbs } from "@/db/schema";
+import { bookings, services, providers, users, providerAvailabilities, providerTimeOffs } from "@/db/schema";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and, lte, gte } from "drizzle-orm";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serviceId, scheduledDate, region, suburb, customerRegion } = await req.json();
+    const { serviceId, scheduledDate } = await req.json();
     if (!serviceId) {
       return new NextResponse("Missing serviceId", { status: 400 });
     }
@@ -72,9 +72,6 @@ export async function POST(req: Request) {
             columns: {
               id: true,
               userId: true,
-              baseRegion: true,
-              baseSuburb: true,
-              serviceRadiusKm: true,
             },
             with: {
               user: { columns: { email: true } },
@@ -84,34 +81,6 @@ export async function POST(req: Request) {
       });
       if (!service) {
         throw new Error("Service not found");
-      }
-
-      // --- 2b. Coverage-based service-area check ---
-      const requestedRegion = (region as string | undefined)?.trim() || (customerRegion as string | undefined)?.trim() || null;
-      const requestedSuburb = (suburb as string | undefined)?.trim() || null;
-
-      const coverage = await db
-        .select({ region: providerSuburbs.region, suburb: providerSuburbs.suburb })
-        .from(providerSuburbs)
-        .where(eq(providerSuburbs.providerId, service.providerId));
-
-      if (coverage.length > 0) {
-        const matches = coverage.some((row) => {
-          const regionMatch = requestedRegion ? row.region.toLowerCase() === requestedRegion.toLowerCase() : false;
-          const suburbMatch = requestedSuburb ? row.suburb.toLowerCase() === requestedSuburb.toLowerCase() : false;
-          return regionMatch && suburbMatch;
-        });
-
-        if (!matches) {
-          console.warn("[BOOKING_OUT_OF_AREA_COVERAGE]", {
-            providerId: service.providerId,
-            requestedRegion,
-            requestedSuburb,
-            serviceId: service.id,
-            timestamp: new Date().toISOString(),
-          });
-          throw new Error("OUT_OF_AREA");
-        }
       }
 
       // 3. Check that a user is not booking their own service
@@ -202,6 +171,8 @@ export async function POST(req: Request) {
         status: "pending",
         priceAtBooking: service.priceInCents, // Snapshot the price
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
+        region: service.region ?? null,
+        suburb: service.suburb ?? null,
       }).returning();
 
       console.log(`[API_BOOKING_CREATE] User ${userId} created Booking ${created.id} for Service ${service.id}`);
@@ -257,16 +228,6 @@ export async function POST(req: Request) {
   } catch (error) {
     console.error("[API_BOOKING_CREATE]", error);
     const message = error instanceof Error ? error.message : "Internal Server Error";
-
-    if (message === "OUT_OF_AREA") {
-      return NextResponse.json(
-        {
-          error: "OUT_OF_AREA",
-          message: "This provider doesn't currently service your area.",
-        },
-        { status: 400 },
-      );
-    }
 
     if (message === "SELF_BOOKING") {
       return new NextResponse("You cannot book your own service", { status: 400 });

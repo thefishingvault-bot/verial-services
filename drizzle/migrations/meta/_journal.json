@@ -176,6 +176,13 @@
       "when": 1765660000000,
       "tag": "0024_provider_suburbs",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1765820000000,
+      "tag": "0025_nz_locations",
+      "breakpoints": true
     }
   ]
 }

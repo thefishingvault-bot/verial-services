@@ -33,6 +33,7 @@ import { ImageUploader } from '@/components/forms/image-uploader';
 import { Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import Link from 'next/link';
+import { NZ_REGIONS } from '@/lib/data/nz-locations';
 
 const categories = [
   'cleaning',
@@ -50,6 +51,8 @@ const formSchema = z.object({
   price: z.number().positive('Price must be a positive number.'),
   description: z.string().optional(),
   chargesGst: z.boolean(),
+  region: z.string().min(1, 'Region is required'),
+  suburb: z.string().min(1, 'Suburb is required'),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -72,8 +75,13 @@ export default function EditServicePage() {
       price: 0,
       description: '',
       chargesGst: true,
+      region: '',
+      suburb: '',
     },
   });
+
+  const region = form.watch('region');
+  const suburbs = region ? NZ_REGIONS[region] ?? [] : [];
 
   useEffect(() => {
     setIsLoading(true);
@@ -89,6 +97,8 @@ export default function EditServicePage() {
           price: data.priceInCents / 100,
           description: data.description || '',
           chargesGst: data.chargesGst,
+          region: data.region || '',
+          suburb: data.suburb || '',
         });
         setCoverImageUrl(data.coverImageUrl ?? null);
         setIsLoading(false);
@@ -113,6 +123,8 @@ export default function EditServicePage() {
           priceInCents,
           category: values.category,
           chargesGst: values.chargesGst,
+          region: values.region,
+          suburb: values.suburb,
         }),
       });
 
@@ -250,6 +262,64 @@ export default function EditServicePage() {
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="region"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Region</FormLabel>
+                      <Select
+                        onValueChange={(val) => {
+                          field.onChange(val);
+                          form.setValue('suburb', '');
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a region" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.keys(NZ_REGIONS).map((regionName) => (
+                            <SelectItem key={regionName} value={regionName}>
+                              {regionName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="suburb"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Suburb</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!region}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={region ? 'Select a suburb' : 'Choose a region first'} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {suburbs.map((suburb) => (
+                            <SelectItem key={suburb} value={suburb}>
+                              {suburb}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               <Button type="submit" disabled={isSaving} className="w-full">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Changes'}

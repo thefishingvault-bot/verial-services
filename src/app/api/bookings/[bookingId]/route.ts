@@ -24,16 +24,13 @@ export async function GET(
   const booking = await db.query.bookings.findFirst({
     where: and(eq(bookings.id, bookingId), eq(bookings.userId, userId)),
     with: {
-      service: { columns: { title: true, slug: true } },
+      service: { columns: { title: true, slug: true, region: true, suburb: true } },
       provider: {
         columns: {
           id: true,
           businessName: true,
           handle: true,
           stripeConnectId: true,
-          baseRegion: true,
-          baseSuburb: true,
-          serviceRadiusKm: true,
         },
         with: {
           user: { columns: { id: true, firstName: true, lastName: true, email: true } },

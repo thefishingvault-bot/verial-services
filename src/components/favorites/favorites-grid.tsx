@@ -77,7 +77,11 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
                       {fav.provider.trustLevel}
                     </span>
                     {fav.provider.isVerified && <Badge variant="secondary">Verified</Badge>}
-                    {fav.provider.baseRegion && <span className="text-slate-500">{fav.provider.baseRegion}</span>}
+                    {(fav.provider.suburb || fav.provider.region) && (
+                      <span className="text-slate-500">
+                        {[fav.provider.suburb, fav.provider.region].filter(Boolean).join(", ")}
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="text-right">

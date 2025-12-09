@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { services, serviceCategoryEnum } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { NZ_REGIONS } from "@/lib/data/nz-locations";
 
 export const runtime = "nodejs";
 
@@ -37,14 +38,21 @@ export async function POST(req: Request) {
       return new NextResponse('You must be an approved provider to list services.', { status: 403 });
     }
 
-    const { title, description, priceInCents, category } = await req.json();
+    const { title, description, priceInCents, category, region, suburb } = await req.json();
 
-    if (!title || !priceInCents || !category) {
-      return new NextResponse("Missing required fields: title, priceInCents, category", { status: 400 });
+    if (!title || !priceInCents || !category || !region || !suburb) {
+      return new NextResponse("Missing required fields: title, priceInCents, category, region, suburb", { status: 400 });
     }
+
+    const validRegion = Object.keys(NZ_REGIONS).includes(region);
+    const validSuburb = validRegion ? NZ_REGIONS[region].includes(suburb) : false;
 
     if (!serviceCategoryEnum.enumValues.includes(category)) {
       return new NextResponse(`Invalid category: ${category}`, { status: 400 });
+    }
+
+    if (!validRegion || !validSuburb) {
+      return new NextResponse("Invalid region/suburb selection", { status: 400 });
     }
 
     const slug = createSlug(title);
@@ -58,6 +66,8 @@ export async function POST(req: Request) {
       category: category,
       slug: `${slug}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure uniqueness for MVP
       chargesGst: provider.chargesGst,
+      region,
+      suburb,
     }).returning();
 
     console.log(`[API_SERVICE_CREATE] Provider ${provider.id} created Service ${newService.id}`);

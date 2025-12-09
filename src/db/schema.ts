@@ -181,6 +181,8 @@ export const services = pgTable("services", {
   category: serviceCategoryEnum("category").default("other").notNull(),
   coverImageUrl: text("cover_image_url"),
   chargesGst: boolean("charges_gst").default(true).notNull(),
+  region: varchar("region", { length: 255 }),
+  suburb: varchar("suburb", { length: 255 }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
@@ -214,6 +216,8 @@ export const bookings = pgTable("bookings", {
   status: bookingStatusEnum("status").default("pending").notNull(),
   scheduledDate: timestamp("scheduled_date"),
   priceAtBooking: integer("price_at_booking").notNull(), // Price (in cents) at the time of booking
+  region: varchar("region", { length: 255 }),
+  suburb: varchar("suburb", { length: 255 }),
 
   // Stripe Payment Intent ID
   paymentIntentId: varchar("payment_intent_id", { length: 255 }).unique(),

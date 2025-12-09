@@ -30,6 +30,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Separator } from '@/components/ui/separator';
 import { ImageUploader } from '@/components/forms/image-uploader';
 import { useToast } from '@/components/ui/use-toast';
+import { NZ_REGIONS } from '@/lib/data/nz-locations';
 
 // As per schema: serviceCategoryEnum
 const categories = [
@@ -52,6 +53,8 @@ const formSchema = z.object({
     message: 'Price must be a positive number.',
   }),
   description: z.string().optional(),
+  region: z.string().min(1, { message: 'Region is required' }),
+  suburb: z.string().min(1, { message: 'Suburb is required' }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -74,8 +77,13 @@ export default function NewServicePage() {
       category: 'cleaning',
       price: 0,
       description: '',
+      region: '',
+      suburb: '',
     },
   });
+
+  const region = form.watch('region');
+  const suburbs = region ? NZ_REGIONS[region] ?? [] : [];
 
   // --- Step 1: Create the service (text details) ---
   const onSubmit = async (values: FormValues) => {
@@ -93,6 +101,8 @@ export default function NewServicePage() {
           description: values.description,
           priceInCents: priceInCents,
           category: values.category,
+          region: values.region,
+          suburb: values.suburb,
         }),
       });
 
@@ -220,6 +230,64 @@ export default function NewServicePage() {
                   </FormItem>
                 )}
               />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <FormField
+                  control={form.control}
+                  name="region"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Region</FormLabel>
+                      <Select
+                        onValueChange={(val) => {
+                          field.onChange(val);
+                          form.setValue('suburb', '');
+                        }}
+                        value={field.value}
+                      >
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select a region" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {Object.keys(NZ_REGIONS).map((regionName) => (
+                            <SelectItem key={regionName} value={regionName}>
+                              {regionName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                <FormField
+                  control={form.control}
+                  name="suburb"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Suburb</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value} disabled={!region}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder={region ? 'Select a suburb' : 'Choose a region first'} />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {suburbs.map((suburb) => (
+                            <SelectItem key={suburb} value={suburb}>
+                              {suburb}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
 
               {apiError && (
                 <p className="text-sm font-medium text-destructive">{apiError}</p>

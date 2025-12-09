@@ -24,7 +24,7 @@ export async function GET(req: Request) {
       }
 
       if (region !== 'all') {
-        whereConditions.push(eq(providers.baseRegion, region));
+        whereConditions.push(eq(services.region, region));
       }
 
       if (q) {
@@ -47,20 +47,32 @@ export async function GET(req: Request) {
           status: providers.status,
           trustLevel: providers.trustLevel,
           trustScore: providers.trustScore,
-          baseRegion: providers.baseRegion,
+          region: sql<string | null>`MIN(${services.region})`,
           createdAt: providers.createdAt,
           userEmail: users.email,
         })
         .from(providers)
         .innerJoin(users, eq(providers.userId, users.id))
+        .leftJoin(services, eq(services.providerId, providers.id))
         .where(where)
+        .groupBy(
+          providers.id,
+          providers.businessName,
+          providers.handle,
+          providers.status,
+          providers.trustLevel,
+          providers.trustScore,
+          providers.createdAt,
+          users.email,
+        )
         .orderBy(providers.createdAt)
         .limit(100);
 
       const totalCount = await db
-        .select({ count: sql<number>`count(*)` })
+        .select({ count: sql<number>`COUNT(DISTINCT ${providers.id})` })
         .from(providers)
         .innerJoin(users, eq(providers.userId, users.id))
+        .leftJoin(services, eq(services.providerId, providers.id))
         .where(where);
 
       return NextResponse.json({

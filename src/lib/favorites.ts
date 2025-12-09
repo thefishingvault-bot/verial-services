@@ -26,7 +26,8 @@ export type FavoriteService = {
     trustLevel: (typeof providers.trustLevel.enumValues)[number];
     trustScore: number;
     isVerified: boolean;
-    baseRegion: string | null;
+    region: string | null;
+    suburb: string | null;
   };
   isFavorited: true;
   score: number;
@@ -51,7 +52,8 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       providerTrustLevel: providers.trustLevel,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
-      providerBaseRegion: providers.baseRegion,
+      providerRegion: services.region,
+      providerSuburb: services.suburb,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
       favoriteCount: sql<number>`(
@@ -113,7 +115,8 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
         trustLevel: row.providerTrustLevel,
         trustScore: row.providerTrustScore ?? 0,
         isVerified: row.providerVerified ?? false,
-        baseRegion: row.providerBaseRegion,
+        region: row.providerRegion,
+        suburb: row.providerSuburb,
       },
       isFavorited: true,
       score: scoreService(rankable),

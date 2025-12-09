@@ -15,7 +15,7 @@ interface ProviderRow {
   status: string;
   trustLevel: string;
   trustScore: number;
-  baseRegion: string;
+  region: string | null;
   createdAt: string;
   userEmail: string;
 }
@@ -374,7 +374,7 @@ function ProviderTableRow({ provider }: { provider: ProviderRow }) {
         <div className="text-sm font-medium">{provider.trustScore}</div>
         <div className="text-xs text-muted-foreground capitalize">{provider.trustLevel}</div>
       </TableCell>
-      <TableCell className="text-sm">{provider.baseRegion || '—'}</TableCell>
+      <TableCell className="text-sm">{provider.region || '—'}</TableCell>
       <TableCell className="text-sm">{new Date(provider.createdAt).toLocaleDateString()}</TableCell>
     </>
   );

@@ -40,6 +40,8 @@ type ServiceDetail = {
   coverImageUrl: string | null;
   chargesGst: boolean;
   createdAt: Date;
+  region: string | null;
+  suburb: string | null;
   provider: {
     id: string;
     userId: string | null;
@@ -49,9 +51,6 @@ type ServiceDetail = {
     trustLevel: (typeof providers.trustLevel.enumValues)[number];
     trustScore: number;
     isVerified: boolean;
-    baseSuburb: string | null;
-    baseRegion: string | null;
-    serviceRadiusKm: number | null;
   };
   avgRating: number;
   reviewCount: number;
@@ -161,6 +160,8 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       coverImageUrl: services.coverImageUrl,
       chargesGst: services.chargesGst,
       createdAt: services.createdAt,
+      serviceRegion: services.region,
+      serviceSuburb: services.suburb,
       providerId: providers.id,
       providerUserId: providers.userId,
       providerHandle: providers.handle,
@@ -169,9 +170,6 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       providerTrustLevel: providers.trustLevel,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
-      providerBaseSuburb: providers.baseSuburb,
-      providerBaseRegion: providers.baseRegion,
-      providerRadius: providers.serviceRadiusKm,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
       favoriteCount: sql<number>`COUNT(${serviceFavorites.id})`,
@@ -200,6 +198,8 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
     coverImageUrl: serviceRow.coverImageUrl,
     chargesGst: serviceRow.chargesGst,
     createdAt: serviceRow.createdAt,
+    region: serviceRow.serviceRegion,
+    suburb: serviceRow.serviceSuburb,
     provider: {
       id: serviceRow.providerId,
       userId: serviceRow.providerUserId,
@@ -209,9 +209,9 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       trustLevel: serviceRow.providerTrustLevel,
       trustScore: serviceRow.providerTrustScore ?? 0,
       isVerified: serviceRow.providerVerified ?? false,
-      baseSuburb: serviceRow.providerBaseSuburb,
-      baseRegion: serviceRow.providerBaseRegion,
-      serviceRadiusKm: serviceRow.providerRadius,
+      // baseSuburb: serviceRow.providerBaseSuburb,
+      // baseRegion: serviceRow.providerBaseRegion,
+      // serviceRadiusKm: serviceRow.providerRadius,
     },
     avgRating: Number(serviceRow.avgRating ?? 0),
     reviewCount: Number(serviceRow.reviewCount ?? 0),
@@ -298,9 +298,11 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
                 <h1 className="text-3xl font-bold text-slate-900">{service.title}</h1>
                 <div className="flex flex-wrap items-center gap-3 text-sm text-slate-700">
                   <Badge variant="outline" className="capitalize">{service.category.replace(/_/g, " ")}</Badge>
-                  {service.provider.baseSuburb || service.provider.baseRegion ? (
+                  {service.suburb || service.region ? (
                     <span className="text-slate-600">
-                      {service.provider.baseSuburb ?? service.provider.baseRegion}
+                      {service.suburb}
+                      {service.suburb && service.region ? ", " : ""}
+                      {service.region}
                     </span>
                   ) : null}
                 </div>
@@ -383,16 +385,9 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-700">
               <p>{service.provider.bio || "No bio provided."}</p>
-              {service.provider.serviceRadiusKm && (
-                <div className="text-slate-600">
-                  Travels up to {service.provider.serviceRadiusKm} km
-                  {service.provider.baseSuburb
-                    ? ` from ${service.provider.baseSuburb}`
-                    : service.provider.baseRegion
-                      ? ` in ${service.provider.baseRegion}`
-                      : ""}
-                </div>
-              )}
+              {service.suburb || service.region ? (
+                <div className="text-slate-600">📍 Located in {service.suburb ? `${service.suburb}, ` : ""}{service.region ?? "New Zealand"}</div>
+              ) : null}
             </CardContent>
           </Card>
 

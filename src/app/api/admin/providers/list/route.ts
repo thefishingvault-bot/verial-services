@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
-import { providers } from '@/db/schema';
+import { providers, services } from '@/db/schema';
 import { NextResponse } from 'next/server';
-import { and, desc, eq, ilike, or } from 'drizzle-orm';
+import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
 
 export const runtime = 'nodejs';
@@ -37,7 +37,9 @@ export async function GET(request: Request) {
     }
 
     if (region && region !== 'all') {
-      whereClauses.push(eq(providers.baseRegion, region));
+      whereClauses.push(
+        sql`${providers.id} IN (SELECT provider_id FROM ${services} WHERE ${services.region} = ${region})`,
+      );
     }
 
     if (charges === '1') {

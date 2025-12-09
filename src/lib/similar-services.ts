@@ -28,9 +28,10 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
     where: eq(services.id, serviceId),
     with: {
       provider: {
-        columns: { baseRegion: true, status: true, isSuspended: true },
+        columns: { status: true, isSuspended: true },
       },
     },
+    columns: { id: true, category: true, region: true, suburb: true },
   });
 
   if (!baseService || !baseService.provider) return null;
@@ -43,8 +44,12 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
     eq(providers.isSuspended, false),
   ];
 
-  if (baseService.provider.baseRegion) {
-    predicates.push(eq(providers.baseRegion, baseService.provider.baseRegion));
+  if (baseService.region) {
+    predicates.push(eq(services.region, baseService.region));
+  }
+
+  if (baseService.suburb) {
+    predicates.push(eq(services.suburb, baseService.suburb));
   }
 
   const rows = await client
@@ -62,7 +67,7 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
       providerBusinessName: providers.businessName,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
-      providerRegion: providers.baseRegion,
+      providerRegion: services.region,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
       favoriteCount: sql<number>`COUNT(${serviceFavorites.id})`,

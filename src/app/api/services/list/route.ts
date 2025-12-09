@@ -28,7 +28,8 @@ type ServiceSummary = {
     businessName: string | null;
     isVerified: boolean;
     trustLevel: "bronze" | "silver" | "gold" | "platinum" | null;
-    baseRegion: string | null;
+    region: string | null;
+    suburb: string | null;
   };
   avgRating: number;
   reviewCount: number;
@@ -93,7 +94,7 @@ export async function GET(req: NextRequest) {
       eq(providers.status, "approved"),
       categoryFilter ? eq(services.category, categoryFilter as ServiceSummary["category"]) : undefined,
       regionFilter
-        ? sql`LOWER(${providers.baseRegion}) = ${regionFilter}`
+        ? sql`LOWER(${services.region}) = ${regionFilter}`
         : undefined,
       minPrice != null ? sql`${services.priceInCents} >= ${minPrice}` : undefined,
       maxPrice != null ? sql`${services.priceInCents} <= ${maxPrice}` : undefined,
@@ -134,7 +135,8 @@ export async function GET(req: NextRequest) {
         providerName: providers.businessName,
         providerVerified: providers.isVerified,
         providerTrust: providers.trustLevel,
-        providerBaseRegion: providers.baseRegion,
+        serviceRegion: services.region,
+        serviceSuburb: services.suburb,
         favoriteCount: sql<number>`(
           SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
         )`,
@@ -194,7 +196,8 @@ export async function GET(req: NextRequest) {
           businessName: s.providerName,
           isVerified: s.providerVerified ?? false,
           trustLevel: (s.providerTrust ?? "bronze") as ServiceSummary["provider"]["trustLevel"],
-          baseRegion: s.providerBaseRegion,
+          region: s.serviceRegion,
+          suburb: s.serviceSuburb,
         },
         avgRating,
         reviewCount: stats.count,

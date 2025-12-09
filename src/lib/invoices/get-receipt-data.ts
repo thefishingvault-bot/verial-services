@@ -30,8 +30,8 @@ export type ReceiptData = {
     gstNumber: string | null;
     userId: string | null;
     userEmail: string | null;
-    baseRegion: string | null;
-    baseSuburb: string | null;
+    region: string | null;
+    suburb: string | null;
   };
   customer: {
     id: string;
@@ -77,10 +77,12 @@ export async function getReceiptData(
       paymentIntentId: true,
       createdAt: true,
       updatedAt: true,
+      region: true,
+      suburb: true,
     },
     with: {
       service: {
-        columns: { id: true, title: true, category: true, chargesGst: true },
+        columns: { id: true, title: true, category: true, chargesGst: true, region: true, suburb: true },
       },
       provider: {
         columns: {
@@ -89,8 +91,6 @@ export async function getReceiptData(
           chargesGst: true,
           gstNumber: true,
           userId: true,
-          baseRegion: true,
-          baseSuburb: true,
         },
         with: {
           user: { columns: { id: true, email: true } },
@@ -192,8 +192,8 @@ export async function getReceiptData(
         gstNumber: providerRecord?.gstNumber ?? null,
         userId: providerUser?.id ?? null,
         userEmail: providerUser?.email ?? null,
-        baseRegion: providerRecord?.baseRegion ?? null,
-        baseSuburb: providerRecord?.baseSuburb ?? null,
+        region: booking.region ?? serviceRecord?.region ?? null,
+        suburb: booking.suburb ?? serviceRecord?.suburb ?? null,
       },
       customer: {
         id: userRecord?.id ?? booking.userId,
