@@ -73,37 +73,48 @@ export async function POST(req: Request) {
               id: true,
               userId: true,
               baseRegion: true,
+              baseSuburb: true,
+              serviceRadiusKm: true,
             },
             with: {
               user: { columns: { email: true } },
             },
-          }
-        }
+          },
+        },
       });
       if (!service) {
         throw new Error("Service not found");
       }
 
-      // --- 2b. Simple region-based service-area check (MVP) ---
+      // --- 2b. Relaxed region-based service-area check ---
       const providerRegionRaw = service.provider?.baseRegion;
+      const providerSuburbRaw = service.provider?.baseSuburb;
       const customerRegionRaw = customerRegion as string | undefined;
 
-      const normalizeRegion = (value: string | null | undefined) =>
-        value?.toString().trim().toLowerCase() || null;
+      const hasCoords = false; // Coordinates not captured; skip distance gating.
 
-      const normalizedProviderRegion = normalizeRegion(providerRegionRaw);
-      const normalizedCustomerRegion = normalizeRegion(customerRegionRaw);
+      // If we don't have coordinates, do not block bookings on text mismatch. This prevents OUT_OF_AREA for valid nearby regions/suburbs.
+      if (!hasCoords) {
+        // We intentionally allow all inputs (including empty) when coords are missing.
+      } else {
+        // Placeholder for future coordinate-aware checks; keep legacy behavior here if coordinates are added later.
+        const normalizeText = (value: string | null | undefined) => value?.toString().trim().toLowerCase() || null;
+        const normalizedProviderRegion = normalizeText(providerRegionRaw);
+        const normalizedProviderSuburb = normalizeText(providerSuburbRaw);
+        const normalizedCustomerText = normalizeText(customerRegionRaw);
+        const text = normalizedCustomerText || "";
+        const matchesRegion = normalizedProviderRegion ? text.includes(normalizedProviderRegion) : false;
+        const matchesSuburb = normalizedProviderSuburb ? text.includes(normalizedProviderSuburb) : false;
 
-      if (normalizedProviderRegion && normalizedCustomerRegion) {
-        if (normalizedProviderRegion !== normalizedCustomerRegion) {
-          console.warn("[BOOKING_OUT_OF_AREA]", {
+        if (!(matchesRegion || matchesSuburb)) {
+          console.warn("[BOOKING_OUT_OF_AREA_COORD]", {
             providerId: service.providerId,
             providerRegion: providerRegionRaw,
+            providerSuburb: providerSuburbRaw,
             customerRegion: customerRegionRaw,
             serviceId: service.id,
             timestamp: new Date().toISOString(),
           });
-
           throw new Error("OUT_OF_AREA");
         }
       }
