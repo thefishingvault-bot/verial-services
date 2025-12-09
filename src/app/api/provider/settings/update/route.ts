@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { providers } from '@/db/schema';
+import { providers, providerSuburbs } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
@@ -14,11 +14,12 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const { chargesGst, baseSuburb, baseRegion, serviceRadiusKm } = body as {
+    const { chargesGst, baseSuburb, baseRegion, serviceRadiusKm, coverageSuburbs } = body as {
       chargesGst: boolean;
       baseSuburb?: string | null;
       baseRegion?: string | null;
       serviceRadiusKm?: number | null;
+      coverageSuburbs?: string[];
     };
 
     if (typeof chargesGst !== 'boolean') {
@@ -47,6 +48,33 @@ export async function PATCH(req: Request) {
       radiusToSave = Math.round(serviceRadiusKm / 5) * 5;
     }
 
+    const provider = await db.query.providers.findFirst({
+      where: (p, { eq }) => eq(p.userId, userId),
+      columns: { id: true },
+    });
+
+    if (!provider) {
+      return new NextResponse('Provider not found', { status: 404 });
+    }
+
+    const normalizedCoverageRegion = baseRegion === undefined
+      ? undefined
+      : (baseRegion === null || baseRegion.trim() === '' ? null : baseRegion.trim());
+
+    let normalizedCoverageSuburbs: string[] | undefined;
+    if (coverageSuburbs !== undefined) {
+      if (!Array.isArray(coverageSuburbs)) {
+        return new NextResponse('Invalid input: coverageSuburbs must be an array of strings', { status: 400 });
+      }
+      normalizedCoverageSuburbs = coverageSuburbs
+        .map((s) => (typeof s === 'string' ? s.trim() : ''))
+        .filter((s) => s.length > 0);
+
+      if (normalizedCoverageRegion && normalizedCoverageSuburbs.length === 0) {
+        return new NextResponse('Invalid input: at least one suburb is required when a region is set', { status: 400 });
+      }
+    }
+
     // Update the provider record for this user
     const updateData: Partial<typeof providers.$inferInsert> = {
       chargesGst,
@@ -65,16 +93,43 @@ export async function PATCH(req: Request) {
       updateData.serviceRadiusKm = radiusToSave;
     }
 
-    const [updatedProvider] = await db.update(providers)
-      .set(updateData)
-      .where(eq(providers.userId, userId))
-      .returning();
+    if (normalizedCoverageSuburbs && normalizedCoverageSuburbs.length > 0 && normalizedCoverageRegion) {
+      updateData.baseSuburb = normalizedCoverageSuburbs[0];
+      updateData.baseRegion = normalizedCoverageRegion;
+    }
+
+    const updatedProvider = await db.transaction(async (tx) => {
+      const [providerRow] = await tx.update(providers)
+        .set(updateData)
+        .where(eq(providers.userId, userId))
+        .returning();
+
+      if (!providerRow) {
+        return null;
+      }
+
+      if (normalizedCoverageSuburbs !== undefined && normalizedCoverageRegion !== undefined) {
+        await tx.delete(providerSuburbs).where(eq(providerSuburbs.providerId, provider.id));
+
+        if (normalizedCoverageRegion && normalizedCoverageSuburbs.length > 0) {
+          await tx.insert(providerSuburbs).values(
+            normalizedCoverageSuburbs.map((suburb) => ({
+              providerId: provider.id,
+              region: normalizedCoverageRegion!,
+              suburb,
+            })),
+          );
+        }
+      }
+
+      return providerRow;
+    });
 
     if (!updatedProvider) {
       return new NextResponse('Provider not found', { status: 404 });
     }
 
-    console.log(`[API_PROVIDER_SETTINGS] Provider ${updatedProvider.id} set chargesGst to ${chargesGst}`);
+    console.log(`[API_PROVIDER_SETTINGS] Provider ${updatedProvider.id} updated coverage`);
     return NextResponse.json(updatedProvider);
 
   } catch (error) {

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { bookings, services, providers, users, providerAvailabilities, providerTimeOffs } from "@/db/schema";
+import { bookings, services, providers, users, providerAvailabilities, providerTimeOffs, providerSuburbs } from "@/db/schema";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and, lte, gte } from "drizzle-orm";
@@ -21,7 +21,7 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { serviceId, scheduledDate, customerRegion } = await req.json();
+    const { serviceId, scheduledDate, region, suburb, customerRegion } = await req.json();
     if (!serviceId) {
       return new NextResponse("Missing serviceId", { status: 400 });
     }
@@ -86,32 +86,27 @@ export async function POST(req: Request) {
         throw new Error("Service not found");
       }
 
-      // --- 2b. Relaxed region-based service-area check ---
-      const providerRegionRaw = service.provider?.baseRegion;
-      const providerSuburbRaw = service.provider?.baseSuburb;
-      const customerRegionRaw = customerRegion as string | undefined;
+      // --- 2b. Coverage-based service-area check ---
+      const requestedRegion = (region as string | undefined)?.trim() || (customerRegion as string | undefined)?.trim() || null;
+      const requestedSuburb = (suburb as string | undefined)?.trim() || null;
 
-      const hasCoords = false; // Coordinates not captured; skip distance gating.
+      const coverage = await db
+        .select({ region: providerSuburbs.region, suburb: providerSuburbs.suburb })
+        .from(providerSuburbs)
+        .where(eq(providerSuburbs.providerId, service.providerId));
 
-      // If we don't have coordinates, do not block bookings on text mismatch. This prevents OUT_OF_AREA for valid nearby regions/suburbs.
-      if (!hasCoords) {
-        // We intentionally allow all inputs (including empty) when coords are missing.
-      } else {
-        // Placeholder for future coordinate-aware checks; keep legacy behavior here if coordinates are added later.
-        const normalizeText = (value: string | null | undefined) => value?.toString().trim().toLowerCase() || null;
-        const normalizedProviderRegion = normalizeText(providerRegionRaw);
-        const normalizedProviderSuburb = normalizeText(providerSuburbRaw);
-        const normalizedCustomerText = normalizeText(customerRegionRaw);
-        const text = normalizedCustomerText || "";
-        const matchesRegion = normalizedProviderRegion ? text.includes(normalizedProviderRegion) : false;
-        const matchesSuburb = normalizedProviderSuburb ? text.includes(normalizedProviderSuburb) : false;
+      if (coverage.length > 0) {
+        const matches = coverage.some((row) => {
+          const regionMatch = requestedRegion ? row.region.toLowerCase() === requestedRegion.toLowerCase() : false;
+          const suburbMatch = requestedSuburb ? row.suburb.toLowerCase() === requestedSuburb.toLowerCase() : false;
+          return regionMatch && suburbMatch;
+        });
 
-        if (!(matchesRegion || matchesSuburb)) {
-          console.warn("[BOOKING_OUT_OF_AREA_COORD]", {
+        if (!matches) {
+          console.warn("[BOOKING_OUT_OF_AREA_COVERAGE]", {
             providerId: service.providerId,
-            providerRegion: providerRegionRaw,
-            providerSuburb: providerSuburbRaw,
-            customerRegion: customerRegionRaw,
+            requestedRegion,
+            requestedSuburb,
             serviceId: service.id,
             timestamp: new Date().toISOString(),
           });

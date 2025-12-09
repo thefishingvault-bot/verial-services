@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useAuth, useUser } from '@clerk/nextjs';
-import { Home, Briefcase, Calendar, CreditCard, User, Package } from 'lucide-react';
+import { useAuth } from '@clerk/nextjs';
+import { Home, Calendar, User, MessageSquare } from 'lucide-react';
 
 // Helper to determine link active state
 const isActive = (pathname: string, href: string) => {
@@ -13,28 +13,21 @@ const isActive = (pathname: string, href: string) => {
 
 export function BottomNavigation() {
   const pathname = usePathname();
-  const { user } = useUser();
   const { isSignedIn } = useAuth();
-  const isProvider = user?.publicMetadata?.role === 'provider';
 
   if (!isSignedIn) return null;
 
-  // Define links for customer vs. provider
-  const navLinks = isProvider
-    ? [ // --- PROVIDER LINKS ---
-        { href: '/dashboard/bookings/provider', label: 'Bookings', icon: Briefcase },
-        { href: '/dashboard/services', label: 'Services', icon: Package },
-        { href: '/dashboard/payouts', label: 'Payouts', icon: CreditCard },
-      ]
-    : [ // --- CUSTOMER LINKS ---
-        { href: '/dashboard', label: 'Home', icon: Home },
-        { href: '/dashboard/bookings', label: 'My Bookings', icon: Calendar },
-        { href: '/dashboard/profile', label: 'Profile', icon: User }, // We will create this page soon
-      ];
+  // Customer dashboard nav only (provider dashboard uses its own layout/nav)
+  const navLinks = [
+    { href: '/dashboard', label: 'Home', icon: Home },
+    { href: '/dashboard/bookings', label: 'Bookings', icon: Calendar },
+    { href: '/dashboard/messages', label: 'Messages', icon: MessageSquare },
+    { href: '/dashboard/profile', label: 'Profile', icon: User },
+  ];
 
   return (
     <nav className="fixed bottom-0 z-50 w-full border-t bg-background md:hidden">
-      <div className="grid h-16 grid-cols-3">
+      <div className="grid h-16 grid-cols-4">
         {navLinks.map((link) => {
           const Icon = link.icon;
           const active = isActive(pathname, link.href);

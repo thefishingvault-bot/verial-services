@@ -1,6 +1,8 @@
 import { db } from '@/lib/db';
+import { providerSuburbs } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
+import { eq } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -27,11 +29,18 @@ export async function GET() {
       return new NextResponse('Provider not found', { status: 404 });
     }
 
+    const coverage = await db
+      .select({ region: providerSuburbs.region, suburb: providerSuburbs.suburb })
+      .from(providerSuburbs)
+      .where(eq(providerSuburbs.providerId, provider.id));
+
     return NextResponse.json({
       chargesGst: provider.chargesGst,
       baseSuburb: provider.baseSuburb,
       baseRegion: provider.baseRegion,
       serviceRadiusKm: provider.serviceRadiusKm,
+      coverageRegion: provider.baseRegion,
+      coverageSuburbs: coverage.map((row) => row.suburb),
     });
 
   } catch (error) {

@@ -26,6 +26,14 @@ const isAdminRoute = createRouteMatcher([
   "/dashboard/admin(.*)",
 ]);
 
+const isProviderDashboardRoute = createRouteMatcher([
+  "/dashboard/provider(.*)",
+]);
+
+const isCustomerDashboardRoute = createRouteMatcher([
+  "/dashboard(.*)",
+]);
+
 export default clerkMiddleware(async (auth, req) => {
   if (isPublicRoute(req)) {
     return;
@@ -37,11 +45,15 @@ export default clerkMiddleware(async (auth, req) => {
     return;
   }
 
-  if (isAdminRoute(req)) {
+  // Fetch user role once if needed for guarded dashboard/admin routes
+  let role: string | undefined;
+  if (isAdminRoute(req) || isProviderDashboardRoute(req) || isCustomerDashboardRoute(req)) {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
-    const role = (user.publicMetadata as Record<string, unknown>)?.role;
+    role = (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+  }
 
+  if (isAdminRoute(req)) {
     if (role !== "admin") {
       return NextResponse.json({ error: "Admin access required" }, { status: 403 });
     }
@@ -59,6 +71,22 @@ export default clerkMiddleware(async (auth, req) => {
         return rateLimitResponse(rate.retryAfter);
       }
     }
+  }
+
+  // Provider dashboard guard
+  if (isProviderDashboardRoute(req)) {
+    if (role !== "provider" && role !== "admin") {
+      return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
+    return;
+  }
+
+  // Customer dashboard guard (exclude provider paths handled above)
+  if (isCustomerDashboardRoute(req) && !isProviderDashboardRoute(req)) {
+    if (role === "provider") {
+      return NextResponse.redirect(new URL("/dashboard/provider", req.url));
+    }
+    return;
   }
 });
 

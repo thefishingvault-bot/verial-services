@@ -5,15 +5,18 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { useToast } from '@/components/ui/use-toast';
+import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from '@/lib/data/nz-suburbs';
 
 interface ProviderSettings {
   chargesGst: boolean;
   baseSuburb: string | null;
   baseRegion: string | null;
   serviceRadiusKm: number | null;
+  coverageRegion?: string | null;
+  coverageSuburbs?: string[];
 }
 
 export default function ProviderSettingsPage() {
@@ -24,6 +27,8 @@ export default function ProviderSettingsPage() {
   const [chargesGst, setChargesGst] = useState(true); // Default to true
   const [baseSuburb, setBaseSuburb] = useState('');
   const [baseRegion, setBaseRegion] = useState('');
+  const [coverageRegion, setCoverageRegion] = useState('');
+  const [coverageSuburbs, setCoverageSuburbs] = useState<string[]>([]);
   const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,6 +46,8 @@ export default function ProviderSettingsPage() {
           setChargesGst(data.chargesGst);
           setBaseSuburb(data.baseSuburb ?? '');
           setBaseRegion(data.baseRegion ?? '');
+          setCoverageRegion(data.coverageRegion ?? data.baseRegion ?? '');
+          setCoverageSuburbs(data.coverageSuburbs ?? []);
           setServiceRadiusKm(data.serviceRadiusKm ?? 10);
           setIsLoading(false);
         })
@@ -53,6 +60,12 @@ export default function ProviderSettingsPage() {
     }
   }, [isProvider]);
 
+  useEffect(() => {
+    if (!baseSuburb && coverageSuburbs.length > 0) {
+      setBaseSuburb(coverageSuburbs[0]);
+    }
+  }, [coverageSuburbs, baseSuburb]);
+
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
@@ -60,7 +73,8 @@ export default function ProviderSettingsPage() {
       const payload = {
         chargesGst,
         baseSuburb: baseSuburb.trim() || null,
-        baseRegion: baseRegion.trim() || null,
+        baseRegion: (coverageRegion || baseRegion).trim() || null,
+        coverageSuburbs,
         serviceRadiusKm,
       };
 
@@ -154,34 +168,60 @@ export default function ProviderSettingsPage() {
 
             <div className="space-y-2">
               <div className="space-y-1">
-                <Label htmlFor="base-suburb">Base suburb</Label>
-                <input
-                  id="base-suburb"
-                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  placeholder="e.g. Manukau, New Lynn"
-                  value={baseSuburb}
-                  onChange={(e) => setBaseSuburb(e.target.value)}
-                />
-              </div>
-
-              <div className="space-y-1">
                 <Label htmlFor="base-region">Region</Label>
                 <select
                   id="base-region"
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  value={baseRegion}
-                  onChange={(e) => setBaseRegion(e.target.value)}
+                  value={coverageRegion}
+                  onChange={(e) => {
+                    setCoverageRegion(e.target.value);
+                    setCoverageSuburbs([]);
+                  }}
                 >
                   <option value="">Select a region</option>
-                  <option value="Auckland">Auckland</option>
-                  <option value="Waikato">Waikato</option>
-                  <option value="Bay of Plenty">Bay of Plenty</option>
-                  <option value="Wellington">Wellington</option>
-                  <option value="Canterbury">Canterbury</option>
-                  <option value="Otago">Otago</option>
-                  <option value="Other / NZ-wide">Other / NZ-wide</option>
+                  {NZ_REGIONS.map((region) => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
                 </select>
               </div>
+
+              {coverageRegion && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm">Suburbs</Label>
+                    <button
+                      type="button"
+                      className="text-xs text-blue-600 hover:underline"
+                      onClick={() => setCoverageSuburbs(NZ_REGIONS_TO_SUBURBS[coverageRegion] ?? [])}
+                    >
+                      Select all
+                    </button>
+                  </div>
+                  <div className="max-h-64 overflow-y-auto rounded-md border px-3 py-2 space-y-1">
+                    {(NZ_REGIONS_TO_SUBURBS[coverageRegion] || []).map((suburb) => {
+                      const checked = coverageSuburbs.includes(suburb);
+                      return (
+                        <button
+                          key={suburb}
+                          type="button"
+                          onClick={() => {
+                            setCoverageSuburbs((prev) => checked ? prev.filter((s) => s !== suburb) : [...prev, suburb]);
+                            setBaseSuburb((prev) => prev || suburb);
+                            setBaseRegion(coverageRegion);
+                          }}
+                          className="w-full flex items-center space-x-2 rounded px-2 py-1 text-left hover:bg-muted"
+                        >
+                          {checked ? <CheckSquare className="h-4 w-4" /> : <Square className="h-4 w-4" />}
+                          <span className="text-sm">{suburb}</span>
+                        </button>
+                      );
+                    })}
+                    {(NZ_REGIONS_TO_SUBURBS[coverageRegion] || []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">Suburb list coming soon for {coverageRegion}.</p>
+                    )}
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1">
                 <Label htmlFor="service-radius">Service radius (km)</Label>

@@ -12,6 +12,7 @@ import {
   index,
   uniqueIndex,
   jsonb,
+  primaryKey,
 } from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
@@ -90,6 +91,16 @@ export const providers = pgTable("providers", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+// Provider suburbs / coverage areas (explicit whitelist)
+export const providerSuburbs = pgTable("provider_suburbs", {
+  providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  region: varchar("region", { length: 100 }).notNull(),
+  suburb: varchar("suburb", { length: 100 }).notNull(),
+}, (table) => ({
+  pk: primaryKey({ columns: [table.providerId, table.suburb] }),
+  regionIdx: index("provider_suburbs_region_idx").on(table.region),
+}));
 
 // Booking Cancellations
 export const bookingCancellations = pgTable("booking_cancellations", {
