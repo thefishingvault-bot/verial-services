@@ -27,7 +27,8 @@ const mockFavorites: FavoriteService[] = [
       trustLevel: "gold",
       trustScore: 80,
       isVerified: true,
-      baseRegion: "Auckland",
+      region: "Auckland",
+      suburb: null,
     },
     isFavorited: true,
     score: 5,
@@ -47,7 +48,7 @@ describe("/dashboard/favorites loader", () => {
   });
 
   it("renders favorites grid", async () => {
-    const page = (await import("@/app/dashboard/favorites/page")).default;
+    const page = (await import("@/app/dashboard/(customer)/favorites/page")).default;
     const ui = await page({ searchParams: {} });
     render(ui as any);
 
