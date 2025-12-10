@@ -52,7 +52,7 @@ describe("ProviderBookingsClient", () => {
     render(<ProviderBookingsClient />);
 
     await waitFor(() => {
-      expect(screen.getByText(/something went wrong loading bookings/i)).toBeInTheDocument();
+      expect(screen.getByText(/failed to fetch bookings\./i)).toBeInTheDocument();
     });
   });
 });

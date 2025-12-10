@@ -5,7 +5,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
-import { useAuth, UserButton, useClerk } from '@clerk/nextjs'; // Import auth hooks
+import { useAuth, useUser, UserButton, useClerk } from '@clerk/nextjs';
 import { NotificationBell } from '@/components/nav/notification-bell';
 
 // --- Guest Links (Signed Out) ---
@@ -14,18 +14,21 @@ const guestLinks = [
   { href: '/sign-in', label: 'Sign In' },
 ];
 
-// --- Auth Links (Signed In) ---
-const authLinks = [
-  { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/favorites', label: 'Favorites' },
-];
-
 export function SiteHeader() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const { isSignedIn } = useAuth(); // Check if user is signed in
+   const { user } = useUser();
   const { signOut } = useClerk(); // Get signOut function
 
-  const links = isSignedIn ? authLinks : guestLinks;
+  const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+  const dashboardHref = role === 'provider' ? '/dashboard/provider' : '/dashboard';
+
+  const links = isSignedIn
+    ? [
+        { href: dashboardHref, label: 'Dashboard' },
+        { href: '/dashboard/favorites', label: 'Favorites' },
+      ]
+    : guestLinks;
 
   return (
     <header className="sticky top-0 z-50 w-full bg-white border-b">
@@ -102,7 +105,7 @@ export function SiteHeader() {
                   </Link>
                   {isSignedIn && (
                     <Link
-                      href="/dashboard"
+                      href={dashboardHref}
                       className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
                       onClick={() => setIsSheetOpen(false)}
                     >

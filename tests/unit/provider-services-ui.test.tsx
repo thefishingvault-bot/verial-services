@@ -25,6 +25,6 @@ describe("ProviderServicesList", () => {
     );
 
     expect(screen.getByText(/Test Service/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Create New/i })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Create New/i })).toBeInTheDocument();
   });
 });

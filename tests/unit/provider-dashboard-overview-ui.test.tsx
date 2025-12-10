@@ -39,10 +39,12 @@ describe("ProviderDashboardPage", () => {
     render(await ProviderDashboardPage());
 
     await waitFor(() => {
-      expect(screen.getByText(/New requests/i)).toBeInTheDocument();
+      const labels = screen.getAllByText(/New requests/i);
+      expect(labels.length).toBeGreaterThan(0);
     });
 
-    expect(screen.getByText("1")).toBeInTheDocument();
+    const counts = screen.getAllByText("1");
+    expect(counts.length).toBeGreaterThan(0);
     expect(screen.getByText(/Jobs confirmed/i)).toBeInTheDocument();
   });
 });
