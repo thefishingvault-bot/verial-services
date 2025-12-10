@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getProviderStats } from "@/lib/provider-stats";
 
 export const runtime = "nodejs";
 
-export async function GET(_req: Request, { params }: { params: { providerId: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ providerId: string }> }) {
   try {
-    const { providerId } = params;
+    const { providerId } = await context.params;
     if (!providerId) {
       return new NextResponse("providerId is required", { status: 400 });
     }

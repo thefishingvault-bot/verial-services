@@ -4,9 +4,25 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 import { useToast } from "@/components/ui/use-toast";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
@@ -49,6 +65,9 @@ export default function ProviderBookingDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<keyof typeof ACTIONS | null>(null);
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState<"decline" | "cancel" | null>(null);
+  const [reason, setReason] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -72,22 +91,13 @@ export default function ProviderBookingDetailPage() {
     return () => controller.abort();
   }, [bookingId]);
 
-  const handleAction = async (action: keyof typeof ACTIONS) => {
+  const handleAction = async (action: keyof typeof ACTIONS, actionReason?: string) => {
     setActionLoading(action);
     try {
-      let reason: string | undefined;
-      if (action === "decline" || action === "cancel") {
-        reason = window.prompt("Please provide a reason (shown to customer):") || undefined;
-        if (!reason) {
-          setActionLoading(null);
-          return;
-        }
-      }
-
       const res = await fetch("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, action, reason }),
+        body: JSON.stringify({ bookingId, action, reason: actionReason }),
       });
 
       if (!res.ok) {
@@ -106,6 +116,12 @@ export default function ProviderBookingDetailPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const startReasonAction = (action: "decline" | "cancel") => {
+    setPendingAction(action);
+    setReason("");
+    setReasonDialogOpen(true);
   };
 
   if (isLoading) {
@@ -159,7 +175,7 @@ export default function ProviderBookingDetailPage() {
             <>
               <Button
                 variant="outline"
-                onClick={() => handleAction("decline")}
+                onClick={() => startReasonAction("decline")}
                 disabled={actionLoading === "decline"}
               >
                 Decline
@@ -177,7 +193,7 @@ export default function ProviderBookingDetailPage() {
             <>
               <Button
                 variant="outline"
-                onClick={() => handleAction("cancel")}
+                onClick={() => startReasonAction("cancel")}
                 disabled={actionLoading === "cancel"}
               >
                 Cancel
@@ -202,6 +218,71 @@ export default function ProviderBookingDetailPage() {
           )}
         </CardFooter>
       </Card>
+
+      <Dialog
+        open={reasonDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !actionLoading) {
+            setReasonDialogOpen(false);
+            setPendingAction(null);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingAction === "decline" ? "Decline booking" : "Cancel booking"}
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a short explanation that will be shown to the customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="booking-reason">
+              Reason
+            </label>
+            <Textarea
+              id="booking-reason"
+              rows={4}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Eg. Im unavailable at that time, or this job is outside my usual scope."
+            />
+          </div>
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!actionLoading) {
+                  setReasonDialogOpen(false);
+                  setPendingAction(null);
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={
+                !pendingAction || !reason.trim() || actionLoading === pendingAction
+              }
+              onClick={async () => {
+                if (!pendingAction || !reason.trim()) return;
+                await handleAction(pendingAction, reason.trim());
+                setReasonDialogOpen(false);
+                setPendingAction(null);
+                setReason("");
+              }}
+            >
+              {actionLoading === pendingAction ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                "Confirm"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
+

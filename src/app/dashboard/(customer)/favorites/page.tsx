@@ -7,14 +7,15 @@ import { FavoritesGrid } from "@/components/favorites/favorites-grid";
 import { getUserFavoriteServices, type FavoriteSort } from "@/lib/favorites";
 
 type PageProps = {
-  searchParams?: { sort?: string };
+  searchParams: Promise<{ sort?: string }>;
 };
 
 export default async function FavoritesPage({ searchParams }: PageProps) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in?redirect_url=/dashboard/favorites");
 
-  const sortParam = searchParams?.sort?.toLowerCase();
+  const { sort: sortRaw } = await searchParams;
+  const sortParam = sortRaw?.toLowerCase();
   const sort: FavoriteSort = sortParam === "top" ? "top" : "recent";
 
   const favorites = await getUserFavoriteServices(userId, sort);

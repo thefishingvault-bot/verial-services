@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { providerSuburbs } from '@/db/schema';
+import { providerSuburbs, providers } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
@@ -22,6 +22,7 @@ export async function GET() {
         baseSuburb: true,
         baseRegion: true,
         serviceRadiusKm: true,
+        gstNumber: true,
       },
     });
 
@@ -41,6 +42,7 @@ export async function GET() {
       serviceRadiusKm: provider.serviceRadiusKm,
       coverageRegion: provider.baseRegion,
       coverageSuburbs: coverage.map((row) => row.suburb),
+      gstNumber: provider.gstNumber,
     });
 
   } catch (error) {

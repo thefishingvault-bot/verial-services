@@ -1,11 +1,11 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { getSimilarServices } from "@/lib/similar-services";
 
 export const runtime = "nodejs";
 
-export async function GET(_req: Request, { params }: { params: { serviceId: string } }) {
+export async function GET(_req: NextRequest, context: { params: Promise<{ serviceId: string }> }) {
   try {
-    const { serviceId } = params;
+    const { serviceId } = await context.params;
     if (!serviceId) {
       return new NextResponse("serviceId is required", { status: 400 });
     }

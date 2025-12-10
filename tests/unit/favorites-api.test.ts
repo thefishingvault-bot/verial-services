@@ -1,4 +1,5 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
+import { NextRequest } from "next/server";
 
 // Lightweight mocks for auth and drizzle helpers
 const authMock = vi.fn();
@@ -272,7 +273,8 @@ describe("/api/favorites/list", () => {
     ];
     setContext({ currentUser: "user_1" });
 
-    const res = await GET();
+    const req = new NextRequest("http://localhost/api/favorites/list");
+    const res = await GET(req);
     const json = await res.json();
 
     expect(res.status).toBe(200);
@@ -298,7 +300,8 @@ describe("/api/favorites/list", () => {
     ];
     setContext({ currentUser: "user_1" });
 
-    const res = await GET();
+    const req = new NextRequest("http://localhost/api/favorites/list");
+    const res = await GET(req);
     const json = await res.json();
     expect(json.items.map((i: any) => i.id)).toEqual(["svc_1"]);
   });
@@ -306,7 +309,8 @@ describe("/api/favorites/list", () => {
   it("requires auth", async () => {
     const { GET } = await importList();
     authMock.mockResolvedValue({ userId: null });
-    const res = await GET();
+    const req = new NextRequest("http://localhost/api/favorites/list");
+    const res = await GET(req);
     expect(res.status).toBe(401);
   });
 });

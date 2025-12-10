@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { services } from "@/db/schema";
 import { NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ export async function GET(
     }
 
     const service = await db.query.services.findFirst({
-      where: eq(services.slug, slug),
+      where: and(eq(services.slug, slug), eq(services.isPublished, true)),
       with: {
         provider: {
           columns: {

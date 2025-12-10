@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { users } from '@/db/schema';
+import { users, providers } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
@@ -18,9 +18,15 @@ export async function GET() {
       where: eq(users.id, userId),
       with: {
         provider: {
-          columns: { bio: true, businessName: true, handle: true }, // Also fetch provider fields
+          columns: {
+            bio: true,
+            businessName: true,
+            handle: true,
+            trustLevel: true,
+            trustScore: true,
+          }, // Also fetch provider fields
         },
-      }
+      },
     });
 
     // --- 2. If not found, create (sync) them ---
@@ -44,7 +50,17 @@ export async function GET() {
       // Try fetching again
       userProfile = await db.query.users.findFirst({
         where: eq(users.id, userId),
-        with: { provider: { columns: { bio: true, businessName: true, handle: true } } },
+        with: {
+          provider: {
+            columns: {
+              bio: true,
+              businessName: true,
+              handle: true,
+              trustLevel: true,
+              trustScore: true,
+            },
+          },
+        },
       });
     }
 

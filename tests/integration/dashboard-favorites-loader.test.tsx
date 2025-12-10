@@ -49,7 +49,7 @@ describe("/dashboard/favorites loader", () => {
 
   it("renders favorites grid", async () => {
     const page = (await import("@/app/dashboard/(customer)/favorites/page")).default;
-    const ui = await page({ searchParams: {} });
+    const ui = await page({ searchParams: Promise.resolve({}) });
     render(ui as any);
 
     expect(screen.getByText(/Saved services/)).toBeInTheDocument();

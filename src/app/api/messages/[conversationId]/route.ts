@@ -1,5 +1,5 @@
 import { auth } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { bookings } from "@/db/schema";
@@ -9,13 +9,14 @@ import { MessageListSchema, MessageSendSchema } from "@/lib/validation/messages"
 
 export const runtime = "nodejs";
 
-export async function GET(req: Request, context: { params: { conversationId: string } }) {
+export async function GET(req: NextRequest, context: { params: Promise<{ conversationId: string }> }) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
+    const { conversationId } = await context.params;
     const parsed = MessageListSchema.safeParse({
-      threadId: context.params.conversationId,
+      threadId: conversationId,
       ...Object.fromEntries(new URL(req.url).searchParams.entries()),
     });
     if (!parsed.success) return NextResponse.json({ errors: parsed.error.flatten() }, { status: 400 });
@@ -56,13 +57,14 @@ export async function GET(req: Request, context: { params: { conversationId: str
   }
 }
 
-export async function POST(req: Request, context: { params: { conversationId: string } }) {
+export async function POST(req: NextRequest, context: { params: Promise<{ conversationId: string }> }) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
+    const { conversationId } = await context.params;
     const body = await req.json();
-    const parsed = MessageSendSchema.safeParse({ ...body, threadId: context.params.conversationId });
+    const parsed = MessageSendSchema.safeParse({ ...body, threadId: conversationId });
     if (!parsed.success) return NextResponse.json({ errors: parsed.error.flatten() }, { status: 400 });
 
     const message = await sendBookingMessage({

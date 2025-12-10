@@ -62,8 +62,9 @@ export async function PATCH(
       chargesGst?: boolean;
       region?: string;
       suburb?: string;
+      isPublished?: boolean;
     };
-    const { title, description, priceInCents, category, chargesGst, region, suburb } = body;
+    const { title, description, priceInCents, category, chargesGst, region, suburb, isPublished } = body;
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
@@ -113,6 +114,7 @@ export async function PATCH(
         ...(chargesGst !== undefined && { chargesGst }),
         ...(region !== undefined && { region }),
         ...(suburb !== undefined && { suburb }),
+        ...(isPublished !== undefined && { isPublished }),
         updatedAt: new Date(),
       })
       .where(

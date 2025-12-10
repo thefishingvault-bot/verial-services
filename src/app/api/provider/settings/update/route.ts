@@ -14,12 +14,13 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const { chargesGst, baseSuburb, baseRegion, serviceRadiusKm, coverageSuburbs } = body as {
+    const { chargesGst, baseSuburb, baseRegion, serviceRadiusKm, coverageSuburbs, gstNumber } = body as {
       chargesGst: boolean;
       baseSuburb?: string | null;
       baseRegion?: string | null;
       serviceRadiusKm?: number | null;
       coverageSuburbs?: string[];
+      gstNumber?: string | null;
     };
 
     if (typeof chargesGst !== 'boolean') {
@@ -32,6 +33,10 @@ export async function PATCH(req: Request) {
 
     if (baseRegion != null && typeof baseRegion !== 'string') {
       return new NextResponse('Invalid input: baseRegion must be a string', { status: 400 });
+    }
+
+    if (gstNumber != null && typeof gstNumber !== 'string') {
+      return new NextResponse('Invalid input: gstNumber must be a string', { status: 400 });
     }
 
     let radiusToSave: number | undefined;
@@ -91,6 +96,10 @@ export async function PATCH(req: Request) {
 
     if (radiusToSave !== undefined) {
       updateData.serviceRadiusKm = radiusToSave;
+    }
+
+    if (gstNumber !== undefined) {
+      updateData.gstNumber = gstNumber === null || gstNumber.trim() === '' ? null : gstNumber.trim();
     }
 
     if (normalizedCoverageSuburbs && normalizedCoverageSuburbs.length > 0 && normalizedCoverageRegion) {

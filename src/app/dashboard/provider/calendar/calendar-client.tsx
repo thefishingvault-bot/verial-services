@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { addMonths, endOfDay, format, isWithinInterval, startOfDay } from "date-fns";
+import { addMonths, differenceInMinutes, endOfDay, format, isWithinInterval, startOfDay } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, PlusCircle, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
 import { buildCalendarGrid, type CalendarEvent } from "@/lib/provider-calendar";
 
 type BookingEvent = Extract<CalendarEvent, { type: "booking" }>;
@@ -81,6 +81,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [isRangeLoading, setIsRangeLoading] = useState(false);
 
   const monthLabel = format(cursor, "MMMM yyyy");
 
@@ -90,13 +91,18 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const dayEvents = useMemo(() => allEvents.filter((e) => isOnDay(e, selectedDate)), [allEvents, selectedDate]);
 
   const fetchRange = useCallback(async () => {
-    const start = startOfDay(new Date(cursor.getFullYear(), cursor.getMonth(), 1)).toISOString();
-    const end = endOfDay(addMonths(cursor, 1)).toISOString();
-    const res = await fetch(`/api/provider/calendar?start=${start}&end=${end}`);
-    if (!res.ok) return;
-    const data = (await res.json()) as CalendarApiResponse;
-    setEvents((data.bookings ?? []).map(normalizeEvent));
-    setTimeOffs((data.timeOffs ?? []).map(normalizeEvent));
+    try {
+      setIsRangeLoading(true);
+      const start = startOfDay(new Date(cursor.getFullYear(), cursor.getMonth(), 1)).toISOString();
+      const end = endOfDay(addMonths(cursor, 1)).toISOString();
+      const res = await fetch(`/api/provider/calendar?start=${start}&end=${end}`);
+      if (!res.ok) return;
+      const data = (await res.json()) as CalendarApiResponse;
+      setEvents((data.bookings ?? []).map(normalizeEvent));
+      setTimeOffs((data.timeOffs ?? []).map(normalizeEvent));
+    } finally {
+      setIsRangeLoading(false);
+    }
   }, [cursor]);
 
   useEffect(() => {
@@ -114,6 +120,11 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
     const startIso = new Date(`${format(from, "yyyy-MM-dd")}T${startTime}:00`).toISOString();
     const endIso = new Date(`${format(to, "yyyy-MM-dd")}T${endTime}:00`).toISOString();
+
+    if (new Date(startIso) >= new Date(endIso)) {
+      setError("End time must be after start time.");
+      return;
+    }
 
     const optimisticId = `temp-${Date.now()}`;
     const optimistic: CalendarEvent = {
@@ -194,6 +205,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
           </Button>
           <div className="font-semibold flex items-center gap-2">
             <CalendarDays className="h-4 w-4" /> {monthLabel}
+            {isRangeLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
           <Button variant="outline" size="icon" onClick={() => setCursor(addMonths(cursor, 1))}>
             <ChevronRight className="h-4 w-4" />
@@ -233,6 +245,22 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                   <label className="text-xs text-muted-foreground">Reason (optional)</label>
                   <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Vacation, holiday, etc." />
                 </div>
+                {dateRange?.from && (
+                  <p className="text-xs text-muted-foreground">
+                    {(() => {
+                      const from = dateRange.from!;
+                      const to = dateRange.to ?? dateRange.from!;
+                      const start = new Date(`${format(from, "yyyy-MM-dd")}T${startTime}:00`);
+                      const end = new Date(`${format(to, "yyyy-MM-dd")}T${endTime}:00`);
+                      if (end <= start) return null;
+                      const minutes = differenceInMinutes(end, start);
+                      const hours = minutes / 60;
+                      if (!Number.isFinite(hours) || hours <= 0) return null;
+                      if (Number.isInteger(hours)) return `Duration: ${hours} hour${hours === 1 ? "" : "s"}`;
+                      return `Duration: ${hours.toFixed(1)} hours`;
+                    })()}
+                  </p>
+                )}
                 {error && <p className="text-sm text-destructive">{error}</p>}
               </div>
               <DialogFooter>
@@ -262,6 +290,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
               const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
               const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
               const isSelected = isSameDay(day.date, selectedDate);
+              const maxBadges = 2;
               return (
                 <button
                   key={day.date.toISOString()}
@@ -280,21 +309,55 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                     )}
                   </div>
                   <div className="mt-1 space-y-1">
-                    {dayEventsForDate.slice(0, 3).map((event) => (
+                    {dayEventsForDate.slice(0, maxBadges).map((event) => (
                       <div
                         key={event.id}
                         title={event.type === "time_off" ? "Time Off (Provider Unavailable)" : event.status}
-                        className={`text-[11px] rounded px-1 py-0.5 ${statusColors[event.status] ?? "bg-slate-200"}`}
+                        className={`flex items-center gap-1 text-[11px] rounded px-1 py-0.5 ${statusColors[event.status] ?? "bg-slate-200"}`}
                       >
-                        {event.type === "time_off" ? "Time off" : event.status}
+                        <span
+                          className={`h-1.5 w-1.5 rounded-full ${
+                            event.type === "time_off"
+                              ? "bg-red-500"
+                              : event.status === "pending"
+                              ? "bg-yellow-500"
+                              : event.status === "accepted"
+                              ? "bg-blue-500"
+                              : event.status === "paid"
+                              ? "bg-green-500"
+                              : "bg-gray-400"
+                          }`}
+                        />
+                        <span>{event.type === "time_off" ? "Time off" : event.status}</span>
                       </div>
                     ))}
+                    {dayEventsForDate.length > maxBadges && (
+                      <div className="text-[10px] text-muted-foreground">+{dayEventsForDate.length - maxBadges} more</div>
+                    )}
                   </div>
                 </button>
               );
             })}
           </div>
         ))}
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-yellow-500" /> Pending
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-blue-500" /> Confirmed
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-green-500" /> Paid
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-2 rounded-full bg-gray-400" /> Completed
+        </span>
+        <span className="flex items-center gap-1">
+          <span className="h-2 w-3 rounded-sm bg-red-200" /> Time off
+        </span>
       </div>
 
       <Card>
@@ -313,6 +376,24 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                 <div className="text-sm font-medium flex items-center gap-2">
                   {event.type === "time_off" ? "Time off" : "Booking"}
                   {event.type === "booking" && <Clock className="h-3 w-3 text-muted-foreground" />}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  {(() => {
+                    const startLabel = event.start ? format(event.start, "HH:mm") : null;
+                    const endLabel = event.end ? format(event.end, "HH:mm") : null;
+                    if (event.type === "time_off") {
+                      if (startLabel && endLabel) {
+                        return `${startLabel}–${endLabel}${event.title ? ` • ${event.title}` : ""}`;
+                      }
+                      if (startLabel) return `${startLabel}${event.title ? ` • ${event.title}` : ""}`;
+                      return event.title || null;
+                    }
+                    if (startLabel && endLabel && startLabel !== endLabel) {
+                      return `${startLabel}–${endLabel}`;
+                    }
+                    if (startLabel) return startLabel;
+                    return null;
+                  })()}
                 </div>
               </div>
               {event.type === "time_off" && (

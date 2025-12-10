@@ -1,10 +1,90 @@
 import Link from "next/link";
+import { auth } from "@clerk/nextjs/server";
 import { requireProvider } from "@/lib/auth-guards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { formatPrice } from "@/lib/utils";
+
+type ProviderOverviewMetrics = {
+  newRequestsCount: number;
+  confirmedThisMonthCount: number;
+  pendingPayoutsNet: number;
+  completedPayoutsNet: number;
+};
+
+async function loadOverview(): Promise<ProviderOverviewMetrics> {
+  const [bookingsRes, earningsRes] = await Promise.all([
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/provider/bookings/list`, {
+      cache: "no-store",
+    }).catch(() => null),
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/provider/earnings/summary`, {
+      cache: "no-store",
+    }).catch(() => null),
+  ]);
+
+  let newRequestsCount = 0;
+  let confirmedThisMonthCount = 0;
+  let pendingPayoutsNet = 0;
+  let completedPayoutsNet = 0;
+
+  if (bookingsRes?.ok) {
+    const all = (await bookingsRes.json()) as Array<{
+      status: string;
+      createdAt: string;
+    }>;
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    newRequestsCount = all.filter((b) => b.status === "pending").length;
+    confirmedThisMonthCount = all.filter((b) => {
+      const created = new Date(b.createdAt);
+      return (
+        ["accepted", "paid", "completed"].includes(b.status) && created >= monthStart
+      );
+    }).length;
+  }
+
+  if (earningsRes?.ok) {
+    const summary = (await earningsRes.json()) as {
+      pendingPayoutsNet?: number;
+      completedPayoutsNet?: number;
+    };
+    pendingPayoutsNet = summary.pendingPayoutsNet ?? 0;
+    completedPayoutsNet = summary.completedPayoutsNet ?? 0;
+  }
+
+  return { newRequestsCount, confirmedThisMonthCount, pendingPayoutsNet, completedPayoutsNet };
+}
 
 export default async function ProviderDashboardPage() {
   await requireProvider();
+  // auth() called to ensure correct user context for API routes when using absolute URLs
+  await auth();
+
+  const metrics = await loadOverview();
+
+  const cards: Array<{ label: string; value: string; hint: string }> = [
+    {
+      label: "New requests",
+      value: String(metrics.newRequestsCount),
+      hint: metrics.newRequestsCount === 0 ? "No pending requests" : "Awaiting your response",
+    },
+    {
+      label: "Jobs confirmed",
+      value: String(metrics.confirmedThisMonthCount),
+      hint: "Confirmed this month",
+    },
+    {
+      label: "Payouts pending",
+      value: formatPrice(metrics.pendingPayoutsNet),
+      hint: "Awaiting transfer",
+    },
+    {
+      label: "Payouts completed",
+      value: formatPrice(metrics.completedPayoutsNet),
+      hint: "Total paid out",
+    },
+  ];
 
   return (
     <div className="space-y-6">
@@ -16,12 +96,7 @@ export default async function ProviderDashboardPage() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        {[
-          { label: "New requests", value: "3", hint: "Awaiting response" },
-          { label: "Jobs confirmed", value: "12", hint: "This month" },
-          { label: "Payout in progress", value: "$1,240", hint: "Expected Fri" },
-          { label: "Avg. rating", value: "4.8", hint: "Based on recent reviews" },
-        ].map((item) => (
+        {cards.map((item) => (
           <Card key={item.label}>
             <CardHeader className="space-y-1 pb-2">
               <p className="text-xs text-muted-foreground">{item.label}</p>
@@ -44,12 +119,18 @@ export default async function ProviderDashboardPage() {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-              No new booking requests yet. Keep your availability up to date to get matched faster.
+              {metrics.newRequestsCount === 0
+                ? "No new booking requests yet. Keep your availability up to date to get matched faster."
+                : `You have ${metrics.newRequestsCount} new booking request${
+                    metrics.newRequestsCount === 1 ? "" : "s"
+                  } awaiting your response.`}
             </div>
             <div className="flex items-center justify-between rounded-md bg-background px-3 py-2">
               <div>
                 <p className="text-sm font-medium">Today</p>
-                <p className="text-xs text-muted-foreground">You are available from 8:00am - 5:00pm</p>
+                <p className="text-xs text-muted-foreground">
+                  Keep your calendar up to date so customers can book you when you're available.
+                </p>
               </div>
               <Button asChild size="sm" variant="outline">
                 <Link href="/dashboard/provider/calendar">Edit availability</Link>
@@ -68,23 +149,22 @@ export default async function ProviderDashboardPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div>
-                <p className="text-sm font-semibold">$3,420</p>
-                <p className="text-xs text-muted-foreground">Month-to-date earnings</p>
+                <p className="text-sm font-semibold">{formatPrice(metrics.completedPayoutsNet)}</p>
+                <p className="text-xs text-muted-foreground">Total paid out</p>
               </div>
-              <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">+8% vs last month</span>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">Pending</p>
-                <p className="text-lg font-semibold">$480</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.pendingPayoutsNet)}</p>
               </div>
               <div className="rounded-md border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">Completed</p>
-                <p className="text-lg font-semibold">$2,940</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.completedPayoutsNet)}</p>
               </div>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              Payouts are sent weekly to your connected account. Confirm completed jobs to speed up transfers.
+              Payouts are sent to your connected account when bookings are completed and funds clear.
             </div>
           </CardContent>
         </Card>
@@ -101,15 +181,15 @@ export default async function ProviderDashboardPage() {
           <CardContent className="space-y-3 text-sm text-muted-foreground">
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-foreground">
               <span>Response time</span>
-              <span className="font-medium">Under 1 hour</span>
+              <span className="font-medium">Keep responses fast for better ranking</span>
             </div>
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-foreground">
               <span>Cancellation rate</span>
-              <span className="font-medium">0% this month</span>
+              <span className="font-medium">Aim to minimise last-minute cancellations</span>
             </div>
             <p>
-              Keep response times low to rank higher in search results. Review requests quickly and update your hours
-              to avoid cancellations.
+              Review new requests quickly and keep your hours and time off up to date to avoid
+              clashes.
             </p>
           </CardContent>
         </Card>
@@ -134,3 +214,4 @@ export default async function ProviderDashboardPage() {
     </div>
   );
 }
+

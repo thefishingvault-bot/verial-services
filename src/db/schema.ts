@@ -181,6 +181,8 @@ export const services = pgTable("services", {
   category: serviceCategoryEnum("category").default("other").notNull(),
   coverImageUrl: text("cover_image_url"),
   chargesGst: boolean("charges_gst").default(true).notNull(),
+  // Controls whether the service is visible in public search and by-slug pages
+  isPublished: boolean("is_published").default(true).notNull(),
   region: varchar("region", { length: 255 }),
   suburb: varchar("suburb", { length: 255 }),
 

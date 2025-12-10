@@ -4,6 +4,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/ca
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { loadProviderCalendar } from "@/lib/provider-calendar";
+import { ProviderAvailabilityForm } from "@/components/provider/provider-availability-form";
 import { ProviderCalendarClient } from "./calendar-client";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,7 @@ export default async function ProviderCalendarPage() {
           <p className="text-muted-foreground">Track bookings and block time off.</p>
         </div>
       </div>
+      <ProviderAvailabilityForm />
       <ProviderCalendarClient initialEvents={data.bookings} initialTimeOffs={data.timeOffs} />
     </div>
   );

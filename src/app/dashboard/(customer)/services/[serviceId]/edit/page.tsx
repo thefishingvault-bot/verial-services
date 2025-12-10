@@ -34,6 +34,7 @@ import { Loader2, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 import Link from 'next/link';
 import { NZ_REGIONS } from '@/lib/data/nz-locations';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 
 const categories = [
   'cleaning',
@@ -53,6 +54,7 @@ const formSchema = z.object({
   chargesGst: z.boolean(),
   region: z.string().min(1, 'Region is required'),
   suburb: z.string().min(1, 'Suburb is required'),
+  isPublished: z.boolean(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -66,6 +68,7 @@ export default function EditServicePage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [coverImageUrl, setCoverImageUrl] = useState<string | null>(null);
+  const [isCoverDialogOpen, setIsCoverDialogOpen] = useState(false);
 
   const form = useForm<FormValues>({
     // @ts-ignore Zod v4 resolver typing mismatch
@@ -78,6 +81,7 @@ export default function EditServicePage() {
       chargesGst: true,
       region: '',
       suburb: '',
+      isPublished: true,
     },
   });
 
@@ -100,6 +104,7 @@ export default function EditServicePage() {
           chargesGst: data.chargesGst,
           region: data.region || '',
           suburb: data.suburb || '',
+          isPublished: data.isPublished ?? true,
         });
         setCoverImageUrl(data.coverImageUrl ?? null);
         setIsLoading(false);
@@ -126,6 +131,7 @@ export default function EditServicePage() {
           chargesGst: values.chargesGst,
           region: values.region,
           suburb: values.suburb,
+          isPublished: values.isPublished,
         }),
       });
 
@@ -168,8 +174,17 @@ export default function EditServicePage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Edit Service</CardTitle>
-          <CardDescription>Update your service details and pricing.</CardDescription>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <CardTitle>Edit Service</CardTitle>
+              <CardDescription>Update your service details, pricing, and visibility.</CardDescription>
+            </div>
+            <div className="flex flex-col items-end gap-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Status: {form.watch('isPublished') ? 'Published' : 'Unpublished'}
+              </span>
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-8">
           <Form {...form}>
@@ -242,6 +257,24 @@ export default function EditServicePage() {
                     <div className="space-y-0.5">
                       <FormLabel className="text-base">Includes GST</FormLabel>
                       <FormDescription>Does this price include 15% GST?</FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch checked={field.value} onCheckedChange={field.onChange} />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="isPublished"
+                render={({ field }) => (
+                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
+                    <div className="space-y-0.5">
+                      <FormLabel className="text-base">Publish service</FormLabel>
+                      <FormDescription>
+                        Toggle whether this service is visible in marketplace search and public pages.
+                      </FormDescription>
                     </div>
                     <FormControl>
                       <Switch checked={field.value} onCheckedChange={field.onChange} />
@@ -337,7 +370,20 @@ export default function EditServicePage() {
                 <Image src={coverImageUrl} alt="Cover" fill className="object-cover" />
               </div>
             )}
-            <ImageUploader serviceId={serviceId} onUploadComplete={handleUploadComplete} />
+
+            <Dialog open={isCoverDialogOpen} onOpenChange={setIsCoverDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline" size="sm">
+                  Change cover image
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Update cover image</DialogTitle>
+                </DialogHeader>
+                <ImageUploader serviceId={serviceId} onUploadComplete={handleUploadComplete} />
+              </DialogContent>
+            </Dialog>
           </div>
         </CardContent>
       </Card>

@@ -72,7 +72,7 @@ type ServiceDetailData = {
 };
 
 type ServiceParams = {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 };
 
 async function getReviewData(serviceId: string) {

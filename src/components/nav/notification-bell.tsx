@@ -170,9 +170,13 @@ export function NotificationBell() {
             ))}
         </div>
         <div className="border-t bg-gray-50/50 px-4 py-2 text-right">
-          <Button variant="link" size="sm" className="px-0 text-xs" onClick={() => (window.location.href = "/dashboard/notifications")}
+          <Button
+            variant="link"
+            size="sm"
+            className="px-0 text-xs"
+            onClick={() => (window.location.href = "/dashboard/notifications")}
           >
-            View all
+            View all notifications
           </Button>
         </div>
       </PopoverContent>
