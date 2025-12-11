@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { format } from "date-fns";
 import {
   Briefcase,
@@ -18,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FavoritesGrid } from "@/components/favorites/favorites-grid";
 import { getCustomerDashboardData, type BookingCardData, type CustomerDashboardData } from "@/lib/dashboard/customer-dashboard";
+import { requireCustomer } from "@/lib/auth-guards";
 import { cn, formatPrice, getTrustBadge } from "@/lib/utils";
 
 // Top navigation cards remain unchanged per requirements.
@@ -341,6 +343,14 @@ function Recommendations({ items }: { items: CustomerDashboardData["recommendati
 }
 
 export default async function DashboardPage() {
+  const { role } = await requireCustomer();
+  if (role === "provider") {
+    redirect("/dashboard/provider");
+  }
+  if (role === "admin") {
+    redirect("/dashboard/admin");
+  }
+
   const data = await getCustomerDashboardData();
 
   return (

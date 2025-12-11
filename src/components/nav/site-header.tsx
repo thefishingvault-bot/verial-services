@@ -21,7 +21,12 @@ export function SiteHeader() {
   const { signOut } = useClerk(); // Get signOut function
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
-  const dashboardHref = role === 'provider' ? '/dashboard/provider' : '/dashboard';
+  const dashboardHref =
+    role === 'provider'
+      ? '/dashboard/provider'
+      : role === 'admin'
+      ? '/dashboard/admin'
+      : '/dashboard';
 
   const links = isSignedIn
     ? [
