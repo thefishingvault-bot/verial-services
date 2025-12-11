@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { requireProvider } from "@/lib/auth-guards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,12 +13,9 @@ type ProviderOverviewMetrics = {
 };
 
 async function loadOverview(): Promise<ProviderOverviewMetrics> {
-  const cookieHeader = headers().get("cookie") ?? "";
-
   const fetchWithAuth = (path: string) =>
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}${path}`, {
+    fetch(path, {
       cache: "no-store",
-      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     }).catch(() => null);
 
   const [bookingsRes, earningsRes] = await Promise.all([
