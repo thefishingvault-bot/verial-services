@@ -1,10 +1,23 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
+import { db } from "@/lib/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 const getUserRole = async (userId: string) => {
   const client = await clerkClient();
   const user = await client.users.getUser(userId);
-  return (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+
+  const metadataRole = (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+  if (metadataRole) return metadataRole;
+
+  // Fallback to DB role if Clerk metadata is missing
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { role: true },
+  });
+
+  return dbUser?.role;
 };
 
 export const requireCustomer = async () => {

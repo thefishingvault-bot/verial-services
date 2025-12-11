@@ -3,6 +3,9 @@ export const runtime = "nodejs";
 import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { db } from "@/lib/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
@@ -50,6 +53,15 @@ export default clerkMiddleware(async (auth, req) => {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
     role = (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+
+    // Fallback to DB role if Clerk metadata is missing
+    if (!role) {
+      const dbUser = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { role: true },
+      });
+      role = dbUser?.role ?? role;
+    }
   }
 
   if (isAdminRoute(req)) {
