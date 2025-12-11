@@ -38,6 +38,8 @@ const isCustomerDashboardRoute = createRouteMatcher([
 ]);
 
 export default clerkMiddleware(async (auth, req) => {
+  const pathname = req.nextUrl.pathname;
+
   if (isPublicRoute(req)) {
     return NextResponse.next();
   }
@@ -64,11 +66,12 @@ export default clerkMiddleware(async (auth, req) => {
     }
   }
 
-  if (isAdminRoute(req)) {
+  // Admin dashboard guard (explicit, to avoid loops)
+  if (pathname.startsWith("/dashboard/admin")) {
     if (role !== "admin") {
-      return NextResponse.json({ error: "Admin access required" }, { status: 403 });
+      return NextResponse.redirect(new URL("/sign-in", req.url));
     }
-
+    // Allow admins through and stop further dashboard handling
     const method = req.method?.toUpperCase();
     if (method === "POST" || method === "PATCH") {
       const rate = await enforceRateLimit(req, {
@@ -82,6 +85,7 @@ export default clerkMiddleware(async (auth, req) => {
         return rateLimitResponse(rate.retryAfter);
       }
     }
+    return NextResponse.next();
   }
 
   // Provider dashboard guard
