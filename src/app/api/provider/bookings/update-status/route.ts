@@ -103,19 +103,18 @@ export async function PATCH(req: Request) {
           ),
         });
 
-        if (!providerSchedule) {
-          return new NextResponse(`Provider is not available on ${requestedDay}s.`, { status: 400 });
-        }
+        // If no schedule exists yet, allow the action to proceed (relax validation until availability editor is complete)
+        if (providerSchedule) {
+          const requestedTimeStr = requestedTime.toTimeString().substring(0, 5);
+          const startTimeStr = providerSchedule.startTime.toString().substring(0, 5);
+          const endTimeStr = providerSchedule.endTime.toString().substring(0, 5);
 
-        const requestedTimeStr = requestedTime.toTimeString().substring(0, 5);
-        const startTimeStr = providerSchedule.startTime.toString().substring(0, 5);
-        const endTimeStr = providerSchedule.endTime.toString().substring(0, 5);
-
-        if (requestedTimeStr < startTimeStr || requestedTimeStr > endTimeStr) {
-          return new NextResponse(
-            `Provider is only available between ${startTimeStr} and ${endTimeStr} on ${requestedDay}s.`,
-            { status: 400 },
-          );
+          if (requestedTimeStr < startTimeStr || requestedTimeStr > endTimeStr) {
+            return new NextResponse(
+              `Provider is only available between ${startTimeStr} and ${endTimeStr} on ${requestedDay}s.`,
+              { status: 400 },
+            );
+          }
         }
 
         const timeOff = await db.query.providerTimeOffs.findFirst({

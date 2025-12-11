@@ -3,6 +3,16 @@ import React from "react";
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
+vi.mock("@clerk/nextjs/server", () => ({
+  auth: () => ({ userId: "user_1" }),
+  currentUser: async () => ({ id: "user_1" }),
+  clerkClient: async () => ({
+    users: {
+      getUser: async () => ({ publicMetadata: { role: "user" } }),
+    },
+  }),
+}));
+
 const emptyData = {
   user: { id: "user_1", name: "Tester" },
   upcomingBookings: [],

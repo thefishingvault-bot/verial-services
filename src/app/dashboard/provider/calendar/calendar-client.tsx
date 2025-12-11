@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarDays, ChevronLeft, ChevronRight, Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
-import { buildCalendarGrid, type CalendarEvent } from "@/lib/provider-calendar";
+import { buildCalendarGrid, type CalendarEvent } from "@/lib/provider-calendar-shared";
 
 type BookingEvent = Extract<CalendarEvent, { type: "booking" }>;
 type TimeOffEvent = Extract<CalendarEvent, { type: "time_off" }>;
