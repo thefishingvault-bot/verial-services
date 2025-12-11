@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { auth } from "@clerk/nextjs/server";
 import { requireProvider } from "@/lib/auth-guards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,13 +14,17 @@ type ProviderOverviewMetrics = {
 };
 
 async function loadOverview(): Promise<ProviderOverviewMetrics> {
+  const cookieHeader = headers().get("cookie") ?? "";
+
+  const fetchWithAuth = (path: string) =>
+    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}${path}`, {
+      cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
+    }).catch(() => null);
+
   const [bookingsRes, earningsRes] = await Promise.all([
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/provider/bookings/list`, {
-      cache: "no-store",
-    }).catch(() => null),
-    fetch(`${process.env.NEXT_PUBLIC_APP_URL ?? ""}/api/provider/earnings/summary`, {
-      cache: "no-store",
-    }).catch(() => null),
+    fetchWithAuth("/api/provider/bookings/list"),
+    fetchWithAuth("/api/provider/earnings/summary"),
   ]);
 
   let newRequestsCount = 0;
@@ -28,29 +33,37 @@ async function loadOverview(): Promise<ProviderOverviewMetrics> {
   let completedPayoutsNet = 0;
 
   if (bookingsRes?.ok) {
-    const all = (await bookingsRes.json()) as Array<{
-      status: string;
-      createdAt: string;
-    }>;
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    try {
+      const all = (await bookingsRes.json()) as Array<{
+        status: string;
+        createdAt: string;
+      }>;
+      const now = new Date();
+      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    newRequestsCount = all.filter((b) => b.status === "pending").length;
-    confirmedThisMonthCount = all.filter((b) => {
-      const created = new Date(b.createdAt);
-      return (
-        ["accepted", "paid", "completed"].includes(b.status) && created >= monthStart
-      );
-    }).length;
+      newRequestsCount = all.filter((b) => b.status === "pending").length;
+      confirmedThisMonthCount = all.filter((b) => {
+        const created = new Date(b.createdAt);
+        return (
+          ["accepted", "paid", "completed"].includes(b.status) && created >= monthStart
+        );
+      }).length;
+    } catch (err) {
+      console.error("Failed to parse provider bookings list", err);
+    }
   }
 
   if (earningsRes?.ok) {
-    const summary = (await earningsRes.json()) as {
-      pendingPayoutsNet?: number;
-      completedPayoutsNet?: number;
-    };
-    pendingPayoutsNet = summary.pendingPayoutsNet ?? 0;
-    completedPayoutsNet = summary.completedPayoutsNet ?? 0;
+    try {
+      const summary = (await earningsRes.json()) as {
+        pendingPayoutsNet?: number;
+        completedPayoutsNet?: number;
+      };
+      pendingPayoutsNet = summary.pendingPayoutsNet ?? 0;
+      completedPayoutsNet = summary.completedPayoutsNet ?? 0;
+    } catch (err) {
+      console.error("Failed to parse provider earnings summary", err);
+    }
   }
 
   return { newRequestsCount, confirmedThisMonthCount, pendingPayoutsNet, completedPayoutsNet };

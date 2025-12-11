@@ -1,13 +1,43 @@
-import { auth } from "@clerk/nextjs/server";
+import { auth, clerkClient } from "@clerk/nextjs/server";
 import { notFound } from "next/navigation";
+import { db } from "@/lib/db";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
+
+const resolveRole = async (userId: string, sessionClaims: Record<string, any> | null | undefined) => {
+  const sessionRole = sessionClaims?.publicMetadata?.role as string | undefined;
+  if (sessionRole) return sessionRole;
+
+  // Clerk fetch fallback
+  try {
+    const client = await clerkClient();
+    const user = await client.users.getUser(userId);
+    const clerkRole = (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+    if (clerkRole) return clerkRole;
+  } catch {
+    // swallow and continue to DB fallback
+  }
+
+  // DB fallback
+  const dbUser = await db.query.users.findFirst({
+    where: eq(users.id, userId),
+    columns: { role: true },
+  });
+  return dbUser?.role;
+};
 
 export async function requireAdmin() {
   const { userId, sessionClaims } = await auth();
-  const role = (sessionClaims as Record<string, any> | null | undefined)?.publicMetadata?.role as string | undefined;
-  if (!userId || role !== "admin") {
+  if (!userId) {
     return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
   }
-  return { isAdmin: true as const, userId, sessionClaims };
+
+  const role = await resolveRole(userId, sessionClaims as Record<string, any> | null | undefined);
+  if (role !== "admin") {
+    return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
+  }
+
+  return { isAdmin: true as const, userId, sessionClaims, role };
 }
 
 export async function assertAdminOrThrow() {
