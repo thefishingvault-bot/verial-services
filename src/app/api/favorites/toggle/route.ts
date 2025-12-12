@@ -51,18 +51,16 @@ export async function POST(req: Request) {
     columns: { id: true },
   });
 
-  await db.transaction(async (tx) => {
-    if (existing) {
-      await tx
-        .delete(serviceFavorites)
-        .where(and(eq(serviceFavorites.userId, userId), eq(serviceFavorites.serviceId, serviceId)));
-    } else {
-      await tx
-        .insert(serviceFavorites)
-        .values({ userId, serviceId })
-        .onConflictDoNothing();
-    }
-  });
+  if (existing) {
+    await db
+      .delete(serviceFavorites)
+      .where(and(eq(serviceFavorites.userId, userId), eq(serviceFavorites.serviceId, serviceId)));
+  } else {
+    await db
+      .insert(serviceFavorites)
+      .values({ userId, serviceId })
+      .onConflictDoNothing();
+  }
 
   const [countRow] = await db
     .select({ count: sql<number>`COUNT(*)` })
