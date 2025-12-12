@@ -112,7 +112,7 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
               <p className="line-clamp-2">{fav.description || "No description provided."}</p>
             </CardContent>
 
-            <CardFooter className="flex flex-col gap-2 sm:flex-row px-4 pb-4 pt-0">
+            <CardFooter className="flex flex-col gap-2 sm:flex-row px-4 pb-5 pt-2">
               <Link href={`/s/${fav.slug}`} className="flex-1">
                 <Button variant="outline" className="w-full" size="sm">
                   View Service
