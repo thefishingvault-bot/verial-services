@@ -173,3 +173,10 @@
     page-break-inside: avoid;
   }
 }
+
+@layer utilities {
+  /* Reduce horizontal padding for px-3 utility on dashboard (matches requested spacing) */
+  .px-3 {
+    padding-inline: calc(var(--spacing) * 2) !important;
+  }
+}
