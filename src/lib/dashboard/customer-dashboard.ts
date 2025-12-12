@@ -5,6 +5,7 @@ import { getUserFavoriteServices, type FavoriteService } from "@/lib/favorites";
 import { db } from "@/lib/db";
 import { canTransition, type BookingStatus } from "@/lib/booking-state";
 import { getDashboardRecommendations, type RecommendationCardData } from "@/lib/recommendations";
+import { getUnreadCount } from "@/lib/notifications";
 
 export type BookingCardData = {
   id: string;
@@ -41,8 +42,10 @@ export type CustomerDashboardData = {
   upcomingBookings: BookingCardData[];
   pastBookings: BookingCardData[];
   reviewsDue: ReviewPrompt[];
+  favorites: FavoriteService[];
   favoritesPreview: FavoriteService[];
   recommendations: RecommendationCardData[];
+  unreadNotifications: number;
   user: {
     id: string;
     name: string;
@@ -183,11 +186,14 @@ export async function getCustomerDashboardData(): Promise<CustomerDashboardData>
     imageUrl: user?.imageUrl || undefined,
   };
 
-  const [bookingRows, favoritesPreview, recommendations] = await Promise.all([
+  const [bookingRows, favoritesAll, recommendations, unreadNotifications] = await Promise.all([
     fetchBookingsForUser(userId),
-    getUserFavoriteServices(userId, "recent").then((items) => items.slice(0, 3)),
+    getUserFavoriteServices(userId, "recent"),
     getDashboardRecommendations(userId),
+    getUnreadCount(userId),
   ]);
+
+  const favoritesPreview = favoritesAll.slice(0, 3);
 
   const { upcoming, past, reviewsDue } = mapBookings(bookingRows);
 
@@ -195,8 +201,10 @@ export async function getCustomerDashboardData(): Promise<CustomerDashboardData>
     upcomingBookings: upcoming,
     pastBookings: past,
     reviewsDue,
+    favorites: favoritesAll,
     favoritesPreview,
     recommendations,
+    unreadNotifications,
     user: profile,
   };
 }

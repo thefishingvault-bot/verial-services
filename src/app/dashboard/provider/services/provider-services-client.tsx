@@ -37,9 +37,9 @@ type ProviderServicesListProps = {
 export function ProviderServicesList({ services, isDeleting, onDelete }: ProviderServicesListProps) {
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8">
-      <div className="flex justify-between items-center mb-6">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">My Services</h1>
-        <Button asChild>
+        <Button asChild className="w-full sm:w-auto">
           <Link href="/dashboard/services/new">
             <Plus className="mr-2 h-4 w-4" /> Create New
           </Link>

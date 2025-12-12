@@ -7,7 +7,7 @@ import {
   serviceCategoryEnum,
   serviceFavorites,
 } from "@/db/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
 
     const rawCategory = searchParams.get("category") ?? undefined;
     const rawRegion = searchParams.get("region") ?? undefined;
+    const rawSuburb = searchParams.get("suburb") ?? undefined;
+    const rawQuery = searchParams.get("q") ?? undefined;
     const rawMinPrice = searchParams.get("minPrice") ?? undefined;
     const rawMaxPrice = searchParams.get("maxPrice") ?? undefined;
     const sort = (searchParams.get("sort") ?? "relevance") as
@@ -75,10 +77,12 @@ export async function GET(req: NextRequest) {
 
     const categoryFilter = isValidCategory ? rawCategory : undefined;
 
-    const normalizeRegion = (value: string | null | undefined) =>
+    const normalizeString = (value: string | null | undefined) =>
       value?.toString().trim().toLowerCase() || null;
 
-    const regionFilter = normalizeRegion(rawRegion);
+    const regionFilter = normalizeString(rawRegion);
+    const suburbFilter = normalizeString(rawSuburb);
+    const textQuery = rawQuery?.trim();
 
     const parsePrice = (value: string | undefined) => {
       if (!value) return undefined;
@@ -95,12 +99,25 @@ export async function GET(req: NextRequest) {
       // Only show published services in public search
       eq(services.isPublished, true),
       categoryFilter ? eq(services.category, categoryFilter as ServiceSummary["category"]) : undefined,
-      regionFilter
-        ? sql`LOWER(${services.region}) = ${regionFilter}`
-        : undefined,
+      regionFilter ? sql`LOWER(${services.region}) = ${regionFilter}` : undefined,
+      suburbFilter ? sql`LOWER(${services.suburb}) = ${suburbFilter}` : undefined,
       minPrice != null ? sql`${services.priceInCents} >= ${minPrice}` : undefined,
       maxPrice != null ? sql`${services.priceInCents} <= ${maxPrice}` : undefined,
+      textQuery
+        ? sql`to_tsvector('simple', coalesce(${services.title}, '') || ' ' || coalesce(${services.description}, '')) @@ plainto_tsquery(${textQuery})`
+        : undefined,
     ].filter((c): c is Exclude<(typeof conditions)[number], undefined> => Boolean(c));
+
+    const avgRatingExpr = sql<number>`COALESCE((
+      SELECT AVG(${reviews.rating})
+      FROM ${reviews}
+      WHERE ${reviews.serviceId} = ${services.id} AND ${reviews.isHidden} = false
+    ), 0)`;
+
+    const reviewCountExpr = sql<number>`(
+      SELECT COUNT(*) FROM ${reviews} r
+      WHERE r.service_id = ${services.id} AND r.is_hidden = false
+    )`;
 
     let orderByClause;
     switch (sort) {
@@ -111,8 +128,7 @@ export async function GET(req: NextRequest) {
         orderByClause = [desc(services.priceInCents)];
         break;
       case "rating_desc":
-        // Placeholder: fall back to createdAt desc until ratings join is more complex
-        orderByClause = [desc(services.createdAt)];
+        orderByClause = [desc(avgRatingExpr), desc(reviewCountExpr), desc(services.createdAt)];
         break;
       case "relevance":
       default:
@@ -139,6 +155,8 @@ export async function GET(req: NextRequest) {
         providerTrust: providers.trustLevel,
         serviceRegion: services.region,
         serviceSuburb: services.suburb,
+        avgRating: avgRatingExpr,
+        reviewCount: reviewCountExpr,
         favoriteCount: sql<number>`(
           SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
         )`,
@@ -155,33 +173,9 @@ export async function GET(req: NextRequest) {
 
     const serviceResults = await baseQuery.orderBy(...orderByClause).limit(pageSize).offset(offset);
 
-    const providerIds = [...new Set(serviceResults.map((s) => s.providerId))].filter(Boolean) as string[];
-
-    const reviewMap: Record<string, { total: number; count: number }> = {};
-
-    if (providerIds.length > 0) {
-      const reviewData = await db
-        .select({
-          providerId: reviews.providerId,
-          rating: reviews.rating,
-        })
-        .from(reviews)
-        .where(and(inArray(reviews.providerId, providerIds), eq(reviews.isHidden, false)));
-
-      reviewData.forEach((r) => {
-        const key = String(r.providerId);
-        if (!reviewMap[key]) {
-          reviewMap[key] = { total: 0, count: 0 };
-        }
-        reviewMap[key].total += r.rating ?? 0;
-        reviewMap[key].count += 1;
-      });
-    }
-
     const items: ServiceSummary[] = serviceResults.map((s) => {
-      const key = String(s.providerId);
-      const stats = reviewMap[key] || { total: 0, count: 0 };
-      const avgRating = stats.count > 0 ? stats.total / stats.count : 0;
+      const avgRating = Number(s.avgRating ?? 0);
+      const reviewCount = Number(s.reviewCount ?? 0);
 
       return {
         id: s.id,
@@ -202,7 +196,7 @@ export async function GET(req: NextRequest) {
           suburb: s.serviceSuburb,
         },
         avgRating,
-        reviewCount: stats.count,
+        reviewCount,
         favoriteCount: Number(s.favoriteCount ?? 0),
         isFavorited: Boolean(s.isFavorited),
       };

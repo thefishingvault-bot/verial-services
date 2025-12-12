@@ -3,6 +3,7 @@ import { getCustomerDashboardData } from "@/lib/dashboard/customer-dashboard";
 import * as favorites from "@/lib/favorites";
 import * as recommendations from "@/lib/recommendations";
 import * as dbMod from "@/lib/db";
+import * as notifications from "@/lib/notifications";
 import { providers } from "@/db/schema";
 
 vi.mock("@clerk/nextjs/server", () => ({
@@ -30,6 +31,7 @@ describe("getCustomerDashboardData", () => {
 
     vi.spyOn(favorites, "getUserFavoriteServices").mockResolvedValue([]);
     vi.spyOn(recommendations, "getDashboardRecommendations").mockResolvedValue([]);
+    vi.spyOn(notifications, "getUnreadCount").mockResolvedValue(0);
   });
 
   it("categorizes bookings, limits reviews due to 3, and slices favorites preview", async () => {
@@ -113,6 +115,7 @@ describe("getCustomerDashboardData", () => {
       { id: "fav3" } as any,
       { id: "fav4" } as any,
     ]);
+    vi.spyOn(notifications, "getUnreadCount").mockResolvedValue(2);
 
     const data = await getCustomerDashboardData();
 
@@ -126,5 +129,7 @@ describe("getCustomerDashboardData", () => {
       expect.objectContaining({ bookingId: "bk_past" }),
     ]);
     expect(data.favoritesPreview).toHaveLength(3);
+    expect(data.favorites).toHaveLength(4);
+    expect(data.unreadNotifications).toBe(2);
   });
 });

@@ -82,7 +82,7 @@ export default function ServicesPageShell({
   return (
     <div className="mx-auto w-full max-w-6xl px-4 lg:px-6 py-6 lg:py-10 space-y-6">
       {/* Top controls: search + filters */}
-      <div className="sticky top-16 z-20 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 pb-3 mb-2">
+      <div className="md:sticky md:top-16 z-20 bg-slate-50/80 backdrop-blur-sm border-b border-slate-200 pb-3 mb-2">
         <ServicesSearchAndFilters
           filters={filters}
           onFiltersChange={handleFiltersChange}

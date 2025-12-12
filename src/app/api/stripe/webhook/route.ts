@@ -35,6 +35,81 @@ export async function POST(req: Request) {
     return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
   }
 
+  const loadBooking = async (bookingId: string) =>
+    db.query.bookings.findFirst({
+      where: eq(bookings.id, bookingId),
+      columns: {
+        id: true,
+        status: true,
+        priceAtBooking: true,
+        providerId: true,
+        serviceId: true,
+        userId: true,
+        paymentIntentId: true,
+      },
+      with: {
+        provider: { columns: { userId: true, businessName: true } },
+        service: { columns: { title: true } },
+      },
+    });
+
+  const notifyCustomer = async (
+    userId: string,
+    bookingId: string,
+    title: string,
+    body: string,
+  ) =>
+    createNotification({
+      userId,
+      title,
+      body,
+      bookingId,
+      actionUrl: `/dashboard/bookings/${bookingId}`,
+    });
+
+  const markRefunded = async (bookingId: string) => {
+    const booking = await loadBooking(bookingId);
+    if (!booking) return NextResponse.json({ ok: true });
+
+    try {
+      assertTransition(booking.status as BookingStatus, "refunded");
+    } catch (err) {
+      console.warn(`[API_STRIPE_WEBHOOK] Invalid refund transition for ${bookingId}:`, err);
+      return NextResponse.json({ ok: true });
+    }
+
+    await db
+      .update(bookings)
+      .set({ status: "refunded", updatedAt: new Date() })
+      .where(eq(bookings.id, bookingId));
+
+    await db
+      .update(providerEarnings)
+      .set({ status: "refunded", updatedAt: new Date() })
+      .where(eq(providerEarnings.bookingId, bookingId));
+
+    if (booking.userId) {
+      await notifyCustomer(
+        booking.userId,
+        bookingId,
+        "Payment refunded",
+        `Your payment for ${booking.service?.title ?? "your booking"} was refunded.`,
+      );
+    }
+
+    if (booking.provider?.userId) {
+      await createNotification({
+        userId: booking.provider.userId,
+        title: "Booking refunded",
+        body: `A refund was processed for booking ${bookingId}.`,
+        bookingId,
+        actionUrl: `/dashboard/bookings/provider`,
+      });
+    }
+
+    return NextResponse.json({ ok: true });
+  };
+
   // Handle the event
   switch (event.type) {
     case "payment_intent.succeeded":
@@ -132,43 +207,119 @@ export async function POST(req: Request) {
 
       break;
 
-    case "payment_intent.payment_failed":
+    case "payment_intent.payment_failed": {
       const paymentFailedIntent = event.data.object as Stripe.PaymentIntent;
-      console.log(`[API_STRIPE_WEBHOOK] Payment failed: ${paymentFailedIntent.id}`, paymentFailedIntent.last_payment_error?.message);
+      console.log(
+        `[API_STRIPE_WEBHOOK] Payment failed: ${paymentFailedIntent.id}`,
+        paymentFailedIntent.last_payment_error?.message,
+      );
 
-      // Notify provider that payment failed so they can follow up
+      // Notify provider and customer, clear unusable PI so they can retry
       try {
         const bookingIdMeta = paymentFailedIntent.metadata?.bookingId;
+        const customerId = paymentFailedIntent.metadata?.userId;
         if (bookingIdMeta) {
-          const booking = await db.query.bookings.findFirst({
-            where: eq(bookings.id, bookingIdMeta),
-            columns: { providerId: true, id: true },
-            with: { provider: { columns: { userId: true, businessName: true } } },
-          });
+          const booking = await loadBooking(bookingIdMeta);
 
-          if (booking?.provider?.userId) {
-            await createNotification({
-              userId: booking.provider.userId,
-              message: `Payment failed for booking ${booking.id}.`,
-              href: `/dashboard/bookings/provider`,
-            });
+          if (booking) {
+            await db
+              .update(bookings)
+              .set({
+                paymentIntentId: null,
+                updatedAt: new Date(),
+              })
+              .where(eq(bookings.id, bookingIdMeta));
 
-            const client = await clerkClient();
-            const providerUser = await client.users.getUser(booking.provider.userId);
-            const email = providerUser.emailAddresses[0]?.emailAddress;
-            if (email) {
-              await sendEmail({
-                to: email,
-                subject: `Payment failed for booking ${booking.id}`,
-                html: `<p>A customer payment attempt failed.</p><p>Please contact the customer to retry.</p>`,
+            if (customerId) {
+              await notifyCustomer(
+                customerId,
+                bookingIdMeta,
+                "Payment failed",
+                `Your payment for ${booking.service?.title ?? "your booking"} failed. Please try another payment method.`,
+              );
+
+              const client = await clerkClient();
+              const customerUser = await client.users.getUser(customerId);
+              const email = customerUser.emailAddresses[0]?.emailAddress;
+              if (email) {
+                await sendEmail({
+                  to: email,
+                  subject: `Payment failed for booking ${bookingIdMeta}`,
+                  html: `<p>Your payment for ${booking.service?.title ?? "your booking"} failed.</p><p>Please retry payment from your dashboard.</p>`,
+                });
+              }
+            }
+
+            if (booking.provider?.userId) {
+              await createNotification({
+                userId: booking.provider.userId,
+                message: `Payment failed for booking ${booking.id}.`,
+                href: `/dashboard/bookings/provider`,
               });
             }
           }
         }
       } catch (notifyError) {
-        console.error("[API_STRIPE_WEBHOOK] Failed to notify provider of payment failure", notifyError);
+        console.error("[API_STRIPE_WEBHOOK] Failed to handle payment failure", notifyError);
       }
       break;
+    }
+
+    case "payment_intent.canceled": {
+      const canceledPi = event.data.object as Stripe.PaymentIntent;
+      const bookingIdMeta = canceledPi.metadata?.bookingId;
+      const customerId = canceledPi.metadata?.userId;
+
+      if (bookingIdMeta) {
+        try {
+          await db
+            .update(bookings)
+            .set({ paymentIntentId: null, updatedAt: new Date() })
+            .where(eq(bookings.id, bookingIdMeta));
+
+          if (customerId) {
+            await notifyCustomer(
+              customerId,
+              bookingIdMeta,
+              "Payment expired",
+              "Your payment session expired. Please retry checkout to confirm your booking.",
+            );
+          }
+        } catch (err) {
+          console.error("[API_STRIPE_WEBHOOK] Failed to handle canceled PI", err);
+        }
+      }
+
+      break;
+    }
+
+    case "charge.refunded": {
+      const charge = event.data.object as Stripe.Charge;
+      const piId = typeof charge.payment_intent === "string" ? charge.payment_intent : charge.payment_intent?.id;
+      if (piId) {
+        const pi = await stripe.paymentIntents.retrieve(piId);
+        const bookingIdMeta = pi.metadata?.bookingId;
+        if (bookingIdMeta) {
+          const result = await markRefunded(bookingIdMeta);
+          if (result) return result;
+        }
+      }
+      break;
+    }
+
+    case "refund.updated": {
+      const refund = event.data.object as Stripe.Refund;
+      const piId = refund.payment_intent as string | null;
+      if (piId) {
+        const pi = await stripe.paymentIntents.retrieve(piId);
+        const bookingIdMeta = pi.metadata?.bookingId;
+        if (bookingIdMeta) {
+          const result = await markRefunded(bookingIdMeta);
+          if (result) return result;
+        }
+      }
+      break;
+    }
 
     default:
       console.log(`[API_STRIPE_WEBHOOK] Unhandled event type: ${event.type}`);

@@ -10,6 +10,8 @@ const user = userEvent.setup();
 
 const baseData: CustomerDashboardData = {
   user: { id: "user_1", name: "Test" },
+  favorites: [],
+  unreadNotifications: 0,
   upcomingBookings: [
     {
       id: "bk1",
@@ -146,8 +148,10 @@ describe("CustomerDashboardSections", () => {
       upcomingBookings: [],
       pastBookings: [],
       reviewsDue: [],
+      favorites: [],
       favoritesPreview: [],
       recommendations: [],
+      unreadNotifications: 0,
     };
 
     render(<CustomerDashboardSections data={emptyData} />);

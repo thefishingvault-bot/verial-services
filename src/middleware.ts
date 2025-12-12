@@ -37,6 +37,10 @@ const isCustomerDashboardRoute = createRouteMatcher([
   "/dashboard(.*)",
 ]);
 
+const isMessagesRoute = createRouteMatcher([
+  "/dashboard/messages(.*)",
+]);
+
 export default clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
 
@@ -98,7 +102,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Customer dashboard guard (exclude provider paths handled above)
   if (isCustomerDashboardRoute(req) && !isProviderDashboardRoute(req)) {
-    if (role === "provider") {
+    if (role === "provider" && !isMessagesRoute(req)) {
       return NextResponse.redirect(new URL("/dashboard/provider", req.url));
     }
     if (role === "admin") {
