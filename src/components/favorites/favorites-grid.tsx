@@ -34,7 +34,7 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
   if (sortedFavorites.length === 0) return null;
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
       {sortedFavorites.map((fav) => {
         const { Icon, color } = getTrustBadge(fav.provider.trustLevel);
         const savedOn = new Intl.DateTimeFormat("en-NZ", { month: "short", day: "numeric" }).format(
