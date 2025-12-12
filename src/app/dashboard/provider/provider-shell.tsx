@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { cn } from "@/lib/utils";
 import { UserButton } from "@clerk/nextjs";
-import { Home, Calendar, Briefcase, BarChart3, Bell, User } from "lucide-react";
+import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare } from "lucide-react";
 
 const providerNav = [
   { href: "/dashboard/provider", label: "Overview", icon: Home },
@@ -13,6 +13,7 @@ const providerNav = [
   { href: "/dashboard/provider/calendar", label: "Calendar", icon: Briefcase },
   { href: "/dashboard/provider/services", label: "Services", icon: Briefcase },
   { href: "/dashboard/provider/earnings", label: "Earnings", icon: BarChart3 },
+  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   { href: "/dashboard/provider/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/provider/profile", label: "Provider Profile", icon: User },
 ];
@@ -68,7 +69,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
         </aside>
 
         <div className="flex-1 space-y-4">
-          <nav className="flex gap-2 overflow-x-auto md:hidden">
+          <nav className="flex gap-2 overflow-x-auto pb-1 md:hidden">
             {providerNav.map((link) => {
               const Icon = link.icon;
               const active = isActive(link.href);
@@ -77,7 +78,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "flex flex-1 items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-medium",
+                    "flex flex-none items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-medium whitespace-nowrap min-w-[140px]",
                     active
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-transparent bg-background text-muted-foreground",
