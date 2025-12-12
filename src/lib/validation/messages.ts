@@ -1,6 +1,7 @@
 import { z } from "zod";
 
-const uuidString = z.string().uuid("Invalid id");
+// Threads are booking-linked and use booking IDs (e.g., "bk_...") rather than UUIDs in prod.
+const threadId = z.string().trim().min(3, "Invalid thread id").max(128);
 
 export const MessageContentSchema = z.object({
   content: z
@@ -21,12 +22,12 @@ export const MessageContentSchema = z.object({
 });
 
 export const MessageSendSchema = z.object({
-  threadId: uuidString,
+  threadId,
   tempId: z.string().trim().max(255).optional(),
 }).and(MessageContentSchema);
 
 export const MessageListSchema = z.object({
-  threadId: uuidString,
+  threadId,
   limit: z.coerce.number().int().min(1).max(100).default(50).optional(),
   cursor: z.string().trim().max(255).optional(),
 });
@@ -34,12 +35,12 @@ export const MessageListSchema = z.object({
 export const ThreadListSchema = z.object({});
 
 export const MarkReadSchema = z.object({
-  threadId: uuidString,
+  threadId,
   lastMessageId: z.string().trim().max(255).optional(),
 });
 
 export const PublishSchema = z.object({
-  threadId: uuidString,
+  threadId,
   event: z.enum([
     "message:new",
     "message:delivered",
