@@ -37,8 +37,11 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
       {sortedFavorites.map((fav) => {
         const { Icon, color } = getTrustBadge(fav.provider.trustLevel);
+        const savedOn = new Intl.DateTimeFormat("en-NZ", { month: "short", day: "numeric" }).format(
+          new Date(fav.favoritedAt),
+        );
         return (
-          <Card key={fav.id} className="overflow-hidden border bg-white">
+          <Card key={fav.id} className="overflow-hidden border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
             <div className="relative aspect-[16/9] bg-slate-100">
               {fav.coverImageUrl ? (
                 <Image
@@ -51,9 +54,12 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
               ) : (
                 <div className="flex h-full items-center justify-center text-sm text-slate-500">No image</div>
               )}
-              <div className="absolute left-3 top-3">
+              <div className="absolute left-3 top-3 flex flex-wrap gap-2">
                 <Badge variant="secondary" className="bg-white/90 capitalize text-slate-900">
                   {fav.category.replace(/_/g, " ")}
+                </Badge>
+                <Badge variant="outline" className="bg-white/90 text-slate-800">
+                  Saved {savedOn}
                 </Badge>
               </div>
               <FavoriteToggle
@@ -72,13 +78,13 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
                     {fav.title}
                   </Link>
                   <div className="flex flex-wrap items-center gap-2 text-sm text-slate-600">
-                    <span className="flex items-center gap-1">
+                    <span className="flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium">
                       <Icon className={cn("h-4 w-4", color)} />
                       {fav.provider.trustLevel}
                     </span>
                     {fav.provider.isVerified && <Badge variant="secondary">Verified</Badge>}
                     {(fav.provider.suburb || fav.provider.region) && (
-                      <span className="text-slate-500">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                         {[fav.provider.suburb, fav.provider.region].filter(Boolean).join(", ")}
                       </span>
                     )}
@@ -91,11 +97,14 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
               </div>
 
               <div className="flex items-center gap-3 text-sm text-slate-700">
-                <span className="flex items-center gap-1">
+                <span className="flex items-center gap-1 rounded-full bg-amber-50 px-2 py-1 font-medium text-amber-700">
                   <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
                   {fav.reviewCount > 0 ? `${fav.avgRating.toFixed(1)} (${fav.reviewCount})` : "No reviews"}
                 </span>
-                <span className="text-slate-500">{fav.favoriteCount} favourite{fav.favoriteCount === 1 ? "" : "s"}</span>
+                <span className="flex items-center gap-1 rounded-full bg-rose-50 px-2 py-1 text-rose-700">
+                  <Heart className="h-4 w-4 fill-rose-500 text-rose-500" />
+                  {fav.favoriteCount} saved
+                </span>
               </div>
             </CardHeader>
 
@@ -103,7 +112,7 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
               <p className="line-clamp-2">{fav.description || "No description provided."}</p>
             </CardContent>
 
-            <CardFooter className="flex items-center gap-2">
+            <CardFooter className="flex flex-col gap-2 sm:flex-row">
               <Link href={`/s/${fav.slug}`} className="flex-1">
                 <Button variant="outline" className="w-full" size="sm">
                   View Service
