@@ -40,12 +40,11 @@ function HomeContent() {
           </p>
           <form action={searchAction} className="w-full max-w-lg">
             <div className="relative flex items-center">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
               <Input
                 name="query"
                 type="search"
                 placeholder="What service do you need? (e.g., 'window cleaning')"
-                className="w-full rounded-md pl-12 pr-16 h-12 shadow-sm"
+                className="w-full rounded-md px-4 pr-16 h-12 shadow-sm"
               />
               <Button type="submit" variant="default" size="icon" className="absolute right-2.5">
                 <Search className="h-5 w-5" />
