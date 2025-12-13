@@ -6,9 +6,9 @@ import { useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import { MessageSquare } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { toast } from 'sonner';
 
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ContactButtonProps {
   providerId: string;
@@ -16,6 +16,8 @@ interface ContactButtonProps {
   className?: string;
   variant?: 'default' | 'destructive' | 'outline' | 'secondary' | 'ghost' | 'link';
   label?: string;
+  iconOnly?: boolean;
+  ariaLabel?: string;
 }
 
 export function ContactButton({
@@ -24,9 +26,12 @@ export function ContactButton({
   className,
   variant = 'outline',
   label = 'Message Provider',
+  iconOnly = false,
+  ariaLabel,
 }: ContactButtonProps) {
   const router = useRouter();
   const { isSignedIn } = useAuth();
+  const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false);
 
   const handleContact = async (event?: React.MouseEvent) => {
@@ -63,26 +68,31 @@ export function ContactButton({
           res.status === 403 &&
           (message.toLowerCase().includes('no booking') || message.toLowerCase().includes('booking'))
         ) {
-          toast.info('Book to message', {
+          toast({
+            title: 'Book to message',
             description: 'You can message a provider once you have an active booking with them.',
           });
           return;
         }
 
-        toast.error('Unable to start conversation', { description: message });
+        toast({
+          title: 'Unable to start conversation',
+          description: message,
+          variant: 'destructive',
+        });
         return;
       }
 
       const json = (await res.json()) as { conversationId?: string; bookingId?: string };
       const conversationId = json.conversationId ?? json.bookingId;
       if (!conversationId) {
-        toast.error('Unable to start conversation');
+        toast({ title: 'Unable to start conversation', variant: 'destructive' });
         return;
       }
 
       router.push(`/dashboard/messages/${conversationId}`);
     } catch {
-      toast.error('Unable to start conversation');
+      toast({ title: 'Unable to start conversation', variant: 'destructive' });
     } finally {
       setIsLoading(false);
     }
@@ -95,9 +105,10 @@ export function ContactButton({
       onClick={handleContact}
       disabled={isLoading}
       aria-busy={isLoading}
+      aria-label={ariaLabel ?? label}
     >
-      <MessageSquare className="mr-2 h-4 w-4" />
-      {label}
+      <MessageSquare className={iconOnly ? 'h-4 w-4' : 'mr-2 h-4 w-4'} />
+      {iconOnly ? null : label}
     </Button>
   );
 }

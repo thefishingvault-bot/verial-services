@@ -18,6 +18,7 @@ import {
 import { LoadMoreButton } from "./load-more-button";
 import { FavoriteToggle } from "@/components/services/favorite-toggle";
 import type { ServiceWithProviderAndFavorite } from "@/lib/services-data";
+import { ContactButton } from "@/components/common/contact-button";
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -237,9 +238,14 @@ export function ServicesGridClient({ services, searchParams, hasMore, currentPag
                     View Details
                   </Button>
                 </Link>
-                <Button variant="outline" size="sm">
-                  <MessageCircle className="h-4 w-4" />
-                </Button>
+                <ContactButton
+                  providerId={service.provider.id}
+                  serviceId={service.id}
+                  variant="outline"
+                  iconOnly
+                  ariaLabel="Message Provider"
+                  className="shrink-0"
+                />
               </div>
             </CardContent>
           </Card>

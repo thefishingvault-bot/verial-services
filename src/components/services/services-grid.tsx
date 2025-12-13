@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { ContactButton } from "@/components/common/contact-button";
 import {
   Star,
   CheckCircle,
@@ -27,9 +28,14 @@ const categoryMap: Record<string, string> = {
   electrical: 'Electrical',
   painting: 'Painting',
   landscaping: 'Landscaping',
-  handyman: 'Handyman',
-};
-
+                <ContactButton
+                  providerId={service.provider.id}
+                  serviceId={service.id}
+                  variant="outline"
+                  iconOnly
+                  ariaLabel="Message Provider"
+                  className="shrink-0"
+                />
 function formatPrice(price: number) {
   return new Intl.NumberFormat('en-NZ', {
     style: 'currency',
