@@ -17,13 +17,23 @@ export async function POST(req: Request) {
     const provider = await db.query.providers.findFirst({ where: eq(providers.userId, userId) });
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
 
-    const body = (await req.json()) as { startTime?: string; endTime?: string; reason?: string };
-    if (!body.startTime || !body.endTime) {
+    const body = (await req.json()) as {
+      startTime?: string;
+      endTime?: string;
+      start?: string;
+      end?: string;
+      reason?: string;
+    };
+
+    const rawStart = body.startTime ?? body.start;
+    const rawEnd = body.endTime ?? body.end;
+
+    if (!rawStart || !rawEnd) {
       return new NextResponse("Missing startTime or endTime", { status: 400 });
     }
 
-    const startTime = new Date(body.startTime);
-    const endTime = new Date(body.endTime);
+    let startTime = new Date(rawStart);
+    const endTime = new Date(rawEnd);
 
     if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime())) {
       return new NextResponse("Invalid startTime or endTime", { status: 400 });
@@ -33,8 +43,20 @@ export async function POST(req: Request) {
       return new NextResponse("startTime must be before endTime", { status: 400 });
     }
 
-    if (startTime < new Date()) {
-      return new NextResponse("Cannot create time off in the past", { status: 400 });
+    const now = new Date();
+
+    // Allow creating a time-off block that started earlier today (or a few minutes ago)
+    // as long as it still ends in the future; clamp the start to "now" so it can
+    // still protect the remaining window.
+    if (endTime <= now) {
+      return new NextResponse("Time off must end in the future", { status: 400 });
+    }
+
+    if (startTime < now) {
+      startTime = now;
+      if (startTime >= endTime) {
+        return new NextResponse("startTime must be before endTime", { status: 400 });
+      }
     }
 
     const overlappingBookings = await db.query.bookings.findMany({
