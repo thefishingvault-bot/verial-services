@@ -70,7 +70,7 @@ const ServicesPageClient = ({ initialFilters, initialServicesData, stats }: Serv
       </div>
 
       {/* Search and Filters */}
-      <div className="bg-white border-b sticky top-0 z-40 shadow-sm">
+      <div className="relative border-b shadow-sm md:sticky md:top-24 md:self-start md:bg-background md:z-10">
         <div className="container mx-auto px-4 py-4">
           <ServicesSearchAndFilters filters={filters} onFiltersChange={handleFiltersChange} />
         </div>
