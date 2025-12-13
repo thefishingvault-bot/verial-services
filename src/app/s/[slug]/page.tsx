@@ -380,7 +380,7 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
                     <CheckCircle className="h-4 w-4" /> Admin trusted
                   </Badge>
                 )}
-                {service.provider.userId && <ContactButton providerUserId={service.provider.userId} />}
+                <ContactButton providerId={service.provider.id} serviceId={service.id} />
               </div>
             </CardHeader>
             <CardContent className="space-y-3 text-sm text-slate-700">

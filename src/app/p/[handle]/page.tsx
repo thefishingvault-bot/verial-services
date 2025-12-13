@@ -125,9 +125,9 @@ function ProviderHeader({
                 @{provider.handle}
               </Link>
             </div>
-        <div className="flex flex-col items-end gap-2">
-          <ContactButton providerUserId={provider.user.id} />
-        </div>
+			<div className="flex flex-col items-end gap-2">
+			  <ContactButton providerId={provider.id} />
+			</div>
           </div>
 
           <div className="mt-4 flex flex-wrap items-center gap-4">

@@ -1,7 +1,7 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-import { canMessage, sendBookingMessage } from "@/lib/messaging";
+import { canMessage, ensureBookingRelationship, sendBookingMessage } from "@/lib/messaging";
 
 export const runtime = "nodejs";
 
@@ -12,19 +12,38 @@ export async function POST(req: Request) {
 
     const body = await req.json();
     const bookingId = body?.bookingId as string | undefined;
+    const providerId = body?.providerId as string | undefined;
+    const serviceId = body?.serviceId as string | undefined;
     const content = (body?.content as string | undefined) ?? "";
 
-    if (!bookingId) return new NextResponse("bookingId is required", { status: 400 });
+    let resolvedBookingId = bookingId;
 
-    const allowed = await canMessage(userId, bookingId);
+    if (!resolvedBookingId) {
+      if (!providerId) return new NextResponse("bookingId or providerId is required", { status: 400 });
+
+      try {
+        const relationship = await ensureBookingRelationship({
+          currentUserId: userId,
+          providerId,
+          serviceId,
+        });
+        resolvedBookingId = relationship.bookingId;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unable to start conversation";
+        const status = message.includes("Provider not found") ? 404 : 403;
+        return new NextResponse(message, { status });
+      }
+    }
+
+    const allowed = await canMessage(userId, resolvedBookingId);
     if (!allowed.ok) return new NextResponse(allowed.reason, { status: 403 });
 
     // Optional first message to bootstrap thread
     if (content.trim()) {
-      await sendBookingMessage({ bookingId, senderId: userId, content });
+      await sendBookingMessage({ bookingId: resolvedBookingId, senderId: userId, content });
     }
 
-    return NextResponse.json({ bookingId });
+    return NextResponse.json({ bookingId: resolvedBookingId, conversationId: resolvedBookingId });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
     const status = message.includes("booking") || message.includes("Unauthorized") ? 403 : 500;

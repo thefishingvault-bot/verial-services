@@ -28,7 +28,7 @@ async function threadMessageCount(bookingId: string) {
   return Number(count ?? 0);
 }
 
-export async function ensureBookingRelationship(params: { currentUserId: string; providerId: string }) {
+export async function ensureBookingRelationship(params: { currentUserId: string; providerId: string; serviceId?: string }) {
   const provider = await db.query.providers.findFirst({
     where: eq(providers.id, params.providerId),
     columns: { userId: true, id: true },
@@ -36,8 +36,16 @@ export async function ensureBookingRelationship(params: { currentUserId: string;
 
   if (!provider) throw new Error("Provider not found");
 
+  const bookingWhere = params.serviceId
+    ? and(
+        eq(bookings.providerId, params.providerId),
+        eq(bookings.userId, params.currentUserId),
+        eq(bookings.serviceId, params.serviceId),
+      )
+    : and(eq(bookings.providerId, params.providerId), eq(bookings.userId, params.currentUserId));
+
   const booking = await db.query.bookings.findFirst({
-    where: and(eq(bookings.providerId, params.providerId), eq(bookings.userId, params.currentUserId)),
+    where: bookingWhere,
     columns: { id: true },
   });
 
