@@ -42,6 +42,7 @@ interface ThreadResponse {
 
 interface Props {
 	initialConversationId?: string | null;
+	basePath?: string;
 }
 
 const PAGE_SIZE = 50;
@@ -52,7 +53,7 @@ const presenceStale = (p?: PresenceRecord | undefined | null) => {
 	return Date.now() - p.lastActive > 5 * 60 * 1000;
 };
 
-export function MessagesShell({ initialConversationId = null }: Props) {
+export function MessagesShell({ initialConversationId = null, basePath = "/dashboard/messages" }: Props) {
 	const router = useRouter();
 	const { user } = useUser();
 	const viewerId = user?.id ?? null;
@@ -181,7 +182,7 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 	const handleSelectConversation = useCallback(
 		(id: string) => {
 			setActiveId(id);
-			router.replace(`/dashboard/messages/${id}`);
+			router.replace(`${basePath}/${id}`);
 			setThreadState((prev) => ({
 				...prev,
 				[id]: {
@@ -197,7 +198,7 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 				void loadThread(id);
 			}
 		},
-		[router, threadState, loadThread, threads],
+		[router, threadState, loadThread, threads, basePath],
 	);
 
 	const scrollToBottom = useCallback(() => {
@@ -441,6 +442,11 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 		return () => el.removeEventListener("scroll", onScroll);
 	}, [activeId, activeState?.nextCursor, activeState?.isAppending, loadThread]);
 
+	const [isHydrated, setIsHydrated] = useState(false);
+	useEffect(() => {
+		setIsHydrated(true);
+	}, []);
+
 	const activeThread = threads.find((t) => t.threadId === activeId) ?? null;
 	const counterpartName = activeState?.counterpart?.name || activeThread?.counterpart.name;
 	const counterpartId = activeState?.counterpart?.id || activeThread?.counterpart.id;
@@ -502,7 +508,7 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 												<div className="flex items-center justify-between gap-2">
 													<p className="truncate text-sm font-medium">{conv.counterpart.name}</p>
 													<span className="whitespace-nowrap text-[11px] text-muted-foreground">
-														{conv.lastMessageAt
+														{isHydrated && conv.lastMessageAt
 															? formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })
 															: ""}
 													</span>
@@ -566,7 +572,9 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 									{counterpartPresence && !presenceStale(counterpartPresence)
 										? "Online"
 										: counterpartPresence
-											? `Last active ${formatDistanceToNow(new Date(counterpartPresence.lastActive))} ago`
+													? isHydrated
+														? `Last active ${formatDistanceToNow(new Date(counterpartPresence.lastActive))} ago`
+														: ""
 											: "Secure, booking-only messaging"}
 								</p>
 							</div>
@@ -586,10 +594,12 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 							) : (
 								orderedMessages.map((msg, idx) => {
 									const prev = orderedMessages[idx - 1];
-									const sameDay = prev
-										? format(new Date(prev.createdAt), "yyyy-MM-dd") === format(new Date(msg.createdAt), "yyyy-MM-dd")
-										: false;
-									const showDay = !sameDay;
+									const sameDay =
+										isHydrated && prev
+											? format(new Date(prev.createdAt), "yyyy-MM-dd") ===
+												format(new Date(msg.createdAt), "yyyy-MM-dd")
+											: false;
+									const showDay = isHydrated ? !sameDay : false;
 									const isMe = viewerId ? msg.senderId === viewerId : msg.senderId !== activeState.counterpart?.id;
 									const statusIcon =
 										msg.status === "sending" ? (
@@ -617,7 +627,7 @@ export function MessagesShell({ initialConversationId = null }: Props) {
 												>
 													<p className="whitespace-pre-wrap break-words">{msg.content}</p>
 													<div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/90">
-														<span>{format(new Date(msg.createdAt), "p")}</span>
+														<span>{isHydrated ? format(new Date(msg.createdAt), "p") : ""}</span>
 														{isMe && statusIcon}
 													</div>
 												</div>

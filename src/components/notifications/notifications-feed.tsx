@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { formatDistanceToNow } from "date-fns";
 import { Bell, CheckCircle2, Loader2, Package } from "lucide-react";
 
@@ -29,6 +29,11 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
   const [nextCursor, setNextCursor] = useState<string | null>(initialNextCursor);
   const [isLoading, setIsLoading] = useState(false);
   const [isMarking, setIsMarking] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
@@ -154,7 +159,9 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
                   </div>
                   {notif.body && <p className="text-sm text-muted-foreground">{notif.body}</p>}
                   <p className="text-xs text-muted-foreground">
-                    {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                    {isHydrated
+                      ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
+                      : ""}
                   </p>
                 </div>
                 {!notif.isRead && (

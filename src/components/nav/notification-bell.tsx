@@ -25,6 +25,7 @@ export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
+  const [isHydrated, setIsHydrated] = useState(false);
 
   const fetchNotifications = () => {
     setIsLoading(true);
@@ -36,6 +37,10 @@ export function NotificationBell() {
       })
       .catch(() => setIsLoading(false));
   };
+
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (isSignedIn && isOpen) {
@@ -161,7 +166,9 @@ export function NotificationBell() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })}
+                  {isHydrated
+                    ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
+                    : ""}
                 </p>
                 {notif.body && (
                   <p className="text-xs text-muted-foreground">{notif.body}</p>

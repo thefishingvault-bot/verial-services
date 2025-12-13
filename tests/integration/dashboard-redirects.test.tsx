@@ -18,6 +18,83 @@ describe("dashboard role-based redirects", () => {
 		vi.resetModules();
 	});
 
+	it("redirects providers from /dashboard/messages to /dashboard/provider/messages", async () => {
+		mockRole = "provider";
+
+		vi.mock("@/components/messages/messages-shell", () => ({
+			MessagesShell: () => null,
+		}));
+
+		vi.mock("next/navigation", () => ({
+			redirect: (url: string) => {
+				const err: any = new Error("REDIRECT");
+				err.redirect = url;
+				throw err;
+			},
+		}));
+
+		const { default: MessagesPage } = await import("@/app/dashboard/(customer)/messages/page");
+
+		try {
+			await MessagesPage();
+			throw new Error("Expected redirect, but function completed normally");
+		} catch (err: any) {
+			expect(err.redirect).toBe("/dashboard/provider/messages");
+		}
+	});
+
+	it("redirects providers from /dashboard/messages/:id to /dashboard/provider/messages/:id", async () => {
+		mockRole = "provider";
+
+		vi.mock("@/components/messages/messages-shell", () => ({
+			MessagesShell: () => null,
+		}));
+
+		vi.mock("next/navigation", () => ({
+			redirect: (url: string) => {
+				const err: any = new Error("REDIRECT");
+				err.redirect = url;
+				throw err;
+			},
+		}));
+
+		const { default: ConversationPage } = await import(
+			"@/app/dashboard/(customer)/messages/[conversationId]/page"
+		);
+
+		try {
+			await ConversationPage({ params: Promise.resolve({ conversationId: "booking_123" }) });
+			throw new Error("Expected redirect, but function completed normally");
+		} catch (err: any) {
+			expect(err.redirect).toBe("/dashboard/provider/messages/booking_123");
+		}
+	});
+
+	it("redirects admins from /dashboard/messages to /dashboard/provider/messages", async () => {
+		mockRole = "admin";
+
+		vi.mock("@/components/messages/messages-shell", () => ({
+			MessagesShell: () => null,
+		}));
+
+		vi.mock("next/navigation", () => ({
+			redirect: (url: string) => {
+				const err: any = new Error("REDIRECT");
+				err.redirect = url;
+				throw err;
+			},
+		}));
+
+		const { default: MessagesPage } = await import("@/app/dashboard/(customer)/messages/page");
+
+		try {
+			await MessagesPage();
+			throw new Error("Expected redirect, but function completed normally");
+		} catch (err: any) {
+			expect(err.redirect).toBe("/dashboard/provider/messages");
+		}
+	});
+
 	it("redirects providers from /dashboard to /dashboard/provider", async () => {
 		mockRole = "provider";
 

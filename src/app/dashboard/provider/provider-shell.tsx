@@ -13,7 +13,7 @@ const providerNav = [
   { href: "/dashboard/provider/calendar", label: "Calendar", icon: Briefcase },
   { href: "/dashboard/provider/services", label: "Services", icon: Briefcase },
   { href: "/dashboard/provider/earnings", label: "Earnings", icon: BarChart3 },
-  { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
+  { href: "/dashboard/provider/messages", label: "Messages", icon: MessageSquare },
   { href: "/dashboard/provider/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/provider/profile", label: "Provider Profile", icon: User },
 ];
