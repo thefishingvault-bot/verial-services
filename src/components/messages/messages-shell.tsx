@@ -456,7 +456,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		<div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
 			<Card
 				ref={listRef}
-				className={cn("border-r lg:w-80 lg:flex-shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
+					className={cn("border-r lg:w-96 lg:flex-shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
 			>
 				<div className="flex items-center justify-between border-b px-4 py-3">
 					<div>
