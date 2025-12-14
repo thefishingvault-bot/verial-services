@@ -622,11 +622,16 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 												<div
 													className={cn(
 														"max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow-sm",
-														isMe ? "bg-primary text-primary-foreground" : "bg-white text-foreground",
+														isMe ? "bg-primary text-primary-foreground" : "bg-background text-foreground",
 													)}
 												>
 													<p className="whitespace-pre-wrap break-words">{msg.content}</p>
-													<div className="mt-1 flex items-center gap-1 text-[10px] text-muted-foreground/90">
+													<div
+														className={cn(
+															"mt-1 flex items-center gap-1 text-[10px]",
+															isMe ? "text-primary-foreground/80" : "text-muted-foreground",
+														)}
+													>
 														<span>{isHydrated ? format(new Date(msg.createdAt), "p") : ""}</span>
 														{isMe && statusIcon}
 													</div>
@@ -638,7 +643,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 							)}
 						</div>
 
-						<div className="border-t bg-white px-4 py-3">
+						<div className="border-t bg-background px-4 py-3">
 							<div className="flex items-end gap-2 rounded-xl border bg-muted/40 px-3 py-2">
 								<button
 									className="rounded-md p-1 text-muted-foreground hover:text-foreground"
