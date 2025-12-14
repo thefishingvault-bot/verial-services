@@ -26,6 +26,8 @@ export async function GET() {
             businessName: true,
             handle: true,
             stripeConnectId: true,
+            isVerified: true,
+            trustLevel: true,
             baseSuburb: true,
             baseRegion: true,
             serviceRadiusKm: true,
