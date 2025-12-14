@@ -6,7 +6,7 @@ import { useMemo, useState } from "react";
 import { Heart, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FavoriteToggle } from "@/components/services/favorite-toggle";
 import { cn, formatPrice, getTrustBadge } from "@/lib/utils";
 import type { FavoriteService, FavoriteSort } from "@/lib/favorites";
@@ -31,10 +31,24 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
     });
   };
 
-  if (sortedFavorites.length === 0) return null;
+  if (sortedFavorites.length === 0) {
+    return (
+      <Card className="mt-6 border-dashed bg-white">
+        <CardHeader>
+          <CardTitle className="text-xl">No favorites yet</CardTitle>
+          <CardDescription>Tap the heart on any service to keep it close for later.</CardDescription>
+        </CardHeader>
+        <CardFooter>
+          <Button asChild>
+            <Link href="/services">Browse services</Link>
+          </Button>
+        </CardFooter>
+      </Card>
+    );
+  }
 
   return (
-    <div className="mt-6 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+    <div className="mt-6 grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
       {sortedFavorites.map((fav) => {
         const { Icon, color } = getTrustBadge(fav.provider.trustLevel);
         const savedOn = new Intl.DateTimeFormat("en-NZ", { month: "short", day: "numeric" }).format(
