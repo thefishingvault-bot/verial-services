@@ -80,7 +80,7 @@ export default function ServicesPageShell({
   };
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-6 lg:py-10">
+    <div className="w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8 lg:py-10">
       <div className="space-y-6 lg:flex lg:items-start lg:gap-8 lg:space-y-0">
         {/* Sidebar (desktop) / top block (mobile) */}
         <aside className="w-full lg:w-80 lg:shrink-0">
