@@ -137,7 +137,9 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
                 tabIndex={0}
                 className={cn(
                   "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors",
-                  notif.isRead ? "bg-white hover:bg-gray-50" : "bg-blue-50/60 hover:bg-blue-50",
+                  notif.isRead
+                    ? "bg-background hover:bg-muted/50"
+                    : "bg-primary/5 hover:bg-primary/10",
                 )}
                 onClick={() => handleOpen(notif)}
                 onKeyDown={(e) => {
@@ -155,7 +157,7 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
                     <p className={cn("text-sm", !notif.isRead && "font-semibold text-foreground")}>
                       {notif.title || notif.message}
                     </p>
-                    {!notif.isRead ? <span className="h-2 w-2 rounded-full bg-blue-600" /> : null}
+                    {!notif.isRead ? <span className="h-2 w-2 rounded-full bg-primary" /> : null}
                   </div>
                   {notif.body && <p className="text-sm text-muted-foreground">{notif.body}</p>}
                   <p className="text-xs text-muted-foreground">

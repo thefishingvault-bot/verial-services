@@ -98,13 +98,13 @@ export function NotificationBell() {
           }
         >
           {unreadCount > 0 && (
-            <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-red-600 ring-2 ring-background" />
+            <span className="absolute right-1.5 top-1.5 inline-flex h-2.5 w-2.5 rounded-full bg-destructive ring-2 ring-background" />
           )}
           <Bell className="h-5 w-5" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-80 p-0" align="end">
-        <div className="flex items-center justify-between border-b bg-gray-50/50 px-4 py-3">
+        <div className="flex items-center justify-between border-b bg-muted/40 px-4 py-3">
           <h4 className="text-sm font-semibold">Notifications</h4>
           <div className="flex items-center gap-2">
             <Button
@@ -144,7 +144,9 @@ export function NotificationBell() {
                 onClick={() => handleNotificationClick(notif)}
                 className={cn(
                   "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
-                  notif.isRead ? "bg-white hover:bg-gray-50" : "bg-blue-50/50 hover:bg-blue-50",
+                  notif.isRead
+                    ? "bg-background hover:bg-muted/50"
+                    : "bg-primary/5 hover:bg-primary/10",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
@@ -162,7 +164,7 @@ export function NotificationBell() {
                     )}
                   </div>
                   {!notif.isRead && (
-                    <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-blue-600" />
+                    <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -170,13 +172,10 @@ export function NotificationBell() {
                     ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
                     : ""}
                 </p>
-                {notif.body && (
-                  <p className="text-xs text-muted-foreground">{notif.body}</p>
-                )}
               </div>
             ))}
         </div>
-        <div className="border-t bg-gray-50/50 px-4 py-2 text-right">
+        <div className="border-t bg-muted/40 px-4 py-2 text-right">
           <Button
             variant="link"
             size="sm"

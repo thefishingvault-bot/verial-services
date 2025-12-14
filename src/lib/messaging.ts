@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNull, ne, or, sql, lt, lte } from "drizzle-or
 
 import { bookings, messageThreads, messages, providers, services, users } from "@/db/schema";
 import { db } from "@/lib/db";
+import { createNotification } from "@/lib/notifications";
 
 const ALLOWED_BOOKING_STATUSES = ["pending", "accepted", "paid", "completed", "disputed", "refunded"] as const;
 const COMPLETED_WINDOW_DAYS = 90;
@@ -276,6 +277,35 @@ export async function sendBookingMessage(params: {
     .where(eq(messageThreads.id, thread.id));
 
   await refreshThreadUnreadCount(params.bookingId);
+
+  // Customer notifications: when a provider replies, create an in-app notification for the customer.
+  try {
+    const customerUserId = allowed.booking.userId;
+    const providerUserId = allowed.booking.provider.userId;
+    const isProviderSender = params.senderId === providerUserId && counterpartUserId === customerUserId;
+
+    if (isProviderSender) {
+      const senderUser = await db.query.users.findFirst({
+        where: eq(users.id, params.senderId),
+        columns: { firstName: true, lastName: true },
+      });
+
+      const senderName =
+        `${senderUser?.firstName ?? ""} ${senderUser?.lastName ?? ""}`.trim() || "Provider";
+
+      await createNotification({
+        userId: customerUserId,
+        type: "message",
+        title: `New message from ${senderName}`,
+        body: cleaned.length > 160 ? `${cleaned.slice(0, 160)}…` : cleaned,
+        actionUrl: `/dashboard/messages/${params.bookingId}`,
+        bookingId: params.bookingId,
+        providerId: allowed.booking.providerId,
+      });
+    }
+  } catch {
+    // Notification creation is best-effort; never block messaging.
+  }
 
   return messageRecord;
 }
