@@ -36,7 +36,7 @@ const NavigationCards = () => (
         </CardHeader>
       </Card>
     </Link>
-    <Link href="/dashboard/bookings">
+    <Link href="/dashboard/bookings" className="hidden sm:block">
       <Card className="hover:shadow-lg transition-shadow">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
@@ -47,7 +47,7 @@ const NavigationCards = () => (
         </CardHeader>
       </Card>
     </Link>
-    <Link href="/dashboard/messages">
+    <Link href="/dashboard/messages" className="hidden sm:block">
       <Card className="hover:shadow-lg transition-shadow">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
@@ -69,7 +69,7 @@ const NavigationCards = () => (
         </CardHeader>
       </Card>
     </Link>
-    <Link href="/dashboard/settings">
+    <Link href="/dashboard/settings" className="hidden sm:block">
       <Card className="hover:shadow-lg transition-shadow">
         <CardHeader className="flex flex-row items-center justify-between">
           <div className="space-y-1">
