@@ -26,7 +26,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <header className="sticky top-0 z-40 border-b bg-background/80 backdrop-blur">
-        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
+        <div className="mx-auto flex h-14 w-full max-w-7xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
               P
@@ -43,8 +43,8 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
 
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-4 px-4 py-6 md:flex-row md:gap-6">
-        <aside className="hidden w-64 shrink-0 rounded-lg border bg-background p-3 md:block">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 px-4 py-6 md:flex-row md:gap-6">
+        <aside className="hidden w-60 shrink-0 rounded-lg border bg-background p-3 md:block">
           <nav className="space-y-1">
             {providerNav.map((link) => {
               const Icon = link.icon;

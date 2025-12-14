@@ -1,9 +1,11 @@
 import Link from "next/link";
-import { auth } from "@clerk/nextjs/server";
 import { requireProvider } from "@/lib/auth-guards";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { formatPrice } from "@/lib/utils";
+import { db } from "@/lib/db";
+import { bookings, providerEarnings, providers } from "@/db/schema";
+import { and, eq, gte, inArray, sql } from "drizzle-orm";
 
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
@@ -12,65 +14,68 @@ type ProviderOverviewMetrics = {
   completedPayoutsNet: number;
 };
 
-async function loadOverview(): Promise<ProviderOverviewMetrics> {
-  const fetchWithAuth = (path: string) =>
-    fetch(path, {
-      cache: "no-store",
-    }).catch(() => null);
+async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
+  const provider = await db.query.providers.findFirst({
+    where: eq(providers.userId, userId),
+    columns: { id: true },
+  });
 
-  const [bookingsRes, earningsRes] = await Promise.all([
-    fetchWithAuth("/api/provider/bookings/list"),
-    fetchWithAuth("/api/provider/earnings/summary"),
-  ]);
-
-  let newRequestsCount = 0;
-  let confirmedThisMonthCount = 0;
-  let pendingPayoutsNet = 0;
-  let completedPayoutsNet = 0;
-
-  if (bookingsRes?.ok) {
-    try {
-      const all = (await bookingsRes.json()) as Array<{
-        status: string;
-        createdAt: string;
-      }>;
-      const now = new Date();
-      const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-      newRequestsCount = all.filter((b) => b.status === "pending").length;
-      confirmedThisMonthCount = all.filter((b) => {
-        const created = new Date(b.createdAt);
-        return (
-          ["accepted", "paid", "completed"].includes(b.status) && created >= monthStart
-        );
-      }).length;
-    } catch (err) {
-      console.error("Failed to parse provider bookings list", err);
-    }
+  if (!provider) {
+    return {
+      newRequestsCount: 0,
+      confirmedThisMonthCount: 0,
+      pendingPayoutsNet: 0,
+      completedPayoutsNet: 0,
+    };
   }
 
-  if (earningsRes?.ok) {
-    try {
-      const summary = (await earningsRes.json()) as {
-        pendingPayoutsNet?: number;
-        completedPayoutsNet?: number;
-      };
-      pendingPayoutsNet = summary.pendingPayoutsNet ?? 0;
-      completedPayoutsNet = summary.completedPayoutsNet ?? 0;
-    } catch (err) {
-      console.error("Failed to parse provider earnings summary", err);
-    }
-  }
+  const now = new Date();
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  return { newRequestsCount, confirmedThisMonthCount, pendingPayoutsNet, completedPayoutsNet };
+  const [pendingBookingsRow, confirmedMonthRow, pendingNetRow, paidOutNetRow] =
+    await Promise.all([
+      db
+        .select({ count: sql<number>`cast(count(*) as int)` })
+        .from(bookings)
+        .where(and(eq(bookings.providerId, provider.id), eq(bookings.status, "pending")))
+        .then((rows) => rows[0]),
+      db
+        .select({ count: sql<number>`cast(count(*) as int)` })
+        .from(bookings)
+        .where(
+          and(
+            eq(bookings.providerId, provider.id),
+            inArray(bookings.status, ["accepted", "paid", "completed"]),
+            gte(bookings.createdAt, monthStart),
+          ),
+        )
+        .then((rows) => rows[0]),
+      db
+        .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
+        .from(providerEarnings)
+        .where(
+          and(eq(providerEarnings.providerId, provider.id), eq(providerEarnings.status, "awaiting_payout")),
+        )
+        .then((rows) => rows[0]),
+      db
+        .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
+        .from(providerEarnings)
+        .where(and(eq(providerEarnings.providerId, provider.id), eq(providerEarnings.status, "paid_out")))
+        .then((rows) => rows[0]),
+    ]);
+
+  return {
+    newRequestsCount: Number(pendingBookingsRow?.count ?? 0),
+    confirmedThisMonthCount: Number(confirmedMonthRow?.count ?? 0),
+    pendingPayoutsNet: Number(pendingNetRow?.net ?? 0),
+    completedPayoutsNet: Number(paidOutNetRow?.net ?? 0),
+  };
 }
 
 export default async function ProviderDashboardPage() {
-  await requireProvider();
-  // auth() called to ensure correct user context for API routes when using absolute URLs
-  await auth();
+  const { userId } = await requireProvider();
 
-  const metrics = await loadOverview();
+  const metrics = await loadOverview(userId);
 
   const cards: Array<{ label: string; value: string; hint: string }> = [
     {
