@@ -80,22 +80,19 @@ export default function ServicesPageShell({
   };
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-4 lg:px-6 py-6 lg:py-10">
-      <div className="space-y-6 lg:flex lg:gap-6 lg:space-y-0">
+    <div className="mx-auto w-full max-w-7xl px-4 py-6 lg:px-6 lg:py-10">
+      <div className="space-y-6 lg:flex lg:items-start lg:gap-8 lg:space-y-0">
         {/* Sidebar (desktop) / top block (mobile) */}
-        <aside className="lg:w-80 lg:shrink-0 lg:z-10">
-          <div className="border-b border-slate-200 pb-3 mb-2 lg:mb-0 lg:border-b-0 lg:pb-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:overflow-auto">
-            <ServicesSearchAndFilters
-              filters={filters}
-              onFiltersChange={handleFiltersChange}
-            />
+        <aside className="w-full lg:w-80 lg:shrink-0">
+          <div className="border-b border-slate-200 pb-3 lg:border-b-0 lg:pb-0 lg:sticky lg:top-24 lg:max-h-[calc(100vh-6rem)] lg:overflow-auto">
+            <ServicesSearchAndFilters filters={filters} onFiltersChange={handleFiltersChange} />
           </div>
         </aside>
 
         {/* Results */}
-        <main className="relative z-0 min-w-0 flex-1 space-y-6">
+        <main className="min-w-0 flex-1 space-y-6">
           {/* KPI row */}
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <div className="rounded-xl border bg-white shadow-sm">
               <div className="px-4 pt-3 pb-1">
                 <p className="text-xs font-medium text-slate-500 uppercase tracking-wide">
