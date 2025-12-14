@@ -82,8 +82,8 @@ export default function ServicesPageShell({
   return (
     <div className="mx-auto w-full max-w-7xl px-4 py-6 md:px-6 lg:px-8 lg:py-10">
       <div className="space-y-6">
-        {/* Search + filters (top, sticky on md+) */}
-        <div className="border-b border-slate-200 pb-4 md:sticky md:top-24 md:z-10 md:bg-background">
+        {/* Search + filters (top, sticky under header) */}
+        <div className="sticky top-16 z-40 border-b border-slate-200 bg-background pb-4">
           <ServicesSearchAndFilters filters={filters} onFiltersChange={handleFiltersChange} />
         </div>
 
