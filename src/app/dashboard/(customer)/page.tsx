@@ -354,8 +354,8 @@ export default async function DashboardPage() {
   const data = await getCustomerDashboardData();
 
   return (
-    <div className="container mx-auto max-w-6xl px-4 py-6 md:py-10 space-y-8">
-      <header className="sticky top-0 z-10 -mx-4 mb-2 bg-background/90 px-4 py-3 backdrop-blur md:-mx-8 md:px-8">
+    <div className="w-full space-y-8">
+      <header className="sticky top-16 z-10 rounded-lg border bg-background/90 px-4 py-3 backdrop-blur">
         <div className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">Dashboard</p>
           <h1 className="text-3xl font-bold leading-tight">Welcome back, {data.user.name}</h1>

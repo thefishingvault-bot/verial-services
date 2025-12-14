@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -147,13 +148,20 @@ export default function CustomerBookingsPage() {
 
     if (bookings.length === 0) {
       return (
-        <div className="flex flex-col items-center justify-center p-8 text-center">
-          <Package className="h-16 w-16 text-muted-foreground mb-4" />
-          <h3 className="text-xl font-semibold">No bookings yet</h3>
-          <p className="text-muted-foreground">
-            When you book a service, it will appear here.
-          </p>
-        </div>
+        <Card className="border-dashed">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Package className="h-5 w-5 text-muted-foreground" />
+              No bookings yet
+            </CardTitle>
+            <CardDescription>When you book a service, it will appear here.</CardDescription>
+          </CardHeader>
+          <CardFooter>
+            <Button asChild>
+              <Link href="/services">Browse services</Link>
+            </Button>
+          </CardFooter>
+        </Card>
       );
     }
 
@@ -252,8 +260,8 @@ export default function CustomerBookingsPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-4 md:p-8">
-      <h1 className="text-3xl font-bold mb-6">My Bookings</h1>
+    <div className="w-full space-y-6">
+      <h1 className="text-3xl font-bold">My Bookings</h1>
       {renderContent()}
     </div>
   );

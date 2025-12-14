@@ -33,19 +33,24 @@ export default function DashboardLayout({
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
       <SiteHeader />
-      <div className="mx-auto flex w-full max-w-6xl flex-1 flex-col px-4 py-6 md:flex-row md:gap-6">
-        <aside className="hidden w-64 shrink-0 space-y-2 rounded-lg border bg-background p-4 md:block">
+      <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-4 py-6 md:flex-row md:gap-8">
+        <aside className="hidden w-60 shrink-0 space-y-2 rounded-lg border bg-background p-3 md:block">
           <p className="text-sm font-semibold text-muted-foreground">Customer</p>
           <nav className="space-y-1">
             {navLinks.map((link) => {
               const Icon = link.icon;
+              const isActive = pathname === link.href;
               return (
                 <Link
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground",
+                    "flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-muted text-foreground"
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <Icon className="h-4 w-4" />
                   <span>{link.label}</span>
@@ -61,7 +66,7 @@ export default function DashboardLayout({
           </div>
         </aside>
 
-        <main className="flex-1 overflow-hidden">{children}</main>
+        <main className="min-w-0 flex-1">{children}</main>
       </div>
 
       {/* Mobile Bottom Navigation */}
