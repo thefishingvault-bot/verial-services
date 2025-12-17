@@ -23,8 +23,10 @@ export async function loadProviderCalendar(params: {
     columns: {
       id: true,
       status: true,
-      serviceId: true,
       scheduledDate: true,
+    },
+    with: {
+      service: { columns: { title: true } },
     },
   });
 
@@ -50,7 +52,7 @@ export async function loadProviderCalendar(params: {
       status: b.status,
       start: b.scheduledDate as Date,
       end: b.scheduledDate as Date,
-      title: "Booking",
+      title: b.service?.title ?? "Booking",
     }));
 
   const timeOffEvents: CalendarEvent[] = timeOffs.map((t) => ({

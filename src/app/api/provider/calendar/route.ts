@@ -19,8 +19,10 @@ export async function GET(req: NextRequest) {
     const startParam = req.nextUrl.searchParams.get("start");
     const endParam = req.nextUrl.searchParams.get("end");
 
-    const start = startParam ? new Date(startParam) : undefined;
-    const end = endParam ? new Date(endParam) : undefined;
+    const startRaw = startParam ? new Date(startParam) : undefined;
+    const endRaw = endParam ? new Date(endParam) : undefined;
+    const start = startRaw && !Number.isNaN(startRaw.getTime()) ? startRaw : undefined;
+    const end = endRaw && !Number.isNaN(endRaw.getTime()) ? endRaw : undefined;
 
     const data = await loadProviderCalendar({ providerId: provider.id, rangeStart: start, rangeEnd: end });
 
