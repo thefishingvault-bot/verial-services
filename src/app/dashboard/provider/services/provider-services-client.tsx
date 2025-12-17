@@ -26,6 +26,9 @@ interface Service {
   priceInCents: number;
   category: string;
   chargesGst: boolean;
+  isPublished?: boolean;
+  region?: string | null;
+  suburb?: string | null;
 }
 
 type ProviderServicesListProps = {
@@ -63,9 +66,14 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                 <CardTitle className="truncate" title={service.title}>
                   {service.title}
                 </CardTitle>
-                <Badge variant="outline" className="w-fit capitalize">
-                  {service.category}
-                </Badge>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant="outline" className="w-fit capitalize">
+                    {service.category}
+                  </Badge>
+                  <Badge variant={service.isPublished ? 'secondary' : 'outline'} className="w-fit">
+                    {service.isPublished ? 'Published' : 'Draft'}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent>
                 <p className="font-bold">
@@ -74,11 +82,17 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                     {service.chargesGst ? 'inc. GST' : 'exc. GST'}
                   </span>
                 </p>
+                {(service.suburb || service.region) && (
+                  <p className="mt-2 text-sm text-muted-foreground truncate">
+                    {service.suburb ? `${service.suburb}${service.region ? `, ${service.region}` : ''}` : service.region}
+                  </p>
+                )}
               </CardContent>
-              <CardFooter className="flex justify-between">
-                <Button variant="ghost" size="sm" asChild>
-                  <Link href={`/s/${service.slug}`} target="_blank">
-                    <ExternalLink className="h-4 w-4" />
+              <CardFooter className="flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/s/${service.slug}`} target="_blank" rel="noreferrer" aria-label="View service">
+                    <ExternalLink className="h-4 w-4 sm:mr-2" />
+                    <span className="hidden sm:inline">View</span>
                   </Link>
                 </Button>
                 <div className="flex gap-2">
@@ -157,12 +171,16 @@ export function ProviderServicesClient() {
     setIsDeleting(serviceId);
     try {
       const res = await fetch(`/api/services/${serviceId}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to delete service');
+      if (!res.ok) {
+        const message = await res.text().catch(() => 'Failed to delete service');
+        throw new Error(message || 'Failed to delete service');
+      }
 
       toast({ title: 'Service deleted' });
       fetchServices();
-    } catch {
-      toast({ variant: 'destructive', title: 'Error', description: 'Could not delete service.' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Could not delete service.';
+      toast({ variant: 'destructive', title: 'Error', description: message });
     } finally {
       setIsDeleting(null);
     }

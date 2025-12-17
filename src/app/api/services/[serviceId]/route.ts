@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { services, providers, serviceCategoryEnum } from "@/db/schema";
+import { bookings, services, providers, serviceCategoryEnum } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
@@ -36,7 +36,10 @@ export async function GET(
       return new NextResponse("Service not found", { status: 404 });
     }
 
-    return NextResponse.json(service);
+    return NextResponse.json({
+      ...service,
+      isPublished: service.isPublished ?? false,
+    });
   } catch (error) {
     console.error("[API_SERVICE_GET]", error);
     return new NextResponse("Internal Server Error", { status: 500 });
@@ -153,6 +156,19 @@ export async function DELETE(
 
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    // Safety: bookings.serviceId may be NOT NULL in the DB schema. Prevent deletion if any booking exists.
+    const existingBooking = await db.query.bookings.findFirst({
+      where: eq(bookings.serviceId, serviceId),
+      columns: { id: true },
+    });
+
+    if (existingBooking) {
+      return new NextResponse(
+        "This service can’t be deleted because it has bookings. You can unpublish it instead.",
+        { status: 409 },
+      );
     }
 
     const [deleted] = await db
