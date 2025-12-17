@@ -368,7 +368,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                           onClick={() => setSelectedDate(day.date)}
                           title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                           className={cn(
-                            "min-h-[72px] md:min-h-[92px] rounded border p-1 text-left transition",
+                            "min-h-[68px] md:min-h-[92px] rounded border p-1 text-left transition",
                             day.inCurrentMonth ? "bg-background" : "bg-muted/30",
                             isSelected && "ring-2 ring-primary",
                             hasTimeOff && "border-destructive/30 bg-destructive/5",
@@ -379,12 +379,40 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                               {format(day.date, "d")}
                             </span>
                             {dayEventsForDate.length > 0 && (
-                              <Badge variant="secondary" className="text-[10px]">
+                              <Badge variant="secondary" className="text-[10px] px-1.5">
                                 {dayEventsForDate.length}
                               </Badge>
                             )}
                           </div>
-                          <div className="mt-1 space-y-1">
+                          {/* Mobile: compact dots (avoid unreadable truncated pills) */}
+                          <div className="mt-2 flex flex-wrap items-center gap-1 sm:hidden">
+                            {dayEventsForDate.slice(0, 4).map((event) => (
+                              <span
+                                key={`${event.type}-${event.id}`}
+                                className={cn("h-2 w-2 rounded-full", getEventDotClass(event))}
+                                aria-label={
+                                  event.type === "time_off"
+                                    ? "Time off"
+                                    : getBookingStatusLabel(event.status)
+                                }
+                                title={
+                                  event.type === "time_off"
+                                    ? event.title
+                                      ? `Time off • ${event.title}`
+                                      : "Time off"
+                                    : `${getBookingStatusLabel(event.status)} • ${event.title}`
+                                }
+                              />
+                            ))}
+                            {dayEventsForDate.length > 4 && (
+                              <span className="text-[10px] text-muted-foreground">
+                                +{dayEventsForDate.length - 4}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Desktop/tablet: show readable pills */}
+                          <div className="mt-1 hidden space-y-1 sm:block">
                             {dayEventsForDate.slice(0, maxBadges).map((event) => (
                               <div
                                 key={`${event.type}-${event.id}`}
