@@ -187,10 +187,24 @@ export async function PATCH(req: Request) {
         .set({
           status: targetStatus,
           paymentIntentId,
+          providerDeclineReason: null,
+          providerCancelReason: null,
           updatedAt: new Date(),
         })
-        .where(and(eq(bookings.id, bookingId), eq(bookings.providerId, provider.id)))
+        .where(
+          and(
+            eq(bookings.id, bookingId),
+            eq(bookings.providerId, provider.id),
+            eq(bookings.status, booking.status as BookingStatus),
+          ),
+        )
         .returning();
+
+      if (!updated) {
+        return new NextResponse("Booking status changed. Please refresh and try again.", {
+          status: 409,
+        });
+      }
 
       console.log(`[API_BOOKING_UPDATE] Provider ${provider.id} accepted Booking ${bookingId}`);
 
@@ -207,9 +221,26 @@ export async function PATCH(req: Request) {
     // Update the booking after validation (non-accept actions)
     const [updatedBooking] = await db
       .update(bookings)
-      .set({ status: targetStatus, updatedAt: new Date() })
-      .where(and(eq(bookings.id, bookingId), eq(bookings.providerId, provider.id)))
+      .set({
+        status: targetStatus,
+        providerDeclineReason: action === "decline" ? reason ?? null : null,
+        providerCancelReason: action === "cancel" ? reason ?? null : null,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(bookings.id, bookingId),
+          eq(bookings.providerId, provider.id),
+          eq(bookings.status, booking.status as BookingStatus),
+        ),
+      )
       .returning();
+
+    if (!updatedBooking) {
+      return new NextResponse("Booking status changed. Please refresh and try again.", {
+        status: 409,
+      });
+    }
 
     console.log(`[API_BOOKING_UPDATE] Provider ${provider.id} updated Booking ${bookingId} to ${targetStatus}`);
 
@@ -239,6 +270,10 @@ async function notifyCustomer(args: {
   try {
     const bookingWithUser = await db.query.bookings.findFirst({
       where: eq(bookings.id, bookingId),
+      columns: {
+        id: true,
+        providerId: true,
+      },
       with: {
         user: { columns: { id: true, email: true } },
         service: { columns: { title: true } },
@@ -286,8 +321,19 @@ async function notifyCustomer(args: {
 
     await createNotification({
       userId: bookingWithUser.user.id,
+      type: "booking",
+      title: subject,
+      body:
+        status === "declined" || status === "canceled_provider"
+          ? reason
+            ? `Reason: ${reason}`
+            : null
+          : null,
       message: subject,
       href: "/dashboard/bookings",
+      actionUrl: `/dashboard/bookings/${bookingId}`,
+      bookingId,
+      providerId: bookingWithUser.providerId,
     });
   } catch (emailError) {
     console.error("[API_BOOKING_UPDATE] Failed to send notification:", emailError);

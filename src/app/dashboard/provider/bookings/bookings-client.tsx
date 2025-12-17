@@ -14,7 +14,17 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
 import { formatPrice } from "@/lib/utils";
 
 type ProviderBookingStatus =
@@ -44,30 +54,6 @@ type ProviderBooking = {
   user: { firstName: string | null; lastName: string | null; email: string };
 };
 
-const getStatusBadgeClass = (status: ProviderBookingStatus) => {
-  switch (status) {
-    case "pending":
-      return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
-    case "accepted":
-      return "bg-blue-100 text-blue-800 hover:bg-blue-100";
-    case "declined":
-    case "canceled_provider":
-      return "bg-red-100 text-red-800 hover:bg-red-100";
-    case "canceled_customer":
-      return "bg-orange-100 text-orange-800 hover:bg-orange-100";
-    case "paid":
-      return "bg-green-100 text-green-800 hover:bg-green-100";
-    case "completed":
-      return "bg-gray-100 text-gray-800 hover:bg-gray-100";
-    case "disputed":
-      return "bg-amber-100 text-amber-800 hover:bg-amber-100";
-    case "refunded":
-      return "bg-slate-100 text-slate-800 hover:bg-slate-100";
-    default:
-      return "bg-gray-100 text-gray-800";
-  }
-};
-
 const ACTIONS = ["accept", "decline", "cancel", "mark-completed"] as const;
 type ProviderAction = (typeof ACTIONS)[number];
 
@@ -76,6 +62,10 @@ export function ProviderBookingsClient() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
+  const [pendingReasonAction, setPendingReasonAction] = useState<"decline" | "cancel" | null>(null);
+  const [pendingBooking, setPendingBooking] = useState<ProviderBooking | null>(null);
+  const [reason, setReason] = useState("");
   const { toast } = useToast();
 
   const fetchBookings = useCallback((signal?: AbortSignal) => {
@@ -106,22 +96,22 @@ export function ProviderBookingsClient() {
     return () => controller.abort();
   }, [fetchBookings]);
 
-  const handleUpdateStatus = async (bookingId: string, action: ProviderAction) => {
+  const handleUpdateStatus = async (
+    bookingId: string,
+    action: ProviderAction,
+    actionReason?: string,
+  ) => {
     setActionLoading(bookingId + action);
     try {
-      let reason: string | undefined;
-      if (action === "decline" || action === "cancel") {
-        reason = window.prompt("Please provide a reason (visible to the customer):") || undefined;
-        if (!reason) {
-          setActionLoading(null);
-          return;
-        }
+      const needsReason = action === "decline" || action === "cancel";
+      if (needsReason && !actionReason) {
+        throw new Error("A reason is required.");
       }
 
       const res = await fetch("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, action, reason }),
+        body: JSON.stringify({ bookingId, action, reason: actionReason }),
       });
 
       if (!res.ok) {
@@ -138,6 +128,13 @@ export function ProviderBookingsClient() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const startReasonAction = (booking: ProviderBooking, action: "decline" | "cancel") => {
+    setPendingBooking(booking);
+    setPendingReasonAction(action);
+    setReason("");
+    setReasonDialogOpen(true);
   };
 
   const { requests, upcoming, history } = useMemo(() => {
@@ -205,6 +202,7 @@ export function ProviderBookingsClient() {
                 booking={booking}
                 actionLoading={actionLoading}
                 onUpdateStatus={handleUpdateStatus}
+                onStartReasonAction={startReasonAction}
               />
             ))}
           </div>
@@ -226,6 +224,7 @@ export function ProviderBookingsClient() {
                 booking={booking}
                 actionLoading={actionLoading}
                 onUpdateStatus={handleUpdateStatus}
+                onStartReasonAction={startReasonAction}
               />
             ))}
           </div>
@@ -245,6 +244,7 @@ export function ProviderBookingsClient() {
                 booking={booking}
                 actionLoading={actionLoading}
                 onUpdateStatus={handleUpdateStatus}
+                onStartReasonAction={startReasonAction}
               />
             ))}
           </div>
@@ -252,6 +252,74 @@ export function ProviderBookingsClient() {
           <p className="text-xs text-muted-foreground">No past bookings yet.</p>
         )}
       </section>
+
+      <Dialog
+        open={reasonDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !actionLoading) {
+            setReasonDialogOpen(false);
+            setPendingReasonAction(null);
+            setPendingBooking(null);
+            setReason("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {pendingReasonAction === "decline" ? "Decline booking" : "Cancel booking"}
+            </DialogTitle>
+            <DialogDescription>
+              Please provide a short explanation that will be shown to the customer.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground" htmlFor="provider-booking-reason">
+              Reason
+            </label>
+            <Textarea
+              id="provider-booking-reason"
+              rows={4}
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Eg. I'm unavailable at that time, or this job is outside my usual scope."
+            />
+            {pendingBooking ? (
+              <p className="text-[11px] text-muted-foreground">
+                For: <span className="font-medium text-foreground">{pendingBooking.service.title}</span>
+              </p>
+            ) : null}
+          </div>
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!actionLoading) {
+                  setReasonDialogOpen(false);
+                  setPendingReasonAction(null);
+                  setPendingBooking(null);
+                  setReason("");
+                }
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              disabled={!pendingBooking || !pendingReasonAction || !reason.trim()}
+              onClick={async () => {
+                if (!pendingBooking || !pendingReasonAction) return;
+                await handleUpdateStatus(pendingBooking.id, pendingReasonAction, reason.trim());
+                setReasonDialogOpen(false);
+                setPendingReasonAction(null);
+                setPendingBooking(null);
+                setReason("");
+              }}
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -259,9 +327,10 @@ export function ProviderBookingsClient() {
 function BookingRow(props: {
   booking: ProviderBooking;
   actionLoading: string | null;
-  onUpdateStatus: (bookingId: string, action: ProviderAction) => void;
+  onUpdateStatus: (bookingId: string, action: ProviderAction, actionReason?: string) => void;
+  onStartReasonAction: (booking: ProviderBooking, action: "decline" | "cancel") => void;
 }) {
-  const { booking, actionLoading, onUpdateStatus } = props;
+  const { booking, actionLoading, onUpdateStatus, onStartReasonAction } = props;
   const isProcessing = (action: ProviderAction) => actionLoading === booking.id + action;
 
   const scheduled = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
@@ -273,40 +342,50 @@ function BookingRow(props: {
   return (
     <Card className="overflow-hidden">
       <div className="border-l-4 border-primary">
-        <CardHeader className="pb-2">
+        <CardHeader className="pb-3">
           <div className="flex items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base leading-tight">{booking.service.title}</CardTitle>
-              <CardDescription className="mt-1 text-xs">
-                {booking.user.firstName} {booking.user.lastName} · {booking.user.email}
+            <div className="min-w-0">
+              <CardTitle className="text-base leading-tight">
+                <Link
+                  href={`/dashboard/provider/bookings/${booking.id}`}
+                  className="hover:underline"
+                >
+                  {booking.service.title}
+                </Link>
+              </CardTitle>
+              <CardDescription className="mt-1 text-xs line-clamp-1">
+                {[booking.user.firstName, booking.user.lastName].filter(Boolean).join(" ") || "Customer"}
+                {booking.user.email ? ` · ${booking.user.email}` : ""}
               </CardDescription>
             </div>
-            <Badge variant="outline" className={getStatusBadgeClass(booking.status)}>
-              {booking.status.toUpperCase()}
+            <Badge variant={getBookingStatusVariant(booking.status)}>
+              {getBookingStatusLabel(booking.status)}
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="pb-2 text-xs md:text-sm">
-          <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
-            <div className="flex items-center gap-1">
-              <CalendarClock className="h-4 w-4" />
-              <span>
-                {dateStr}
-                {timeStr && ` at ${timeStr}`}
-              </span>
+        <CardContent className="pb-2">
+          <div className="grid gap-2 md:grid-cols-[1fr_auto] md:items-center">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <div className="flex items-center gap-1">
+                <CalendarClock className="h-4 w-4" />
+                <span>
+                  {dateStr}
+                  {timeStr && ` at ${timeStr}`}
+                </span>
+              </div>
+              {booking.provider.serviceRadiusKm &&
+                (booking.provider.baseSuburb || booking.provider.baseRegion) && (
+                  <span className="text-[11px] text-muted-foreground">
+                    Service area:{" "}
+                    {booking.provider.baseSuburb
+                      ? `up to ${booking.provider.serviceRadiusKm} km from ${booking.provider.baseSuburb}`
+                      : `up to ${booking.provider.serviceRadiusKm} km in ${booking.provider.baseRegion}`}
+                  </span>
+                )}
             </div>
-            <div className="font-medium text-foreground">
+            <div className="text-sm font-semibold text-foreground md:text-right">
               {formatPrice(booking.priceAtBooking)}
             </div>
-            {booking.provider.serviceRadiusKm &&
-              (booking.provider.baseSuburb || booking.provider.baseRegion) && (
-                <div className="text-[11px] text-muted-foreground">
-                  Service area:{" "}
-                  {booking.provider.baseSuburb
-                    ? `up to ${booking.provider.serviceRadiusKm} km from ${booking.provider.baseSuburb}`
-                    : `up to ${booking.provider.serviceRadiusKm} km in ${booking.provider.baseRegion}`}
-                </div>
-              )}
           </div>
         </CardContent>
         <CardFooter className="flex flex-wrap items-center justify-between gap-2 pt-2">
@@ -316,7 +395,7 @@ function BookingRow(props: {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onUpdateStatus(booking.id, "decline")}
+                  onClick={() => onStartReasonAction(booking, "decline")}
                   disabled={isProcessing("decline")}
                   className="text-destructive hover:text-destructive"
                 >
@@ -343,7 +422,7 @@ function BookingRow(props: {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => onUpdateStatus(booking.id, "cancel")}
+                  onClick={() => onStartReasonAction(booking, "cancel")}
                   disabled={isProcessing("cancel")}
                 >
                   {isProcessing("cancel") ? (
@@ -371,7 +450,7 @@ function BookingRow(props: {
             )}
           </div>
 
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="outline" size="sm">
             <Link href={`/dashboard/provider/bookings/${booking.id}`}>
               View details
             </Link>
