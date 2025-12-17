@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
+import { createNotification } from "@/lib/notifications";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
@@ -39,6 +40,19 @@ export async function POST(req: Request) {
       console.log(`[API_STRIPE_CONNECT_WEBHOOK] Received account.updated for ${stripeConnectId}`);
 
       try {
+        const provider = await db.query.providers.findFirst({
+          where: eq(providers.stripeConnectId, stripeConnectId),
+          columns: {
+            id: true,
+            userId: true,
+            chargesEnabled: true,
+            payoutsEnabled: true,
+          },
+        });
+
+        const prevChargesEnabled = provider?.chargesEnabled ?? null;
+        const prevPayoutsEnabled = provider?.payoutsEnabled ?? null;
+
         // Update our provider record with the latest Stripe Connect status
         await db.update(providers)
           .set({
@@ -49,6 +63,38 @@ export async function POST(req: Request) {
           .where(eq(providers.stripeConnectId, stripeConnectId));
 
         console.log(`[API_STRIPE_CONNECT_WEBHOOK] Provider ${stripeConnectId} updated successfully.`);
+
+        // Best-effort notifications for meaningful changes
+        if (provider?.userId) {
+          const base = {
+            userId: provider.userId,
+            type: "stripe_connect",
+            actionUrl: "/dashboard/provider/earnings",
+            providerId: provider.id,
+            idempotencyKey: `stripe-connect:${event.id}:${provider.userId}`,
+            ttlSeconds: 60 * 60 * 24,
+          } as const;
+
+          if (prevPayoutsEnabled !== null && prevPayoutsEnabled !== account.payouts_enabled) {
+            await createNotification({
+              ...base,
+              title: account.payouts_enabled ? "Payouts enabled" : "Payouts disabled",
+              body: account.payouts_enabled
+                ? "Your Stripe payouts are enabled. You can now receive payouts for paid bookings."
+                : "Your Stripe payouts are currently disabled. You may need to complete additional verification in Stripe.",
+            });
+          }
+
+          if (prevChargesEnabled !== null && prevChargesEnabled !== account.charges_enabled) {
+            await createNotification({
+              ...base,
+              title: account.charges_enabled ? "Payments enabled" : "Payments disabled",
+              body: account.charges_enabled
+                ? "You can now accept payments for new bookings."
+                : "Your ability to accept payments is currently disabled. Please review your Stripe Connect status.",
+            });
+          }
+        }
       } catch (dbError) {
         console.error(`[API_STRIPE_CONNECT_WEBHOOK] DB Error updating provider ${stripeConnectId}:`, dbError);
         return new NextResponse("Database update failed", { status: 500 });

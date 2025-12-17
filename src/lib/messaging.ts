@@ -278,29 +278,37 @@ export async function sendBookingMessage(params: {
 
   await refreshThreadUnreadCount(params.bookingId);
 
-  // Customer notifications: when a provider replies, create an in-app notification for the customer.
+  // In-app notifications (best-effort): notify the recipient about new messages.
   try {
     const customerUserId = allowed.booking.userId;
     const providerUserId = allowed.booking.provider.userId;
     const isProviderSender = params.senderId === providerUserId && counterpartUserId === customerUserId;
+    const isCustomerSender = params.senderId === customerUserId && counterpartUserId === providerUserId;
 
-    if (isProviderSender) {
+    if (isProviderSender || isCustomerSender) {
       const senderUser = await db.query.users.findFirst({
         where: eq(users.id, params.senderId),
         columns: { firstName: true, lastName: true },
       });
 
       const senderName =
-        `${senderUser?.firstName ?? ""} ${senderUser?.lastName ?? ""}`.trim() || "Provider";
+        `${senderUser?.firstName ?? ""} ${senderUser?.lastName ?? ""}`.trim() || (isProviderSender ? "Provider" : "Customer");
+
+      const recipientUserId = counterpartUserId;
+      const actionUrl = isProviderSender
+        ? `/dashboard/messages/${params.bookingId}`
+        : `/dashboard/provider/messages/${params.bookingId}`;
 
       await createNotification({
-        userId: customerUserId,
+        userId: recipientUserId,
         type: "message",
         title: `New message from ${senderName}`,
         body: cleaned.length > 160 ? `${cleaned.slice(0, 160)}…` : cleaned,
-        actionUrl: `/dashboard/messages/${params.bookingId}`,
+        actionUrl,
         bookingId: params.bookingId,
         providerId: allowed.booking.providerId,
+        idempotencyKey: `message:${serverMessageId}:${recipientUserId}`,
+        ttlSeconds: 60 * 60 * 24,
       });
     }
   } catch {

@@ -1,7 +1,9 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
+import { canMessage } from "@/lib/messaging";
 import { pusherServer } from "@/lib/pusher";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +12,17 @@ export async function POST(req: Request) {
     const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
     if (!pusherServer) return new NextResponse("Realtime not configured", { status: 503 });
+
+    const rate = await enforceRateLimit(req, {
+      userId,
+      resource: "pusher:auth",
+      limit: 60,
+      windowSeconds: 60,
+    });
+
+    if (!rate.success) {
+      return rateLimitResponse(rate.retryAfter);
+    }
 
     const contentType = req.headers.get("content-type") ?? "";
     let socketId = "";
@@ -26,6 +39,18 @@ export async function POST(req: Request) {
 
     if (!socketId || !channelName) {
       return new NextResponse("Invalid auth payload", { status: 400 });
+    }
+
+    // Only allow subscribing to booking-linked message channels if the user is a participant.
+    // This prevents guessing booking IDs and receiving private realtime events.
+    const threadPrefixes = ["private-thread-", "private-messages-"];
+    const matchedPrefix = threadPrefixes.find((p) => channelName.startsWith(p));
+    if (matchedPrefix) {
+      const threadId = channelName.slice(matchedPrefix.length);
+      const allowed = await canMessage(userId, threadId);
+      if (!allowed.ok) {
+        return new NextResponse("Forbidden", { status: 403 });
+      }
     }
 
     const presenceData = channelName.startsWith("presence-")

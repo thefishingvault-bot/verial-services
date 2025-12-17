@@ -2,6 +2,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import { listNotifications } from '@/lib/notifications';
+import { enforceRateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,17 @@ export async function GET(request: Request) {
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse('Unauthorized', { status: 401 });
+    }
+
+    const rate = await enforceRateLimit(request, {
+      userId,
+      resource: 'notifications:list',
+      limit: 60,
+      windowSeconds: 60,
+    });
+
+    if (!rate.success) {
+      return rateLimitResponse(rate.retryAfter);
     }
 
     const url = new URL(request.url);

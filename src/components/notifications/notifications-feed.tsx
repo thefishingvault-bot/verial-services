@@ -93,14 +93,14 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
   return (
     <div className="flex flex-col gap-4">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-lg">Your notifications</CardTitle>
             <p className="text-sm text-muted-foreground">
               Stay on top of bookings, payments, and account updates.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <Button variant="secondary" size="sm" onClick={refresh} disabled={isLoading}>
               {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               Refresh
@@ -169,14 +169,16 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
                 {!notif.isRead && (
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="icon-sm"
                     className="ml-auto"
+                    aria-label="Mark as read"
+                    title="Mark as read"
                     onClick={(e) => {
                       e.stopPropagation();
                       markOneRead(notif.id);
                     }}
                   >
-                    Mark read
+                    <CheckCircle2 className="h-4 w-4" />
                   </Button>
                 )}
               </div>

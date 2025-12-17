@@ -6,7 +6,7 @@ import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
-import { createNotification } from "@/lib/notifications";
+import { createNotification, createNotificationOnce } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
@@ -199,6 +199,30 @@ export async function POST(req: Request) {
           });
 
         console.log(`[API_STRIPE_WEBHOOK] Booking ${bookingId} successfully marked as 'paid' and earnings recorded.`);
+
+        // Provider notification (best-effort): let provider know the booking was paid.
+        try {
+          const booking = await loadBooking(bookingId);
+          if (booking?.provider?.userId) {
+            await createNotificationOnce({
+              event: `stripe:payment_intent.succeeded:${paymentIntent.id}`,
+              bookingId,
+              userId: booking.provider.userId,
+              ttlSeconds: 60 * 60 * 24,
+              payload: {
+                type: "payment",
+                title: "Booking paid",
+                body: `${booking.service?.title ?? "A booking"} has been paid. Earnings are now awaiting payout.`,
+                actionUrl: "/dashboard/provider/earnings",
+                bookingId,
+                providerId: booking.providerId,
+                serviceId: booking.serviceId,
+              },
+            });
+          }
+        } catch (notifyError) {
+          console.warn("[API_STRIPE_WEBHOOK] Provider paid notification failed", notifyError);
+        }
       } catch (dbError) {
         console.error(`[API_STRIPE_WEBHOOK] DB Error updating booking ${bookingId}:`, dbError);
         // Return 500 to Stripe so it retries this webhook

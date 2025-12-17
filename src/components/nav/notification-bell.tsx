@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -22,10 +23,24 @@ interface Notification {
 
 export function NotificationBell() {
   const { isSignedIn } = useAuth();
+  const pathname = usePathname();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
   const [isHydrated, setIsHydrated] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  const isProviderDashboard = pathname?.startsWith("/dashboard/provider") ?? false;
+  const viewAllHref = isProviderDashboard ? "/dashboard/provider/notifications" : "/dashboard/notifications";
+
+  const fetchUnreadCount = () => {
+    fetch("/api/notifications/unread-count")
+      .then((res) => res.json())
+      .then((data: { count?: number }) => setUnreadCount(Number(data?.count ?? 0)))
+      .catch(() => {
+        // ignore
+      });
+  };
 
   const fetchNotifications = () => {
     setIsLoading(true);
@@ -45,17 +60,28 @@ export function NotificationBell() {
   useEffect(() => {
     if (isSignedIn && isOpen) {
       fetchNotifications();
+      fetchUnreadCount();
     }
     if (isSignedIn && !isOpen && notifications.length === 0) {
       fetchNotifications();
+      fetchUnreadCount();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isSignedIn, isOpen]);
 
   const markAsRead = async (ids: string[]) => {
-    setNotifications((prev) =>
-      prev.map((n) => (ids.includes(n.id) ? { ...n, isRead: true } : n)),
-    );
+    setNotifications((prev) => {
+      let unreadInBatch = 0;
+      const next = prev.map((n) => {
+        if (!ids.includes(n.id)) return n;
+        if (!n.isRead) unreadInBatch += 1;
+        return { ...n, isRead: true };
+      });
+      if (unreadInBatch > 0) {
+        setUnreadCount((count) => Math.max(0, count - unreadInBatch));
+      }
+      return next;
+    });
 
     await fetch("/api/notifications/mark-read", {
       method: "POST",
@@ -78,11 +104,10 @@ export function NotificationBell() {
   const handleMarkAllRead = async () => {
     await fetch("/api/notifications/mark-all", { method: "POST" });
     setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    setUnreadCount(0);
   };
 
   if (!isSignedIn) return null;
-
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
 
   return (
     <Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -180,7 +205,7 @@ export function NotificationBell() {
             variant="link"
             size="sm"
             className="px-0 text-xs"
-            onClick={() => (window.location.href = "/dashboard/notifications")}
+            onClick={() => (window.location.href = viewAllHref)}
           >
             View all notifications
           </Button>
