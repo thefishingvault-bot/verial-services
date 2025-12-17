@@ -60,6 +60,8 @@ export function ProviderProfileForm() {
   const [coverageRegion, setCoverageRegion] = useState("");
   const [coverageSuburbs, setCoverageSuburbs] = useState<string[]>([]);
   const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
+  const [suburbSearch, setSuburbSearch] = useState("");
+  const [suburbToAdd, setSuburbToAdd] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -123,17 +125,69 @@ export function ProviderProfileForm() {
     }
   }, [coverageSuburbs, baseSuburb]);
 
+  const availableSuburbs = coverageRegion ? (NZ_REGIONS_TO_SUBURBS[coverageRegion] || []) : [];
+  const filteredAvailableSuburbs = suburbSearch.trim()
+    ? availableSuburbs.filter((s) => s.toLowerCase().includes(suburbSearch.trim().toLowerCase()))
+    : availableSuburbs;
+
+  const addCoverageSuburb = (raw: string) => {
+    const cleaned = raw.trim();
+    if (!cleaned) return;
+    if (!coverageRegion) {
+      setError("Please select a region first.");
+      return;
+    }
+
+    setCoverageSuburbs((prev) => {
+      if (prev.some((s) => s.toLowerCase() === cleaned.toLowerCase())) return prev;
+      return [...prev, cleaned];
+    });
+
+    setBaseRegion(coverageRegion);
+    setBaseSuburb((prev) => prev || cleaned);
+  };
+
+  const removeCoverageSuburb = (suburb: string) => {
+    setCoverageSuburbs((prev) => {
+      const next = prev.filter((s) => s !== suburb);
+      setBaseSuburb((currentBase) => {
+        if (currentBase !== suburb) return currentBase;
+        return next[0] ?? "";
+      });
+      return next;
+    });
+  };
+
   const handleSave = async () => {
     setIsSaving(true);
     setError(null);
 
     try {
+      const nextBusinessName = businessName.trim();
+      const nextHandle = handle.trim();
+
+      if (!nextBusinessName) {
+        throw new Error("Business name is required.");
+      }
+
+      if (!nextHandle) {
+        throw new Error("Username (handle) is required.");
+      }
+
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(nextHandle)) {
+        throw new Error("Handle can only include lowercase letters, numbers, and dashes.");
+      }
+
+      if (coverageRegion && coverageSuburbs.length === 0) {
+        throw new Error("Please select at least one suburb for your service area.");
+      }
+
       const profilePayload = {
         firstName: profile?.firstName ?? undefined,
         lastName: profile?.lastName ?? undefined,
         bio,
-        businessName: businessName.trim() || undefined,
-        handle: handle.trim() || undefined,
+        businessName: nextBusinessName,
+        handle: nextHandle,
         avatarUrl: avatarUrl ?? undefined,
       };
 
@@ -341,16 +395,82 @@ export function ProviderProfileForm() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="text-sm">Suburbs</Label>
-                    <button
-                      type="button"
-                      className="text-xs text-blue-600 hover:underline"
-                      onClick={() => setCoverageSuburbs(NZ_REGIONS_TO_SUBURBS[coverageRegion] ?? [])}
-                    >
-                      Select all
-                    </button>
+                    {availableSuburbs.length > 0 ? (
+                      <button
+                        type="button"
+                        className="text-xs text-blue-600 hover:underline"
+                        onClick={() => {
+                          setCoverageSuburbs(availableSuburbs);
+                          if (!baseSuburb && availableSuburbs.length > 0) setBaseSuburb(availableSuburbs[0]);
+                          setBaseRegion(coverageRegion);
+                        }}
+                      >
+                        Select all
+                      </button>
+                    ) : null}
                   </div>
+
+                  {coverageSuburbs.length > 0 ? (
+                    <div className="flex flex-wrap gap-2 rounded-md border bg-muted/20 px-3 py-2">
+                      {coverageSuburbs.map((suburb) => (
+                        <button
+                          key={suburb}
+                          type="button"
+                          className="inline-flex items-center gap-1 rounded-full border bg-background px-2 py-1 text-xs hover:bg-muted"
+                          onClick={() => removeCoverageSuburb(suburb)}
+                          aria-label={`Remove ${suburb}`}
+                          title="Remove"
+                        >
+                          <span className="truncate max-w-[220px]">{suburb}</span>
+                          <span className="text-muted-foreground">×</span>
+                        </button>
+                      ))}
+                      <div className="ml-auto text-xs text-muted-foreground self-center">
+                        {coverageSuburbs.length} selected
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">Select or add suburbs to define your coverage.</p>
+                  )}
+
+                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                    <Input
+                      value={suburbToAdd}
+                      onChange={(e) => setSuburbToAdd(e.target.value)}
+                      placeholder={availableSuburbs.length > 0 ? "Add a suburb (optional)" : "Type a suburb and press Add"}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          addCoverageSuburb(suburbToAdd);
+                          setSuburbToAdd("");
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        addCoverageSuburb(suburbToAdd);
+                        setSuburbToAdd("");
+                      }}
+                      disabled={!suburbToAdd.trim()}
+                    >
+                      Add
+                    </Button>
+                  </div>
+
                   <div className="max-h-64 overflow-y-auto rounded-md border px-3 py-2 space-y-1">
-                    {(NZ_REGIONS_TO_SUBURBS[coverageRegion] || []).map((suburb) => {
+                    {availableSuburbs.length > 0 ? (
+                      <div className="mb-2">
+                        <Input
+                          value={suburbSearch}
+                          onChange={(e) => setSuburbSearch(e.target.value)}
+                          placeholder="Search suburbs"
+                        />
+                      </div>
+                    ) : null}
+
+                    {filteredAvailableSuburbs.map((suburb) => {
                       const checked = coverageSuburbs.includes(suburb);
                       return (
                         <button
@@ -372,11 +492,13 @@ export function ProviderProfileForm() {
                         </button>
                       );
                     })}
-                    {(NZ_REGIONS_TO_SUBURBS[coverageRegion] || []).length === 0 && (
+                    {availableSuburbs.length === 0 ? (
                       <p className="text-xs text-muted-foreground">
-                        Suburb list coming soon for {coverageRegion}.
+                        No preloaded suburb list for {coverageRegion}. You can still add any suburb above.
                       </p>
-                    )}
+                    ) : filteredAvailableSuburbs.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">No suburbs match your search.</p>
+                    ) : null}
                   </div>
                 </div>
               )}

@@ -2,7 +2,7 @@ import { db } from '@/lib/db';
 import { users, providers } from '@/db/schema';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
-import { eq } from 'drizzle-orm';
+import { and, eq, ne } from 'drizzle-orm';
 
 export const runtime = 'nodejs';
 
@@ -15,6 +15,46 @@ export async function PATCH(req: Request) {
 
     // Destructure all possible fields
     const { firstName, lastName, bio, businessName, handle, avatarUrl } = await req.json();
+
+    const normalizedHandle = typeof handle === 'string' ? handle.trim().toLowerCase() : undefined;
+    const normalizedBusinessName = typeof businessName === 'string' ? businessName.trim() : undefined;
+    const normalizedBio = typeof bio === 'string' ? bio.trim() : undefined;
+
+    if (normalizedHandle !== undefined) {
+      if (normalizedHandle.length < 3 || normalizedHandle.length > 50) {
+        return new NextResponse('Invalid handle: must be between 3 and 50 characters', { status: 400 });
+      }
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalizedHandle)) {
+        return new NextResponse('Invalid handle: only lowercase letters, numbers, and dashes are allowed', { status: 400 });
+      }
+
+      const reserved = new Set([
+        'admin',
+        'api',
+        'dashboard',
+        'sign-in',
+        'sign-up',
+        'services',
+        'p',
+        's',
+      ]);
+      if (reserved.has(normalizedHandle)) {
+        return new NextResponse('Invalid handle: this handle is reserved', { status: 400 });
+      }
+    }
+
+    if (normalizedBusinessName !== undefined) {
+      if (!normalizedBusinessName) {
+        return new NextResponse('Invalid businessName: business name is required', { status: 400 });
+      }
+      if (normalizedBusinessName.length > 255) {
+        return new NextResponse('Invalid businessName: too long', { status: 400 });
+      }
+    }
+
+    if (normalizedBio !== undefined && normalizedBio.length > 2000) {
+      return new NextResponse('Invalid bio: too long', { status: 400 });
+    }
 
     // --- 1. Update Clerk ---
     const client = await clerkClient();
@@ -44,9 +84,18 @@ export async function PATCH(req: Request) {
     if (provider) {
       const providerUpdateData: { bio?: string; businessName?: string; handle?: string } = {};
 
-      if (bio !== undefined) providerUpdateData.bio = bio;
-      if (businessName !== undefined) providerUpdateData.businessName = businessName;
-      if (handle !== undefined) providerUpdateData.handle = handle;
+      if (normalizedBio !== undefined) providerUpdateData.bio = normalizedBio;
+      if (normalizedBusinessName !== undefined) providerUpdateData.businessName = normalizedBusinessName;
+      if (normalizedHandle !== undefined) {
+        const existingHandle = await db.query.providers.findFirst({
+          where: and(eq(providers.handle, normalizedHandle), ne(providers.id, provider.id)),
+          columns: { id: true },
+        });
+        if (existingHandle) {
+          return new NextResponse('Handle already taken', { status: 409 });
+        }
+        providerUpdateData.handle = normalizedHandle;
+      }
 
       if (Object.keys(providerUpdateData).length > 0) {
         await db
