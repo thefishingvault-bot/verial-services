@@ -19,6 +19,11 @@ describe("ProviderEarningsPage", () => {
       ok: true,
       json: async () => ({
         currency: "NZD",
+        connect: {
+          stripeConnectId: "acct_123",
+          chargesEnabled: true,
+          payoutsEnabled: true,
+        },
         lifetime: { gross: 100000, fee: 10000, gst: 5000, net: 85000 },
         last30: { gross: 20000, fee: 2000, gst: 1000, net: 17000 },
         pendingPayoutsNet: 5000,
@@ -64,6 +69,11 @@ describe("ProviderEarningsPage", () => {
       ok: true,
       json: async () => ({
         currency: "NZD",
+        connect: {
+          stripeConnectId: null,
+          chargesEnabled: false,
+          payoutsEnabled: false,
+        },
         lifetime: { gross: 0, fee: 0, gst: 0, net: 0 },
         last30: { gross: 0, fee: 0, gst: 0, net: 0 },
         pendingPayoutsNet: 0,

@@ -36,15 +36,23 @@ function formatDate(value: string | null) {
 }
 
 function statusColor(status: string | null): string {
-  if (!status) return "bg-muted text-muted-foreground";
+  if (!status) return "outline";
   switch (status) {
     case "awaiting_payout":
-      return "bg-amber-100 text-amber-800";
+      return "outline";
     case "paid_out":
-      return "bg-emerald-100 text-emerald-800";
+      return "secondary";
     default:
-      return "bg-muted text-muted-foreground";
+      return "outline";
   }
+}
+
+function formatPayoutStatus(status: string | null) {
+  if (!status) return "-";
+  return status
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 }
 
 export function EarningsBookingsTable({ currency, recentBookings }: EarningsBookingsTableProps) {
@@ -65,9 +73,9 @@ export function EarningsBookingsTable({ currency, recentBookings }: EarningsBook
             <TableRow>
               <TableHead>Booking</TableHead>
               <TableHead>Service</TableHead>
-              <TableHead>Gross</TableHead>
-              <TableHead>Fees</TableHead>
-              <TableHead>GST</TableHead>
+              <TableHead className="hidden md:table-cell">Gross</TableHead>
+              <TableHead className="hidden md:table-cell">Fees</TableHead>
+              <TableHead className="hidden md:table-cell">GST</TableHead>
               <TableHead>Net</TableHead>
               <TableHead>Payout status</TableHead>
               <TableHead>Payout date</TableHead>
@@ -87,21 +95,21 @@ export function EarningsBookingsTable({ currency, recentBookings }: EarningsBook
                 <TableCell className="text-xs text-muted-foreground">
                   {row.serviceTitle ?? "Service"}
                 </TableCell>
-                <TableCell className="text-xs">
+                <TableCell className="hidden md:table-cell text-xs">
                   {formatPrice(row.grossAmount, currency)}
                 </TableCell>
-                <TableCell className="text-xs">
+                <TableCell className="hidden md:table-cell text-xs">
                   -{formatPrice(row.platformFeeAmount, currency)}
                 </TableCell>
-                <TableCell className="text-xs">
+                <TableCell className="hidden md:table-cell text-xs">
                   {formatPrice(row.gstAmount, currency)}
                 </TableCell>
                 <TableCell className="text-xs font-medium">
                   {formatPrice(row.netAmount, currency)}
                 </TableCell>
                 <TableCell>
-                  <Badge className={`text-xs ${statusColor(row.payoutStatus)}`}>
-                    {row.payoutStatus ?? "-"}
+                  <Badge variant={statusColor(row.payoutStatus) as any} className="text-xs">
+                    {formatPayoutStatus(row.payoutStatus)}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-xs">

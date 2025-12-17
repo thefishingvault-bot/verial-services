@@ -5,9 +5,15 @@ import { EarningsSummaryCards } from "@/components/provider/earnings-summary-car
 import { EarningsBookingsTable } from "@/components/provider/earnings-bookings-table";
 import { StripeWarning } from "@/components/provider/stripe-warning";
 import { formatPrice } from "@/lib/utils";
+import { cookies, headers } from "next/headers";
 
 type EarningsSummaryResponse = {
   currency: string;
+  connect?: {
+    stripeConnectId: string | null;
+    chargesEnabled: boolean;
+    payoutsEnabled: boolean;
+  };
   lifetime: {
     gross: number;
     fee: number;
@@ -45,9 +51,31 @@ type EarningsSummaryResponse = {
 
 async function loadEarnings(): Promise<EarningsSummaryResponse | null> {
   try {
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "";
+    let host: string | null = null;
+    let proto: string = "https";
+    try {
+      const hdrs = await headers();
+      const forwardedHost = hdrs.get("x-forwarded-host");
+      host = forwardedHost ?? hdrs.get("host");
+      proto = hdrs.get("x-forwarded-proto") ?? (host?.includes("localhost") ? "http" : "https");
+    } catch {
+      host = null;
+      proto = "http";
+    }
+
+    const baseUrl =
+      process.env.NEXT_PUBLIC_APP_URL ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : host ? `${proto}://${host}` : "http://localhost:3000");
+
+    let cookieHeader = "";
+    try {
+      cookieHeader = (await cookies()).toString();
+    } catch {
+      cookieHeader = "";
+    }
     const res = await fetch(`${baseUrl}/api/provider/earnings/summary`, {
       cache: "no-store",
+      headers: cookieHeader ? { cookie: cookieHeader } : undefined,
     });
     if (!res.ok) return null;
     return (await res.json()) as EarningsSummaryResponse;
@@ -71,7 +99,7 @@ export default async function ProviderEarningsPage() {
 
   const upcoming = earnings?.upcomingPayout ?? null;
 
-  const stripeConfigured = completedNet > 0 || pendingNet > 0 || !!upcoming;
+  const stripeConfigured = !!earnings?.connect?.stripeConnectId && !!earnings?.connect?.payoutsEnabled;
 
   return (
     <div className="space-y-6">

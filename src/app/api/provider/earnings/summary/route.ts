@@ -107,6 +107,11 @@ export async function GET() {
 
     return NextResponse.json({
       currency: "NZD",
+      connect: {
+        stripeConnectId: provider.stripeConnectId ?? null,
+        chargesEnabled: provider.chargesEnabled ?? false,
+        payoutsEnabled: provider.payoutsEnabled ?? false,
+      },
       lifetime: totals,
       last30,
       pendingPayoutsNet: pendingNet?.net ?? 0,

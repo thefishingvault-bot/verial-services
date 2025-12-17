@@ -43,12 +43,12 @@ export function EarningsSummaryCards({
   ];
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
       {items.map((item) => (
         <Card key={item.label}>
           <CardHeader className="space-y-1 pb-2">
             <p className="text-xs text-muted-foreground">{item.label}</p>
-            <CardTitle className="text-2xl">
+            <CardTitle className="text-xl sm:text-2xl">
               {loading ? (
                 <Skeleton className="h-6 w-20" />
               ) : (

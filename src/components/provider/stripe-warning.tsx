@@ -12,7 +12,7 @@ export function StripeWarning() {
           verification is complete.
         </AlertDescription>
       </div>
-      <Button asChild size="sm" variant="outline">
+      <Button asChild size="sm" variant="outline" className="w-full sm:w-auto">
         <Link href="/dashboard/provider/profile?connect=stripe">Complete Stripe setup</Link>
       </Button>
     </Alert>
