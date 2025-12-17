@@ -128,12 +128,18 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRangeLoading, setIsRangeLoading] = useState(false);
 
-  const monthLabel = format(cursor, "MMMM yyyy");
-  const weekStart = startOfWeek(cursor);
-  const weekEnd = endOfWeek(cursor);
-  const rangeStart = view === "month" ? startOfMonth(cursor) : weekStart;
-  const rangeEnd = view === "month" ? endOfMonth(cursor) : weekEnd;
-  const headerLabel = view === "month" ? monthLabel : `Week of ${format(weekStart, "dd MMM yyyy")}`;
+  // NOTE: startOfMonth/startOfWeek etc return new Date objects each call.
+  // Memoize them so effects don't re-trigger on every render.
+  const range = useMemo(() => {
+    const weekStart = startOfWeek(cursor);
+    const weekEnd = endOfWeek(cursor);
+    const monthLabel = format(cursor, "MMMM yyyy");
+    const rangeStart = view === "month" ? startOfMonth(cursor) : weekStart;
+    const rangeEnd = view === "month" ? endOfMonth(cursor) : weekEnd;
+    const headerLabel = view === "month" ? monthLabel : `Week of ${format(weekStart, "dd MMM yyyy")}`;
+
+    return { weekStart, weekEnd, rangeStart, rangeEnd, headerLabel };
+  }, [cursor, view]);
 
   const weeks = useMemo(() => buildCalendarGrid(cursor), [cursor]);
   const allEvents = useMemo(() => [...events, ...timeOffs], [events, timeOffs]);
@@ -143,8 +149,8 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const fetchRange = useCallback(async () => {
     try {
       setIsRangeLoading(true);
-      const start = startOfDay(rangeStart).toISOString();
-      const end = endOfDay(rangeEnd).toISOString();
+      const start = startOfDay(range.rangeStart).toISOString();
+      const end = endOfDay(range.rangeEnd).toISOString();
       const res = await fetch(`/api/provider/calendar?start=${start}&end=${end}`);
       if (!res.ok) return;
       const data = (await res.json()) as CalendarApiResponse;
@@ -153,17 +159,17 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
     } finally {
       setIsRangeLoading(false);
     }
-  }, [rangeEnd, rangeStart]);
+  }, [range]);
 
   useEffect(() => {
     void fetchRange();
   }, [fetchRange]);
 
   useEffect(() => {
-    if (!isWithinInterval(selectedDate, { start: startOfDay(rangeStart), end: endOfDay(rangeEnd) })) {
-      setSelectedDate(rangeStart);
+    if (!isWithinInterval(selectedDate, { start: startOfDay(range.rangeStart), end: endOfDay(range.rangeEnd) })) {
+      setSelectedDate(range.rangeStart);
     }
-  }, [rangeEnd, rangeStart, selectedDate]);
+  }, [range, selectedDate]);
 
   const createTimeOff = async () => {
     if (!dateRange?.from) {
@@ -265,7 +271,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             <ChevronLeft className="h-4 w-4" />
           </Button>
           <div className="font-semibold flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" /> {headerLabel}
+            <CalendarDays className="h-4 w-4" /> {range.headerLabel}
             {isRangeLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
           </div>
           <Button
@@ -452,8 +458,8 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
               <div className="min-w-[720px] space-y-2">
                 <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
                   {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date(weekStart);
-                    date.setDate(weekStart.getDate() + i);
+                    const date = new Date(range.weekStart);
+                    date.setDate(range.weekStart.getDate() + i);
                     const label = format(date, "EEE d");
                     return (
                       <div key={label} className="text-center">
@@ -464,8 +470,8 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                 </div>
                 <div className="grid grid-cols-7 gap-2">
                   {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date(weekStart);
-                    date.setDate(weekStart.getDate() + i);
+                    const date = new Date(range.weekStart);
+                    date.setDate(range.weekStart.getDate() + i);
                     const dayEventsForDate = allEvents.filter((e) => isOnDay(e, date));
                     const hasTimeOff = timeOffs.some((t) => isOnDay(t, date));
                     const isSelected = isSameDay(date, selectedDate);
