@@ -143,7 +143,7 @@ export default async function ProviderDashboardPage() {
               <div>
                 <p className="text-sm font-medium">Today</p>
                 <p className="text-xs text-muted-foreground">
-                  Keep your calendar up to date so customers can book you when you're available.
+                  Keep your calendar up to date so customers can book you when you&apos;re available.
                 </p>
               </div>
               <Button asChild size="sm" variant="outline">

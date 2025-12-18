@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useForm, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { useUser } from "@clerk/nextjs";
@@ -32,8 +32,7 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   const form = useForm<FormValues>({
-    // @ts-ignore Zod v4 resolver typing mismatch
-    resolver: zodResolver(formSchema as any) as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
     defaultValues: {
       firstName: "",
       lastName: "",

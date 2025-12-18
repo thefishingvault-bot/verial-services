@@ -178,7 +178,7 @@ export function ProviderBookingsClient() {
           <div>
             <CardTitle className="text-base">No bookings yet</CardTitle>
             <CardDescription>
-              When customers request your services, you'll see them here and can accept or
+              When customers request your services, you&apos;ll see them here and can accept or
               decline.
             </CardDescription>
           </div>
@@ -431,7 +431,7 @@ function BookingRow(props: {
                   Cancel booking
                 </Button>
                 <span className="self-center text-[11px] text-muted-foreground">
-                  Waiting for customer payment&mdash;we'll notify you when it's paid.
+                  Waiting for customer payment&mdash;we&apos;ll notify you when it&apos;s paid.
                 </span>
               </>
             )}

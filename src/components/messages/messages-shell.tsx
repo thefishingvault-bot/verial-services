@@ -10,7 +10,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { applyDeliveryStatus, normalizeMessage, replaceTempMessage, UiMessage, upsertMessages } from "@/lib/messaging-client";
+import { applyDeliveryStatus, normalizeMessage, replaceTempMessage, type ServerMessage, UiMessage, upsertMessages } from "@/lib/messaging-client";
 import type { PresenceRecord } from "@/lib/presence";
 import { pusherClient } from "@/lib/pusher-client";
 import { cn } from "@/lib/utils";
@@ -35,10 +35,20 @@ interface ThreadState {
 }
 
 interface ThreadResponse {
-	messages: any[];
+	messages: ServerMessage[];
 	counterpart: ThreadSummary["counterpart"] | null;
 	nextCursor: string | null;
 }
+
+type ThreadsResponseItem = {
+	bookingId: string;
+	serviceTitle?: string | null;
+	counterpart: ThreadSummary["counterpart"];
+	lastMessage: string | null;
+	lastMessageAt: string | Date | null;
+	unreadCount?: number;
+	status?: string;
+};
 
 interface Props {
 	initialConversationId?: string | null;
@@ -98,8 +108,8 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		try {
 			const res = await fetch("/api/messages/threads", { cache: "no-store" });
 			if (!res.ok) throw new Error("Failed to load threads");
-			const data = await res.json();
-			const mapped: ThreadSummary[] = (data.threads || []).map((t: any) => ({
+			const data = (await res.json()) as { threads?: ThreadsResponseItem[] };
+			const mapped: ThreadSummary[] = (data.threads || []).map((t) => ({
 				id: t.bookingId,
 				threadId: t.bookingId,
 				serviceTitle: t.serviceTitle,
@@ -293,7 +303,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	}, [draft, sendMessage]);
 
 	const handleIncoming = useCallback(
-		(threadId: string, payload: any) => {
+		(threadId: string, payload: ServerMessage) => {
 			setThreadState((prev) => {
 				const existing = prev[threadId]?.messages ?? [];
 				const merged = upsertMessages(existing, [payload], viewerId ?? undefined);
@@ -339,8 +349,8 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		(threadId: string) => {
 			if (!pusherClient) return;
 			const channel = pusherClient.subscribe(`private-thread-${threadId}`);
-			channel.bind("message:new", (data: any) => handleIncoming(threadId, data));
-			channel.bind("message:delivered", (data: any) => {
+			channel.bind("message:new", (data: ServerMessage) => handleIncoming(threadId, data));
+			channel.bind("message:delivered", (data: { serverMessageId: string }) => {
 				setThreadState((prev) => ({
 					...prev,
 					[threadId]: {
@@ -353,7 +363,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 					},
 				}));
 			});
-			channel.bind("message:seen", (data: any) => {
+			channel.bind("message:seen", (data: { serverMessageId: string }) => {
 				setThreadState((prev) => ({
 					...prev,
 					[threadId]: {
@@ -366,10 +376,10 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 					},
 				}));
 			});
-			channel.bind("thread:unread", (data: any) => {
+			channel.bind("thread:unread", (data: { unreadCount: number }) => {
 				setThreads((prev) => prev.map((t) => (t.threadId === threadId ? { ...t, unreadCount: data.unreadCount } : t)));
 			});
-			channel.bind("typing", (data: any) => {
+			channel.bind("typing", (data: { isTyping: boolean }) => {
 				setTyping((prev) => ({ ...prev, [threadId]: data.isTyping }));
 				setTimeout(() => setTyping((prev) => ({ ...prev, [threadId]: false })), 3000);
 			});

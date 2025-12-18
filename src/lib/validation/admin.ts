@@ -139,7 +139,8 @@ export async function parseBody<T extends z.ZodTypeAny>(schema: T, req: Request)
 }
 
 export function parseQuery<T extends z.ZodTypeAny>(schema: T, req: Request & { nextUrl?: URL }) {
-  const result = schema.safeParse(Object.fromEntries((req as any).nextUrl?.searchParams ?? new URL(req.url).searchParams));
+  const url = req.nextUrl ?? new URL(req.url);
+  const result = schema.safeParse(Object.fromEntries(url.searchParams));
   if (!result.success) return { ok: false as const, error: result.error.flatten() };
   return { ok: true as const, data: result.data };
 }
@@ -153,7 +154,7 @@ export function parseParams<T extends z.ZodTypeAny>(schema: T, params: unknown) 
 export async function parseForm<T extends z.ZodTypeAny>(schema: T, req: Request) {
   const formData = await req.formData().catch(() => null);
   if (!formData) return { ok: false as const, error: { formErrors: ["Invalid form data"], fieldErrors: {} } };
-  const obj: Record<string, any> = {};
+  const obj: Record<string, FormDataEntryValue> = {};
   formData.forEach((value, key) => {
     obj[key] = value;
   });

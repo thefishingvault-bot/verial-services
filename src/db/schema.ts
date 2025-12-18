@@ -224,6 +224,10 @@ export const bookings = pgTable("bookings", {
   // Stripe Payment Intent ID
   paymentIntentId: varchar("payment_intent_id", { length: 255 }).unique(),
 
+  // Provider-provided reasons for certain status transitions
+  providerDeclineReason: text("provider_decline_reason"),
+  providerCancelReason: text("provider_cancel_reason"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

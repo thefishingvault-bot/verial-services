@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -47,8 +47,7 @@ export function ReviewForm({ bookingId, serviceTitle, providerId, onReviewSubmit
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
-    // @ts-ignore Zod v4 resolver typing mismatch
-    resolver: zodResolver(formSchema as any) as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
     defaultValues: {
       rating: 0,
       comment: '',

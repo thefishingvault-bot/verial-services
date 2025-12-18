@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 
 import type Stripe from "stripe";
 
@@ -106,9 +106,9 @@ export async function getReceiptData(
     return { ok: false, error: "not_found" };
   }
 
-  const providerRecord = (Array.isArray(booking.provider) ? booking.provider[0] : booking.provider) as any;
-  const serviceRecord = (Array.isArray(booking.service) ? booking.service[0] : booking.service) as any;
-  const userRecord = (Array.isArray(booking.user) ? booking.user[0] : booking.user) as any;
+  const providerRecord = (Array.isArray(booking.provider) ? booking.provider[0] : booking.provider) ?? null;
+  const serviceRecord = (Array.isArray(booking.service) ? booking.service[0] : booking.service) ?? null;
+  const userRecord = (Array.isArray(booking.user) ? booking.user[0] : booking.user) ?? null;
 
   const viewerProvider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
@@ -129,21 +129,26 @@ export async function getReceiptData(
   });
 
   let paymentIntent: Stripe.PaymentIntent | null = null;
+  let chargeList: Stripe.ApiList<Stripe.Charge> | null = null;
   if (booking.paymentIntentId) {
     try {
-      paymentIntent = await stripe.paymentIntents.retrieve(booking.paymentIntentId, {
-        expand: ["charges.data.refunds"],
+      paymentIntent = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
+      chargeList = await stripe.charges.list({
+        payment_intent: booking.paymentIntentId,
+        expand: ["data.refunds"],
+        limit: 100,
       });
     } catch (error) {
       console.error("[RECEIPT_PAYMENT_INTENT]", error);
       paymentIntent = null;
+      chargeList = null;
     }
   }
 
   const refunds: ReceiptData["payment"]["refunds"] = [];
   let refundedAmount = 0;
 
-  const charges = (paymentIntent as any)?.charges?.data ?? [];
+  const charges = chargeList?.data ?? [];
   for (const charge of charges) {
     for (const refund of charge.refunds?.data ?? []) {
       refundedAmount += refund.amount || 0;
@@ -165,7 +170,7 @@ export async function getReceiptData(
 
   const customerName = [userRecord?.firstName, userRecord?.lastName].filter(Boolean).join(" ") || "Customer";
 
-  const providerUser = (providerRecord as any)?.user;
+  const providerUser = providerRecord?.user;
 
   return {
     ok: true,

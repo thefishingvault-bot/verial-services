@@ -4,9 +4,13 @@ import { db } from "@/lib/db";
 import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
-const resolveRole = async (userId: string, sessionClaims: Record<string, any> | null | undefined) => {
-  const sessionRole = sessionClaims?.publicMetadata?.role as string | undefined;
-  if (sessionRole) return sessionRole;
+type SessionClaims = {
+  publicMetadata?: Record<string, unknown>;
+};
+
+const resolveRole = async (userId: string, sessionClaims: SessionClaims | null | undefined) => {
+  const sessionRole = sessionClaims?.publicMetadata?.role;
+  if (typeof sessionRole === "string") return sessionRole;
 
   // Clerk fetch fallback
   try {
@@ -32,7 +36,7 @@ export async function requireAdmin() {
     return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
   }
 
-  const role = await resolveRole(userId, sessionClaims as Record<string, any> | null | undefined);
+  const role = await resolveRole(userId, sessionClaims as SessionClaims | null | undefined);
   if (role !== "admin") {
     return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
   }

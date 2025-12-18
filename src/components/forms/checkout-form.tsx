@@ -1,11 +1,24 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   PaymentElement,
   useStripe,
   useElements,
 } from '@stripe/react-stripe-js';
+
+const mapStatusToMessage = (status: string | undefined) => {
+  switch (status) {
+    case 'succeeded':
+      return 'Payment succeeded! Redirecting to your bookings...';
+    case 'processing':
+      return 'Payment processing... we will update your booking shortly.';
+    case 'requires_payment_method':
+      return 'Payment failed. Please try another payment method.';
+    default:
+      return null;
+  }
+};
 
 export function CheckoutForm() {
   const stripe = useStripe();
@@ -14,20 +27,7 @@ export function CheckoutForm() {
   const [message, setMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const mapStatusToMessage = (status: string | undefined) => {
-    switch (status) {
-      case 'succeeded':
-        return 'Payment succeeded! Redirecting to your bookings...';
-      case 'processing':
-        return 'Payment processing... we will update your booking shortly.';
-      case 'requires_payment_method':
-        return 'Payment failed. Please try another payment method.';
-      default:
-        return null;
-    }
-  };
-
-  const pollPaymentIntent = async (clientSecret: string) => {
+  const pollPaymentIntent = useCallback(async (clientSecret: string) => {
     if (!stripe) return;
     const result = await stripe.retrievePaymentIntent(clientSecret);
     const statusMessage = mapStatusToMessage(result.paymentIntent?.status);
@@ -38,14 +38,18 @@ export function CheckoutForm() {
         window.location.href = '/dashboard/bookings';
       }, 1200);
     }
-  };
+  }, [stripe]);
 
   // Surface status if redirected back with PI client secret
   useEffect(() => {
     if (!stripe) return;
     const clientSecret = new URLSearchParams(window.location.search).get('payment_intent_client_secret');
-    if (clientSecret) void pollPaymentIntent(clientSecret);
-  }, [stripe]);
+    if (!clientSecret) return;
+    const t = window.setTimeout(() => {
+      void pollPaymentIntent(clientSecret);
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [stripe, pollPaymentIntent]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -62,6 +66,7 @@ export function CheckoutForm() {
       confirmParams: {
         return_url: `${window.location.origin}/dashboard/bookings`,
       },
+      redirect: "if_required",
     });
 
     if (result.error) {
@@ -74,7 +79,7 @@ export function CheckoutForm() {
       return;
     }
 
-    const clientSecret = (result as any).paymentIntent?.client_secret;
+    const clientSecret = result.paymentIntent?.client_secret;
     if (clientSecret) {
       await pollPaymentIntent(clientSecret);
     }

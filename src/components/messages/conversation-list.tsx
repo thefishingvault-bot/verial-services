@@ -13,6 +13,15 @@ interface ConversationSummary {
   bookingRef?: string | null;
 }
 
+type ThreadsResponseItem = {
+  bookingId?: string;
+  counterpart?: { name?: string | null; avatarUrl?: string | null } | null;
+  lastMessage?: string | null;
+  lastMessageAt?: string | Date | null;
+  unreadCount?: number;
+  serviceTitle?: string | null;
+};
+
 async function fetchConversations(): Promise<ConversationSummary[]> {
   const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "";
   const res = await fetch(`${baseUrl}/api/messages/threads`, {
@@ -23,9 +32,11 @@ async function fetchConversations(): Promise<ConversationSummary[]> {
     return [];
   }
 
-  const data: { threads?: any[] } = await res.json();
+  const data = (await res.json()) as { threads?: ThreadsResponseItem[] };
 
-  return (data.threads ?? []).map((t) => ({
+  return (data.threads ?? [])
+    .filter((t): t is ThreadsResponseItem & { bookingId: string } => typeof t.bookingId === "string" && t.bookingId.length > 0)
+    .map((t) => ({
     id: t.bookingId,
     counterpartName: t.counterpart?.name ?? "Unknown",
     counterpartHandle: "",

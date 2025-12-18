@@ -65,7 +65,7 @@ describe("FavoritesGrid", () => {
   });
 
   it("returns null when no favorites", () => {
-    const { container } = render(<FavoritesGrid items={[]} sort="recent" />);
-    expect(container.firstChild).toBeNull();
+    render(<FavoritesGrid items={[]} sort="recent" />);
+    expect(screen.getByText(/No favorites yet/i)).toBeInTheDocument();
   });
 });

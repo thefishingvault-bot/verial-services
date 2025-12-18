@@ -128,4 +128,5 @@ const handler = async (req: NextRequest, context: RouteContext): Promise<Respons
   );
 };
 
-export const GET = handler as any;
+export const GET = handler;
+

@@ -121,7 +121,7 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
             <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
               <Package className="h-12 w-12 text-muted-foreground/40" />
               <div>
-                <p className="font-medium">You're all caught up</p>
+                <p className="font-medium">You&apos;re all caught up</p>
                 <p className="text-sm text-muted-foreground">
                   New updates will show up here as they arrive.
                 </p>

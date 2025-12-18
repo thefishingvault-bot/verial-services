@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -71,8 +71,7 @@ export default function NewServicePage() {
   const { toast } = useToast();
 
   const form = useForm<FormValues>({
-    // @ts-ignore Zod v4 resolver typing mismatch
-    resolver: zodResolver(formSchema as any) as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
     defaultValues: {
       title: '',
       category: 'cleaning',

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { useForm } from 'react-hook-form';
+import { useForm, type Resolver, type SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import Image from 'next/image';
@@ -71,8 +71,7 @@ export default function EditServicePage() {
   const [isCoverDialogOpen, setIsCoverDialogOpen] = useState(false);
 
   const form = useForm<FormValues>({
-    // @ts-ignore Zod v4 resolver typing mismatch
-    resolver: zodResolver(formSchema as any) as any,
+    resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
     defaultValues: {
       title: '',
       category: 'cleaning',
@@ -116,7 +115,7 @@ export default function EditServicePage() {
       });
   }, [serviceId, form, router, toast]);
 
-  const onSubmit = async (values: FormValues) => {
+  const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setIsSaving(true);
     try {
       const priceInCents = Math.round(values.price * 100);
@@ -188,7 +187,7 @@ export default function EditServicePage() {
         </CardHeader>
         <CardContent className="space-y-8">
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit as any)} className="space-y-6">
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
                 control={form.control}
                 name="title"

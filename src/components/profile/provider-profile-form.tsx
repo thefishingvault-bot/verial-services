@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { AvatarUploader } from "@/components/forms/avatar-uploader";
-import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-suburbs";
+import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-regions.generated";
 import { getTrustBadge } from "@/lib/utils";
 
 type ProviderProfileResponse = {
@@ -520,8 +520,8 @@ export function ProviderProfileForm() {
                   }}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Shown as "Travels up to {serviceRadiusKm} km from {baseSuburb || baseRegion || "your area"}" on
-                  your listings.
+                  Shown as &quot;Travels up to {serviceRadiusKm} km from {baseSuburb || baseRegion || "your area"}&quot; on your
+                  listings.
                 </p>
               </div>
             </div>

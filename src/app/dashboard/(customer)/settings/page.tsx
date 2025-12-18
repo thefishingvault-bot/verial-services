@@ -8,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Loader2, AlertCircle, CheckSquare, Square } from 'lucide-react';
 import { useUser } from '@clerk/nextjs';
 import { useToast } from '@/components/ui/use-toast';
-import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from '@/lib/data/nz-suburbs';
+import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from '@/lib/data/nz-regions.generated';
 
 interface ProviderSettings {
   chargesGst: boolean;

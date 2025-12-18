@@ -3,13 +3,15 @@ import { bookings, providers, reviews, serviceFavorites, services } from "@/db/s
 import { db } from "@/lib/db";
 import { FAVORITE_BOOST, scoreService, type RankableService } from "@/lib/ranking";
 
+type ServiceCategory = (typeof services.$inferSelect)["category"];
+
 export type RecommendationCardData = {
   serviceId: string;
   slug: string;
   title: string;
   description: string | null;
   priceInCents: number;
-  category: string;
+  category: ServiceCategory;
   coverImageUrl: string | null;
   provider: {
     id: string;
@@ -25,8 +27,8 @@ export type RecommendationCardData = {
 
 type EngagementSignals = {
   favoriteServiceIds: Set<string>;
-  favoriteCategories: Set<string>;
-  bookingCategories: Set<string>;
+  favoriteCategories: Set<ServiceCategory>;
+  bookingCategories: Set<ServiceCategory>;
   bookedProviders: Set<string>;
 };
 
@@ -45,13 +47,13 @@ async function getEngagementSignals(userId: string): Promise<EngagementSignals> 
   ]);
 
   const favoriteServiceIds = new Set<string>();
-  const favoriteCategories = new Set<string>();
+  const favoriteCategories = new Set<ServiceCategory>();
   favoriteRows.forEach((row) => {
     favoriteServiceIds.add(row.serviceId);
     favoriteCategories.add(row.category);
   });
 
-  const bookingCategories = new Set<string>();
+  const bookingCategories = new Set<ServiceCategory>();
   const bookedProviders = new Set<string>();
   bookingRows.forEach((row) => {
     bookingCategories.add(row.category);
@@ -62,10 +64,10 @@ async function getEngagementSignals(userId: string): Promise<EngagementSignals> 
 }
 
 function buildReason(opts: {
-  favoriteCategories: Set<string>;
-  bookingCategories: Set<string>;
+  favoriteCategories: Set<ServiceCategory>;
+  bookingCategories: Set<ServiceCategory>;
   bookedProviders: Set<string>;
-  category: string;
+  category: ServiceCategory;
   providerId: string;
 }) {
   if (opts.favoriteCategories.has(opts.category)) return "Because you like this category";
@@ -109,9 +111,8 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
       and(
         eq(providers.status, "approved"),
         eq(providers.isSuspended, false),
-        // @ts-ignore column enum typing is stricter than runtime values
         preferredCategories.length > 0
-          ? inArray(services.category as any, preferredCategories as any)
+          ? inArray(services.category, preferredCategories)
           : sql`1=1`,
       ),
     )

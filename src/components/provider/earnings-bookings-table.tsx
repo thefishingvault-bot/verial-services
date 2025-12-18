@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { formatPrice } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
+import { Badge, badgeVariants } from "@/components/ui/badge";
+import type { VariantProps } from "class-variance-authority";
 import {
   Table,
   TableBody,
@@ -35,7 +36,7 @@ function formatDate(value: string | null) {
   return date.toLocaleDateString();
 }
 
-function statusColor(status: string | null): string {
+function statusColor(status: string | null): VariantProps<typeof badgeVariants>["variant"] {
   if (!status) return "outline";
   switch (status) {
     case "awaiting_payout":
@@ -108,7 +109,7 @@ export function EarningsBookingsTable({ currency, recentBookings }: EarningsBook
                   {formatPrice(row.netAmount, currency)}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={statusColor(row.payoutStatus) as any} className="text-xs">
+                  <Badge variant={statusColor(row.payoutStatus)} className="text-xs">
                     {formatPayoutStatus(row.payoutStatus)}
                   </Badge>
                 </TableCell>

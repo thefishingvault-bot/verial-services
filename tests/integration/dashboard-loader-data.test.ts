@@ -4,7 +4,7 @@ import { getCustomerDashboardData } from "@/lib/dashboard/customer-dashboard";
 import * as favorites from "@/lib/favorites";
 import * as recommendations from "@/lib/recommendations";
 import * as dbMod from "@/lib/db";
-import { bookings, providers, services } from "@/db/schema";
+import { bookings, notifications } from "@/db/schema";
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: () => Promise.resolve({ userId: "user_int" }),
@@ -64,7 +64,15 @@ describe("dashboard loader integration", () => {
     const leftJoin = vi.fn().mockReturnThis();
 
     mockSelect.mockReturnValue({
-      from: () => ({ innerJoin, leftJoin, where: whereMock }),
+      from: (table: any) => {
+        if (table === notifications) {
+          return {
+            where: async () => [{ count: 0 }],
+          };
+        }
+
+        return { innerJoin, leftJoin, where: whereMock };
+      },
     });
 
     vi.spyOn(dbMod, "db", "get").mockReturnValue({ select: mockSelect } as any);

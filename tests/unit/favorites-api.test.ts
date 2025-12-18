@@ -82,6 +82,25 @@ function createDb() {
     return [{ count }];
   };
 
+  const insert = () => ({
+    values: (row: any) => ({
+      onConflictDoNothing: async () => {
+        const exists = state.favorites.some((f) => f.userId === row.userId && f.serviceId === row.serviceId);
+        if (!exists) {
+          state.favorites.push({ id: `fav_${state.favorites.length + 1}`, createdAt: new Date(), ...row });
+        }
+      },
+    }),
+  });
+
+  const del = () => ({
+    where: async () => {
+      state.favorites = state.favorites.filter(
+        (f) => !(f.userId === state.currentUser && f.serviceId === state.currentServiceId),
+      );
+    },
+  });
+
   return {
     query: {
       services: {
@@ -96,27 +115,12 @@ function createDb() {
           ) || null,
       },
     },
+    insert,
+    delete: del,
     transaction: async (fn: any) => {
       await fn({
-        insert: () => ({
-          values: (row: any) => ({
-            onConflictDoNothing: async () => {
-              const exists = state.favorites.some(
-                (f) => f.userId === row.userId && f.serviceId === row.serviceId,
-              );
-              if (!exists) {
-                state.favorites.push({ id: `fav_${state.favorites.length + 1}`, createdAt: new Date(), ...row });
-              }
-            },
-          }),
-        }),
-        delete: () => ({
-          where: async () => {
-            state.favorites = state.favorites.filter(
-              (f) => !(f.userId === state.currentUser && f.serviceId === state.currentServiceId),
-            );
-          },
-        }),
+        insert,
+        delete: del,
       });
     },
     select: (shape: any) => {

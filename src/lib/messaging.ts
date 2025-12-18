@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNull, ne, or, sql, lt, lte } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 import { bookings, messageThreads, messages, providers, services, users } from "@/db/schema";
 import { db } from "@/lib/db";
@@ -210,7 +211,7 @@ export async function listThreadMessages(userId: string, bookingId: string, opts
     cursorDate = pivot?.createdAt ?? null;
   }
 
-  const whereClauses = [eq(messages.bookingId, bookingId)] as any[];
+  const whereClauses: SQL[] = [eq(messages.bookingId, bookingId)];
   if (cursorDate) {
     whereClauses.push(lt(messages.createdAt, cursorDate));
   }
@@ -320,7 +321,7 @@ export async function sendBookingMessage(params: {
 
 export async function markThreadRead(userId: string, bookingId: string, lastMessageId?: string | null) {
   const now = new Date();
-  const whereClauses = [eq(messages.bookingId, bookingId), isNull(messages.readAt), eq(messages.recipientId, userId)] as any[];
+  const whereClauses: SQL[] = [eq(messages.bookingId, bookingId), isNull(messages.readAt), eq(messages.recipientId, userId)];
 
   if (lastMessageId) {
     const pivot = await db.query.messages.findFirst({ where: eq(messages.serverMessageId, lastMessageId), columns: { createdAt: true } });

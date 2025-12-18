@@ -1,6 +1,7 @@
 import { describe, expect, test, vi, beforeEach } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { GET } from "@/app/api/og/service/[slug]/route";
+import { NextRequest } from "next/server";
 import { createServiceFixture, createProviderFixture } from "../utils/fixtures";
 import { createOgRouteClient } from "../utils/mock-db";
 
@@ -40,7 +41,7 @@ describe("/api/og/service/[slug]", () => {
     });
     dbState.client = createOgRouteClient({ service, rating: 4.5, reviewCount: 12 });
 
-    const res: any = await GET(new Request("http://localhost/api/og/service/deluxe-clean"), { params: { slug: "deluxe-clean" } });
+    const res: any = await GET(new NextRequest("http://localhost/api/og/service/deluxe-clean"), { params: Promise.resolve({ slug: "deluxe-clean" }) });
 
     expect(res.status).toBe(200);
     expect(res.headers.get("content-type")).toBe("image/png");
@@ -51,7 +52,7 @@ describe("/api/og/service/[slug]", () => {
 
   test("404 when service missing", async () => {
     dbState.client = createOgRouteClient({ service: null });
-    const res: any = await GET(new Request("http://localhost/api/og/service/missing"), { params: { slug: "missing" } });
+    const res: any = await GET(new NextRequest("http://localhost/api/og/service/missing"), { params: Promise.resolve({ slug: "missing" }) });
     expect(res.status).toBe(404);
   });
 
@@ -63,7 +64,7 @@ describe("/api/og/service/[slug]", () => {
     });
     dbState.client = createOgRouteClient({ service, rating: 0, reviewCount: 0 });
 
-    const res: any = await GET(new Request("http://localhost/api/og/service/no-biz"), { params: { slug: "no-biz" } });
+    const res: any = await GET(new NextRequest("http://localhost/api/og/service/no-biz"), { params: Promise.resolve({ slug: "no-biz" }) });
     expect(res.status).toBe(200);
     expect(res.body).toContain("No Biz");
     expect(res.body).toContain("NZ$ 0.00");

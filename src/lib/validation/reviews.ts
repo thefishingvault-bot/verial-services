@@ -39,7 +39,8 @@ export async function parseBody<T extends z.ZodTypeAny>(schema: T, req: Request)
 }
 
 export function parseQuery<T extends z.ZodTypeAny>(schema: T, req: Request & { nextUrl?: URL }) {
-  const result = schema.safeParse(Object.fromEntries((req as any).nextUrl?.searchParams ?? []));
+  const url = req.nextUrl ?? new URL(req.url);
+  const result = schema.safeParse(Object.fromEntries(url.searchParams));
   if (!result.success) {
     return { ok: false as const, error: result.error.flatten() };
   }
