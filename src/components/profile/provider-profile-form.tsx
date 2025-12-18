@@ -42,6 +42,33 @@ type ProviderSettingsResponse = {
 export function ProviderProfileForm() {
   const { toast } = useToast();
 
+  type Island = "" | "north" | "south";
+  const NZ_REGION_TO_ISLAND: Record<string, Exclude<Island, "">> = {
+    Northland: "north",
+    Auckland: "north",
+    Waikato: "north",
+    "Bay of Plenty": "north",
+    Gisborne: "north",
+    "Hawke's Bay": "north",
+    Taranaki: "north",
+    Manawatu: "north",
+    "Manawatu-Whanganui": "north",
+    Wellington: "north",
+    Tasman: "south",
+    Nelson: "south",
+    Marlborough: "south",
+    Westland: "south",
+    "West Coast": "south",
+    Canterbury: "south",
+    Otago: "south",
+    Southland: "south",
+  };
+
+  const inferIslandFromRegion = (region: string | null | undefined): Island => {
+    if (!region) return "";
+    return (NZ_REGION_TO_ISLAND[region] as Island | undefined) ?? "";
+  };
+
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,6 +84,7 @@ export function ProviderProfileForm() {
   const [gstNumber, setGstNumber] = useState("");
   const [baseSuburb, setBaseSuburb] = useState("");
   const [baseRegion, setBaseRegion] = useState("");
+  const [island, setIsland] = useState<Island>("");
   const [coverageRegion, setCoverageRegion] = useState("");
   const [coverageSuburbs, setCoverageSuburbs] = useState<string[]>([]);
   const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
@@ -99,6 +127,7 @@ export function ProviderProfileForm() {
         setBaseSuburb(settingsData.baseSuburb ?? "");
         setBaseRegion(settingsData.baseRegion ?? "");
         setCoverageRegion(settingsData.coverageRegion ?? settingsData.baseRegion ?? "");
+        setIsland(inferIslandFromRegion(settingsData.coverageRegion ?? settingsData.baseRegion));
         setCoverageSuburbs(settingsData.coverageSuburbs ?? []);
         setServiceRadiusKm(settingsData.serviceRadiusKm ?? 10);
       } catch (err) {
@@ -124,6 +153,13 @@ export function ProviderProfileForm() {
       setBaseSuburb(coverageSuburbs[0]);
     }
   }, [coverageSuburbs, baseSuburb]);
+
+  const visibleRegions = island
+    ? NZ_REGIONS.filter((region) => {
+        const mapped = NZ_REGION_TO_ISLAND[region];
+        return !mapped || mapped === island;
+      })
+    : NZ_REGIONS;
 
   const availableSuburbs = coverageRegion ? (NZ_REGIONS_TO_SUBURBS[coverageRegion] || []) : [];
   const filteredAvailableSuburbs = suburbSearch.trim()
@@ -372,6 +408,38 @@ export function ProviderProfileForm() {
 
             <div className="space-y-2">
               <div className="space-y-1">
+                <Label htmlFor="coverage-island">Island</Label>
+                <select
+                  id="coverage-island"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  value={island}
+                  onChange={(e) => {
+                    const nextIsland = (e.target.value as Island) || "";
+                    setIsland(nextIsland);
+
+                    const currentRegionIsland = coverageRegion
+                      ? NZ_REGION_TO_ISLAND[coverageRegion]
+                      : undefined;
+                    const mismatched =
+                      nextIsland && coverageRegion && currentRegionIsland && currentRegionIsland !== nextIsland;
+
+                    if (mismatched) {
+                      setCoverageRegion("");
+                      setCoverageSuburbs([]);
+                      setBaseRegion("");
+                      setBaseSuburb("");
+                      setSuburbSearch("");
+                      setSuburbToAdd("");
+                    }
+                  }}
+                >
+                  <option value="">All regions</option>
+                  <option value="north">North Island</option>
+                  <option value="south">South Island</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
                 <Label htmlFor="coverage-region">Region</Label>
                 <select
                   id="coverage-region"
@@ -383,7 +451,7 @@ export function ProviderProfileForm() {
                   }}
                 >
                   <option value="">Select a region</option>
-                  {NZ_REGIONS.map((region) => (
+                  {visibleRegions.map((region) => (
                     <option key={region} value={region}>
                       {region}
                     </option>
