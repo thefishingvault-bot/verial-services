@@ -1,7 +1,7 @@
 
 import { db } from '@/lib/db';
 import { providers, users } from '@/db/schema';
-import { and, eq, ilike, or, sql } from 'drizzle-orm';
+import { and, eq, ilike, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { auth, clerkClient } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
@@ -52,10 +52,10 @@ export default async function AdminVerificationsPage({
   const q = params.q;
   const statusFilter = params.status;
   const regionFilter = params.region;
+  const stripeFilter = params.stripe;
+  const verifiedOnly = params.verified;
 
-  const baseWhere = [
-    or(eq(providers.status, 'pending'), eq(providers.status, 'approved'), eq(providers.status, 'rejected')),
-  ];
+  const baseWhere: Parameters<typeof and> = [];
 
   if (q) {
     baseWhere.push(
@@ -75,7 +75,17 @@ export default async function AdminVerificationsPage({
     baseWhere.push(eq(providers.status, statusFilter as 'pending' | 'approved' | 'rejected'));
   }
 
-  const where = and(...baseWhere);
+  if (verifiedOnly) {
+    baseWhere.push(eq(providers.isVerified, true));
+  }
+
+  if (stripeFilter === 'connected') {
+    baseWhere.push(and(isNotNull(providers.stripeConnectId), eq(providers.chargesEnabled, true)));
+  } else if (stripeFilter === 'disconnected') {
+    baseWhere.push(or(eq(providers.chargesEnabled, false), isNull(providers.stripeConnectId)));
+  }
+
+  const where = baseWhere.length ? and(...baseWhere) : undefined;
 
   const [rows, regions] = await Promise.all([
     db
@@ -123,7 +133,13 @@ export default async function AdminVerificationsPage({
   return (
     <div className="space-y-6">
       <AdminProvidersFiltersBar
-        searchParams={{ q, status: statusFilter, region: regionFilter }}
+        searchParams={{
+          q,
+          status: statusFilter,
+          region: regionFilter,
+          stripe: stripeFilter,
+          verified: verifiedOnly ? '1' : undefined,
+        }}
         regions={regionList}
       />
 

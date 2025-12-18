@@ -43,6 +43,11 @@ export const AdminVerificationsSearchSchema = z.object({
   q: z.string().trim().optional().default(""),
   status: z.enum(["pending", "approved", "rejected", "all"]).default("all"),
   region: z.string().trim().optional().default("all"),
+  stripe: z.enum(["connected", "disconnected", "all"]).default("all"),
+  verified: z
+    .union([z.literal("1"), z.literal("true"), z.literal("yes"), z.literal("on"), z.literal("")])
+    .optional()
+    .transform((v) => Boolean(v)),
 });
 
 export const AdminTrustIncidentsSearchSchema = z.object({
