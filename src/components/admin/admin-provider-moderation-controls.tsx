@@ -72,15 +72,18 @@ export function AdminProviderModerationControls({
   return (
     <div className="space-y-2 text-sm">
       <div className="flex flex-wrap gap-2">
-        {status === "pending" && (
-          <>
-            <Button size="sm" variant="outline" onClick={approve} disabled={pendingAction !== null}>
-              {pendingAction === "approve" && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}Approve provider
-            </Button>
-            <Button size="sm" variant="outline" onClick={reject} disabled={pendingAction !== null}>
-              {pendingAction === "reject" && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}Reject provider
-            </Button>
-          </>
+        {status !== "approved" && (
+          <Button size="sm" variant="outline" onClick={approve} disabled={pendingAction !== null}>
+            {pendingAction === "approve" && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+            {status === "rejected" ? "Re-approve provider" : "Approve provider"}
+          </Button>
+        )}
+
+        {status !== "rejected" && (
+          <Button size="sm" variant="outline" onClick={reject} disabled={pendingAction !== null}>
+            {pendingAction === "reject" && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+            {status === "approved" ? "Reject provider" : "Reject provider"}
+          </Button>
         )}
 
         <Button size="sm" variant="outline" onClick={toggleVerified} disabled={pendingAction !== null}>

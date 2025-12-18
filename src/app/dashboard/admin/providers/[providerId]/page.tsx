@@ -23,8 +23,22 @@ const toValidDate = (value: unknown): Date | null => {
 const formatDate = (value: unknown) => {
   const date = toValidDate(value);
   return date
-    ? new Intl.DateTimeFormat('en-NZ', { dateStyle: 'medium' }).format(date)
+    ? new Intl.DateTimeFormat('en-NZ', {
+        timeZone: 'Pacific/Auckland',
+        dateStyle: 'medium',
+      }).format(date)
     : '—';
+};
+
+const formatMonthYearNZ = (value: unknown) => {
+  const date = toValidDate(value);
+  return date
+    ? new Intl.DateTimeFormat('en-NZ', {
+        timeZone: 'Pacific/Auckland',
+        month: 'long',
+        year: 'numeric',
+      }).format(date)
+    : 'Unknown';
 };
 
 export default async function AdminProviderDetailPage({
@@ -103,9 +117,12 @@ export default async function AdminProviderDetailPage({
       priceAtBooking: bookings.priceAtBooking,
       customerFirstName: users.firstName,
       customerLastName: users.lastName,
+      serviceTitle: services.title,
+      serviceSlug: services.slug,
     })
     .from(bookings)
     .innerJoin(users, eq(bookings.userId, users.id))
+    .leftJoin(services, eq(bookings.serviceId, services.id))
     .where(eq(bookings.providerId, provider.id))
     .orderBy(desc(bookings.createdAt))
     .limit(5);
@@ -209,11 +226,7 @@ export default async function AdminProviderDetailPage({
                   <span>•</span>
                   <span>
                     Provider since{' '}
-                    {providerSinceSafe
-                      ? new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' }).format(
-                          providerSinceSafe,
-                        )
-                      : 'Unknown'}
+                    {formatMonthYearNZ(providerSinceSafe ?? providerSinceDate)}
                   </span>
                 </CardDescription>
                 <div className="mt-2 flex flex-wrap gap-2 text-xs">
@@ -228,6 +241,9 @@ export default async function AdminProviderDetailPage({
                   >
                     {provider.status}
                   </Badge>
+                  {provider.isSuspended && (
+                    <Badge variant="destructive">Suspended</Badge>
+                  )}
                   <Badge variant="outline">
                     {provider.isVerified ? 'Verified' : 'Not verified'}
                   </Badge>
@@ -386,6 +402,35 @@ export default async function AdminProviderDetailPage({
                   <div>Stripe not connected</div>
                 )}
               </div>
+
+              <div>
+                <div className="text-xs text-muted-foreground">KYC</div>
+                <div className="space-y-1">
+                  <div className="capitalize">
+                    {(provider.kycStatus ?? 'not_started').replace(/_/g, ' ')}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    Submitted: {formatDate(provider.kycSubmittedAt)} · Verified: {formatDate(provider.kycVerifiedAt)}
+                  </div>
+                  <div className="text-xs">
+                    {provider.identityDocumentUrl ? (
+                      <a href={provider.identityDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                        Identity document
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Identity document: —</span>
+                    )}
+                    <span className="text-muted-foreground"> · </span>
+                    {provider.businessDocumentUrl ? (
+                      <a href={provider.businessDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                        Business document
+                      </a>
+                    ) : (
+                      <span className="text-muted-foreground">Business document: —</span>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -463,6 +508,11 @@ export default async function AdminProviderDetailPage({
             <CardDescription>Moderation controls for this provider.</CardDescription>
           </CardHeader>
           <CardContent>
+            {provider.isSuspended && (
+              <div className="mb-3 rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                Suspended: {provider.suspensionReason ?? 'No reason provided'} · Start: {formatDate(provider.suspensionStartDate)}
+              </div>
+            )}
             <AdminProviderModerationControls
               providerId={provider.id}
               status={provider.status}
@@ -523,7 +573,20 @@ export default async function AdminProviderDetailPage({
                 {recentBookings.map((b) => (
                   <div key={b.id} className="grid grid-cols-5 gap-2 items-center border-b py-1 last:border-b-0">
                     <span>{formatDate(b.scheduledDate ?? b.createdAt)}</span>
-                    <span className="truncate font-mono text-[11px]">{b.id}</span>
+                    <span className="truncate">
+                      {b.serviceSlug ? (
+                        <Link href={`/s/${b.serviceSlug}`} target="_blank" className="hover:underline">
+                          {b.serviceTitle ?? 'Service'}
+                        </Link>
+                      ) : (
+                        <span className="text-muted-foreground">Unknown service</span>
+                      )}
+                      <div className="font-mono text-[11px] text-muted-foreground">
+                        <Link href={`/dashboard/admin/bookings/${b.id}`} className="hover:underline">
+                          {b.id}
+                        </Link>
+                      </div>
+                    </span>
                     <span className="truncate">
                       {`${b.customerFirstName ?? ''} ${b.customerLastName ?? ''}`.trim() || 'Unknown'}
                     </span>
