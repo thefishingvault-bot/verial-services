@@ -62,15 +62,15 @@ export async function GET(request: NextRequest) {
         providerId: bookings.providerId,
         totalBookings: sql<number>`cast(count(*) as int)`,
         completedBookings: sql<number>`cast(count(case when ${bookings.status} = 'completed' then 1 end) as int)`,
-        cancelledBookings: sql<number>`cast(count(case when ${bookings.status} = 'canceled' then 1 end) as int)`,
+        cancelledBookings: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') then 1 end) as int)`,
 
         bookings30d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
         completed30d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
-        cancelled30d: sql<number>`cast(count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+        cancelled30d: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
 
         bookings90d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
         completed90d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
-        cancelled90d: sql<number>`cast(count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
+        cancelled90d: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
       })
       .from(bookings)
       .where(inArray(bookings.providerId, allProviderIds))
@@ -340,7 +340,7 @@ export async function GET(request: NextRequest) {
         day: sql<Date>`date_trunc('day', ${bookings.createdAt})`,
         total: sql<number>`count(*)`,
         completed: sql<number>`count(case when ${bookings.status} = 'completed' then 1 end)`,
-        canceled: sql<number>`count(case when ${bookings.status} = 'canceled' then 1 end)`,
+        canceled: sql<number>`count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') then 1 end)`,
       })
       .from(bookings)
       .where(and(
