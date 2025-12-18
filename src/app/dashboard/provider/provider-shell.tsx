@@ -21,7 +21,10 @@ const providerNav = [
 export function ProviderShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => {
+    if (href === "/dashboard/provider") return pathname === href;
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/20">
