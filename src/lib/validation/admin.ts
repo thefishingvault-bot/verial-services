@@ -2,13 +2,18 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const uuid = () => z.string().uuid();
+const providerId = () =>
+  z
+    .string()
+    .min(1)
+    .regex(/^prov_[A-Za-z0-9_]+$/, "Invalid provider id");
 
 export const PaginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(200).default(50),
 });
 
-export const ProviderIdSchema = z.object({ providerId: uuid() });
+export const ProviderIdSchema = z.object({ providerId: providerId() });
 export const UserIdSchema = z.object({ userId: uuid() });
 export const BookingIdSchema = z.object({ bookingId: uuid() });
 export const DisputeIdSchema = z.object({ disputeId: uuid() });
@@ -27,7 +32,7 @@ export const TrustRuleSchema = z.object({
 });
 
 export const VerifyProviderSchema = z.object({
-  providerId: uuid(),
+  providerId: providerId(),
   newStatus: z.enum(["pending", "approved", "rejected"]),
 });
 

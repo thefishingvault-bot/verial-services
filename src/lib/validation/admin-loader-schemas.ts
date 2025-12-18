@@ -2,6 +2,11 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 const uuid = () => z.string().uuid();
+const providerId = () =>
+  z
+    .string()
+    .min(1)
+    .regex(/^prov_[A-Za-z0-9_]+$/, "Invalid provider id");
 
 function parseWithFallback<T extends z.ZodTypeAny>(schema: T, raw: unknown): z.infer<T> {
   const result = schema.safeParse(raw ?? {});
@@ -21,7 +26,7 @@ export function parseSearchParams<T extends z.ZodTypeAny>(schema: T, raw: unknow
   return parseWithFallback(schema, raw);
 }
 
-export const ProviderIdParamSchema = z.object({ providerId: uuid() });
+export const ProviderIdParamSchema = z.object({ providerId: providerId() });
 export const BookingIdParamSchema = z.object({ bookingId: uuid() });
 export const DisputeIdParamSchema = z.object({ disputeId: uuid() });
 export const RuleIdParamSchema = z.object({ ruleId: uuid() });
