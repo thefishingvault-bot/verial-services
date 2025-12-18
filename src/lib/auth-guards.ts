@@ -1,7 +1,7 @@
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import { db } from "@/lib/db";
-import { users } from "@/db/schema";
+import { providers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const getUserRole = async (userId: string) => {
@@ -41,6 +41,17 @@ export const requireProvider = async () => {
   const role = await getUserRole(userId);
   if (role !== "provider" && role !== "admin") {
     redirect("/dashboard");
+  }
+
+  // Providers only get dashboard access after approval.
+  if (role === "provider") {
+    const provider = await db.query.providers.findFirst({
+      where: eq(providers.userId, userId),
+      columns: { status: true },
+    });
+    if (provider?.status !== "approved") {
+      redirect("/dashboard/register-provider");
+    }
   }
 
   return { userId, role: role ?? "provider" };

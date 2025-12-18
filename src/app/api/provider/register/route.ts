@@ -16,18 +16,19 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    // Check if user is already a provider
-    const existingProvider = await db.query.providers.findFirst({
-      where: (p, { eq }) => eq(p.userId, userId),
-    });
-    if (existingProvider) {
-      return new NextResponse("User is already a provider", { status: 400 });
-    }
-
     const { businessName, handle } = await req.json();
     if (!businessName || !handle) {
       return new NextResponse("Missing businessName or handle", { status: 400 });
     }
+
+    // Check if user already has a provider application
+    const existingProvider = await db.query.providers.findFirst({
+      where: (p, { eq }) => eq(p.userId, userId),
+      columns: {
+        id: true,
+        status: true,
+      },
+    });
 
     // --- 1. Get user details from Clerk ---
     const client = await clerkClient();
@@ -36,6 +37,8 @@ export async function POST(req: Request) {
     if (!userEmail) {
       return new NextResponse("User email not found", { status: 400 });
     }
+
+    const currentClerkRole = (user.publicMetadata as Record<string, unknown>)?.role as string | undefined;
 
     // --- 2. Create the User record (if it doesn't exist) ---
     // This ensures the foreign key constraint will pass.
@@ -46,11 +49,60 @@ export async function POST(req: Request) {
         firstName: user.firstName,
         lastName: user.lastName,
         avatarUrl: user.imageUrl,
-        role: "user", // Start as user, will be updated to provider
+        role: "user", // Providers only get access after admin approval
       }).onConflictDoNothing(); // If user already exists, do nothing
     } catch (dbError) {
       console.error("[API_PROVIDER_REGISTER] Error creating user record:", dbError);
       return new NextResponse("Failed to create user record", { status: 500 });
+    }
+
+    // Determine whether we should demote role (never demote admins).
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { role: true },
+    });
+    const isAdmin = currentClerkRole === "admin" || dbUser?.role === "admin";
+
+    // Ensure Clerk role is not prematurely set (but never downgrade admins).
+    if (!isAdmin) {
+      await client.users.updateUserMetadata(userId, {
+        publicMetadata: {
+          ...(user.publicMetadata as Record<string, unknown>),
+          role: "user",
+        },
+      });
+    }
+
+    // If the user previously got rejected, allow resubmission by re-opening the same provider record.
+    if (existingProvider) {
+      if (existingProvider.status === 'rejected') {
+        const [updatedProvider] = await db
+          .update(providers)
+          .set({
+            businessName,
+            handle,
+            status: 'pending',
+            isVerified: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(providers.id, existingProvider.id))
+          .returning();
+
+        await db
+          .update(users)
+          .set({ providerId: existingProvider.id, role: isAdmin ? 'admin' : 'user' })
+          .where(eq(users.id, userId));
+
+        console.log(`[API_PROVIDER_REGISTER] User ${userId} resubmitted Provider ${existingProvider.id}`);
+        return NextResponse.json(updatedProvider);
+      }
+
+      return new NextResponse(
+        existingProvider.status === 'pending'
+          ? 'Provider application already submitted and awaiting review'
+          : 'User is already an approved provider',
+        { status: 400 },
+      );
     }
 
     // --- 3. Create the new Provider record ---
@@ -63,17 +115,10 @@ export async function POST(req: Request) {
       // All other fields (status, trust, etc.) will use their defaults
     }).returning();
 
-    // --- 4. Update the User record to link to the providerId ---
+    // --- 4. Update the User record to link to the providerId (keep role as user until approved) ---
     await db.update(users)
-      .set({ providerId: newProvider.id, role: "provider" })
+      .set({ providerId: newProvider.id, role: isAdmin ? "admin" : "user" })
       .where(eq(users.id, userId));
-
-    // --- 5. Update Clerk publicMetadata to set role ---
-    await client.users.updateUserMetadata(userId, {
-      publicMetadata: {
-        role: "provider",
-      },
-    });
 
     console.log(`[API_PROVIDER_REGISTER] User ${userId} successfully registered as Provider ${newProvider.id}`);
     return NextResponse.json(newProvider);

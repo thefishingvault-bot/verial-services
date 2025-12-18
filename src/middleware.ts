@@ -4,7 +4,7 @@ import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/
 import { NextResponse } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { users } from "@/db/schema";
+import { providers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 // Define routes that are public (accessible without auth)
@@ -55,6 +55,18 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Fetch user role once if needed for guarded dashboard/admin routes
   let role: string | undefined;
+  let providerStatus: "pending" | "approved" | "rejected" | undefined;
+
+  const getProviderStatus = async () => {
+    if (providerStatus !== undefined) return providerStatus;
+    const provider = await db.query.providers.findFirst({
+      where: (p, { eq }) => eq(p.userId, userId),
+      columns: { status: true },
+    });
+    providerStatus = provider?.status;
+    return providerStatus;
+  };
+
   if (isAdminRoute(req) || isProviderDashboardRoute(req) || isCustomerDashboardRoute(req)) {
     const client = await clerkClient();
     const user = await client.users.getUser(userId);
@@ -97,17 +109,29 @@ export default clerkMiddleware(async (auth, req) => {
     if (role !== "provider" && role !== "admin") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
+
+    // Providers only get dashboard access after approval.
+    if (role === "provider") {
+      const status = await getProviderStatus();
+      if (status !== "approved") {
+        return NextResponse.redirect(new URL("/dashboard/register-provider", req.url));
+      }
+    }
     return NextResponse.next();
   }
 
   // Customer dashboard guard (exclude provider paths handled above)
   if (isCustomerDashboardRoute(req) && !isProviderDashboardRoute(req)) {
     if (role === "provider") {
-      if (isMessagesRoute(req)) {
-        const suffix = pathname.replace(/^\/dashboard\/messages/, "");
-        return NextResponse.redirect(new URL(`/dashboard/provider/messages${suffix}`, req.url));
+      // Only redirect into provider dashboard once the application is approved.
+      const status = await getProviderStatus();
+      if (status === "approved") {
+        if (isMessagesRoute(req)) {
+          const suffix = pathname.replace(/^\/dashboard\/messages/, "");
+          return NextResponse.redirect(new URL(`/dashboard/provider/messages${suffix}`, req.url));
+        }
+        return NextResponse.redirect(new URL("/dashboard/provider", req.url));
       }
-      return NextResponse.redirect(new URL("/dashboard/provider", req.url));
     }
 
     if (role === "admin") {
