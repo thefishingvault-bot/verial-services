@@ -23,6 +23,7 @@ type ProviderHealth = {
     firstName: string | null;
     lastName: string | null;
   };
+  totalServices: number;
   totalBookings: number;
   completedBookings: number;
   cancelledBookings: number;
@@ -269,6 +270,7 @@ export default function AdminProviderHealthPage() {
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [savedFilters, setSavedFilters] = useState<FilterPreset[]>([]);
@@ -300,6 +302,7 @@ export default function AdminProviderHealthPage() {
 
   const fetchProviders = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const params = new URLSearchParams({
         sort: sortBy,
@@ -309,16 +312,25 @@ export default function AdminProviderHealthPage() {
         incidents: incidentsFilter,
       });
       const response = await fetch(`/api/admin/providers/health?${params}`);
-      if (response.ok) {
-        const data: ApiResponse = await response.json();
-        setProviders(data.providers.map((provider) => ({
-          ...provider,
-          createdAt: new Date(provider.createdAt),
-        })));
-        setAnalytics(data.analytics);
+      if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        setProviders([]);
+        setAnalytics(null);
+        setError(`Failed to load health data (${response.status}). ${text || ''}`.trim());
+        return;
       }
+
+      const data: ApiResponse = await response.json();
+      setProviders(data.providers.map((provider) => ({
+        ...provider,
+        createdAt: new Date(provider.createdAt),
+      })));
+      setAnalytics(data.analytics);
     } catch (error) {
       console.error("Error fetching providers:", error);
+      setProviders([]);
+      setAnalytics(null);
+      setError('Failed to load health data.');
     } finally {
       setLoading(false);
     }
@@ -663,9 +675,6 @@ export default function AdminProviderHealthPage() {
 
   const handleRefreshIntervalChange = (interval: number) => {
     setRefreshInterval(interval);
-    if (interval === 0) {
-      setAutoRefreshEnabled(false);
-    }
   };
 
   if (loading) {
@@ -680,14 +689,17 @@ export default function AdminProviderHealthPage() {
   const criticalRisk = filteredProviders.filter(p => p.riskLevel === "critical").length;
   const highRisk = filteredProviders.filter(p => p.riskLevel === "high").length;
   const unresolvedIncidents = filteredProviders.reduce((sum, p) => sum + p.unresolvedIncidents, 0);
-  const providerCount = providers.length || 1;
-  const profileCompleteCount = providers.filter(p => p.businessName && p.handle).length;
-  const servicesAddedCount = providers.filter(p => p.totalBookings > 0).length;
-  const reviewsCount = providers.filter(p => p.totalReviews > 0).length;
-  const trust80Count = providers.filter(p => p.trustScore >= 80).length;
-  const averageCompletionRate = providers.length > 0
-    ? Math.round(providers.reduce((sum, p) => sum + p.completionRate, 0) / providers.length)
+  const providerCount = filteredProviders.length || 1;
+  const profileCompleteCount = filteredProviders.filter(p => p.businessName && p.handle).length;
+  const servicesAddedCount = filteredProviders.filter(p => p.totalServices > 0).length;
+  const reviewsCount = filteredProviders.filter(p => p.totalReviews > 0).length;
+  const trust80Count = filteredProviders.filter(p => p.trustScore >= 80).length;
+  const averageCompletionRate = filteredProviders.length > 0
+    ? Math.round(filteredProviders.reduce((sum, p) => sum + p.completionRate, 0) / filteredProviders.length)
     : 0;
+
+  const totalBookingsLast30d = filteredProviders.reduce((sum, p) => sum + p.bookings30d, 0);
+  const activeProvidersCount = analytics?.summary.activeProviders ?? filteredProviders.filter(p => p.totalBookings > 0).length;
 
   const completionTrend = analytics?.trends.bookingTimeSeries.map((point) => ({
     name: point.date.slice(5),
@@ -701,6 +713,11 @@ export default function AdminProviderHealthPage() {
 
   return (
     <div className="space-y-6">
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-800 p-4 rounded-lg">
+          {error}
+        </div>
+      )}
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1336,7 +1353,7 @@ export default function AdminProviderHealthPage() {
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
               <div className="text-lg font-semibold text-blue-900 mb-1">Total Bookings</div>
               <div className="text-3xl font-bold text-blue-600">
-                {providers.reduce((sum, p) => sum + p.totalBookings, 0).toLocaleString()}
+                  {totalBookingsLast30d.toLocaleString()}
               </div>
               <div className="text-sm text-blue-700 mt-1">Last 30 days</div>
             </div>
@@ -1350,7 +1367,7 @@ export default function AdminProviderHealthPage() {
             <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
               <div className="text-lg font-semibold text-purple-900 mb-1">Active Providers</div>
               <div className="text-3xl font-bold text-purple-600">
-                {providers.filter(p => p.status === 'active').length}
+                {activeProvidersCount}
               </div>
               <div className="text-sm text-purple-700 mt-1">Currently active</div>
             </div>
@@ -1432,18 +1449,18 @@ export default function AdminProviderHealthPage() {
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">30-Day Growth</span>
                 <span className="text-sm font-medium text-green-600">
-                  +{analytics?.growthMetrics.avgBookingGrowth.toFixed(1) || 12}%
+                  {analytics ? `${analytics.growthMetrics.avgBookingGrowth >= 0 ? '+' : ''}${analytics.growthMetrics.avgBookingGrowth.toFixed(1)}%` : 'N/A'}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">90-Day Growth</span>
                 <span className="text-sm font-medium text-green-600">
-                  +{analytics?.growthMetrics.avgCompletionGrowth.toFixed(1) || 28}%
+                  {analytics ? `${analytics.growthMetrics.avgCompletionGrowth >= 0 ? '+' : ''}${analytics.growthMetrics.avgCompletionGrowth.toFixed(1)} pts` : 'N/A'}
                 </span>
               </div>
               <div className="flex justify-between items-center p-3 bg-gray-50 rounded">
                 <span className="text-sm">New Providers</span>
-                <span className="text-sm font-medium">{analytics?.growthMetrics.newProviders30d || 15} this month</span>
+                <span className="text-sm font-medium">{analytics ? `${analytics.growthMetrics.newProviders30d}` : 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -1484,13 +1501,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Profile Complete</span>
                 <span className="text-green-600 font-bold">
-                  {profileCompleteCount}/{providers.length}
+                  {profileCompleteCount}/{filteredProviders.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-green-600 h-2 rounded-full"
-                  style={{ width: `${providers.length ? (profileCompleteCount / providers.length) * 100 : 0}%` }}
+                  style={{ width: `${filteredProviders.length ? (profileCompleteCount / filteredProviders.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1499,13 +1516,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Services Added</span>
                 <span className="text-blue-600 font-bold">
-                  {servicesAddedCount}/{providers.length}
+                  {servicesAddedCount}/{filteredProviders.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-blue-600 h-2 rounded-full"
-                  style={{ width: `${providers.length ? (servicesAddedCount / providers.length) * 100 : 0}%` }}
+                  style={{ width: `${filteredProviders.length ? (servicesAddedCount / filteredProviders.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -1514,13 +1531,13 @@ export default function AdminProviderHealthPage() {
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Reviews Received</span>
                 <span className="text-purple-600 font-bold">
-                  {reviewsCount}/{providers.length}
+                  {reviewsCount}/{filteredProviders.length}
                 </span>
               </div>
               <div className="w-full bg-gray-200 rounded-full h-2">
                 <div
                   className="bg-purple-600 h-2 rounded-full"
-                  style={{ width: `${providers.length ? (reviewsCount / providers.length) * 100 : 0}%` }}
+                  style={{ width: `${filteredProviders.length ? (reviewsCount / filteredProviders.length) * 100 : 0}%` }}
                 ></div>
               </div>
             </div>
@@ -2266,7 +2283,7 @@ export default function AdminProviderHealthPage() {
         </div>
       )}
 
-      {providers.length === 0 && (
+      {filteredProviders.length === 0 && (
         <p className="text-gray-500 text-center py-8">No providers found matching the current filters.</p>
       )}
 

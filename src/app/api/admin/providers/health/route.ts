@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { providers, users, bookings, reviews, trustIncidents, providerSuspensions, disputes, refunds, riskRules } from "@/db/schema";
-import { eq, desc, asc, sql, inArray, and } from "drizzle-orm";
+import { providers, users, services, bookings, reviews, trustIncidents, providerSuspensions, disputes, refunds, riskRules } from "@/db/schema";
+import { eq, sql, inArray, and } from "drizzle-orm";
 import { RiskScoringEngine } from "@/lib/risk-scoring";
 import { requireAdmin } from "@/lib/admin-auth";
 
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const sortBy = (searchParams.get("sort") as SortOption) || "risk";
-    const sortOrder = searchParams.get("order") === "asc" ? asc : desc;
+    const sortOrder = searchParams.get("order") === "asc" ? "asc" : "desc";
     const riskFilter = searchParams.get("risk") || "all";
     const statusFilter = searchParams.get("status") || "all";
     const incidentsFilter = searchParams.get("incidents") || "all";
@@ -38,8 +38,8 @@ export async function GET(request: NextRequest) {
       .from(riskRules)
       .where(eq(riskRules.enabled, true));
 
-    // Fetch providers with comprehensive health metrics
-    const providersWithHealth = await db
+    // Base provider list (no joins that multiply rows)
+    const baseProviders = await db
       .select({
         id: providers.id,
         businessName: providers.businessName,
@@ -48,120 +48,235 @@ export async function GET(request: NextRequest) {
         trustLevel: providers.trustLevel,
         trustScore: providers.trustScore,
         createdAt: providers.createdAt,
-        user: {
-          email: users.email,
-          firstName: users.firstName,
-          lastName: users.lastName,
-        },
-        // Core booking metrics
-        totalBookings: sql<number>`count(${bookings.id})`.as("total_bookings"),
-        completedBookings: sql<number>`count(case when ${bookings.status} = 'completed' then 1 end)`.as("completed_bookings"),
-        cancelledBookings: sql<number>`count(case when ${bookings.status} = 'canceled' then 1 end)`.as("cancelled_bookings"),
-
-        // 30-day performance trends
-        bookings30d: sql<number>`count(case when ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end)`.as("bookings_30d"),
-        completed30d: sql<number>`count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end)`.as("completed_30d"),
-        cancelled30d: sql<number>`count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end)`.as("cancelled_30d"),
-
-        // 90-day performance trends
-        bookings90d: sql<number>`count(case when ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end)`.as("bookings_90d"),
-        completed90d: sql<number>`count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end)`.as("completed_90d"),
-        cancelled90d: sql<number>`count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end)`.as("cancelled_90d"),
-
-        // Review metrics
-        totalReviews: sql<number>`count(${reviews.id})`.as("total_reviews"),
-        avgRating: sql<number>`avg(${reviews.rating})`.as("avg_rating"),
-
-        // Trust incidents
-        totalIncidents: sql<number>`count(distinct ${trustIncidents.id})`.as("total_incidents"),
-        unresolvedIncidents: sql<number>`count(case when ${trustIncidents.resolved} = false then 1 end)`.as("unresolved_incidents"),
-        recentIncidents: sql<number>`count(case when ${trustIncidents.createdAt} >= ${thirtyDaysAgo} then 1 end)`.as("recent_incidents"),
-
-        // Suspensions
-        totalSuspensions: sql<number>`count(distinct ${providerSuspensions.id})`.as("total_suspensions"),
-        activeSuspensions: sql<number>`count(case when ${providerSuspensions.endDate} > now() or ${providerSuspensions.endDate} is null then 1 end)`.as("active_suspensions"),
-
-        // Disputes and refunds
-        totalDisputes: sql<number>`count(distinct ${disputes.id})`.as("total_disputes"),
-        unresolvedDisputes: sql<number>`count(case when ${disputes.status} != 'resolved' then 1 end)`.as("unresolved_disputes"),
-        totalRefunds: sql<number>`count(distinct ${refunds.id})`.as("total_refunds"),
-        refundAmount: sql<number>`coalesce(sum(${refunds.amount}), 0)`.as("total_refund_amount"),
+        userEmail: users.email,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
       })
       .from(providers)
-      .leftJoin(users, eq(providers.userId, users.id))
-      .leftJoin(bookings, eq(providers.id, bookings.providerId))
-      .leftJoin(reviews, eq(providers.id, reviews.providerId))
-      .leftJoin(trustIncidents, eq(providers.id, trustIncidents.providerId))
-      .leftJoin(providerSuspensions, eq(providers.id, providerSuspensions.providerId))
-      .leftJoin(disputes, eq(bookings.id, disputes.bookingId))
-      .leftJoin(refunds, eq(bookings.id, refunds.bookingId))
-      .groupBy(providers.id, users.email, users.firstName, users.lastName)
-      .orderBy(
-        sortBy === "bookings" ? sortOrder(sql`count(${bookings.id})`) :
-        sortBy === "cancellations" ? sortOrder(sql`count(case when ${bookings.status} = 'canceled' then 1 end)`) :
-        sortBy === "reviews" ? sortOrder(sql`count(${reviews.id})`) :
-        sortBy === "trust" ? sortOrder(providers.trustScore) :
-        sortBy === "risk" ? sortOrder(sql`count(case when ${trustIncidents.resolved} = false then 1 end)`) :
-        sortOrder(providers.createdAt)
-      );
+      .leftJoin(users, eq(providers.userId, users.id));
 
-    // Process and enhance the data
-    let filteredProviders = await Promise.all(
-      providersWithHealth.map(async (provider) => {
-        const completionRate = provider.totalBookings > 0 ? (provider.completedBookings / provider.totalBookings) * 100 : 0;
-        const cancellationRate = provider.totalBookings > 0 ? (provider.cancelledBookings / provider.totalBookings) * 100 : 0;
+    const allProviderIds = baseProviders.map((p) => p.id);
 
-        const completionRate30d = provider.bookings30d > 0 ? (provider.completed30d / provider.bookings30d) * 100 : 0;
-        const cancellationRate30d = provider.bookings30d > 0 ? (provider.cancelled30d / provider.bookings30d) * 100 : 0;
+    const bookingsAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: bookings.providerId,
+        totalBookings: sql<number>`cast(count(*) as int)`,
+        completedBookings: sql<number>`cast(count(case when ${bookings.status} = 'completed' then 1 end) as int)`,
+        cancelledBookings: sql<number>`cast(count(case when ${bookings.status} = 'canceled' then 1 end) as int)`,
 
-        const completionRate90d = provider.bookings90d > 0 ? (provider.completed90d / provider.bookings90d) * 100 : 0;
-        const cancellationRate90d = provider.bookings90d > 0 ? (provider.cancelled90d / provider.bookings90d) * 100 : 0;
+        bookings30d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+        completed30d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+        cancelled30d: sql<number>`cast(count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
 
-        // Calculate comprehensive risk assessment
-        const riskAssessment = await RiskScoringEngine.calculateRiskScore(provider.id);
-
-        // Activity patterns (booking frequency)
-        const daysSinceCreation = Math.floor((now.getTime() - provider.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-        const bookingFrequency = daysSinceCreation > 0 ? provider.totalBookings / daysSinceCreation : 0;
-
-        // Determine applicable risk rules
-        const applicableRules = enabledRiskRules.filter(rule => {
-          // Check if this rule applies based on incident types and provider data
-          if (rule.incidentType === "complaint" && provider.totalIncidents > 0) return true;
-          if (rule.incidentType === "violation" && provider.unresolvedIncidents > 0) return true;
-          if (rule.incidentType === "service_quality" && completionRate < 80) return true;
-          if (rule.incidentType === "review_abuse" && provider.avgRating < 3.0) return true;
-          return false;
-        });
-
-        return {
-          ...provider,
-          // Core rates
-          completionRate,
-          cancellationRate,
-          // Trend rates
-          completionRate30d,
-          cancellationRate30d,
-          completionRate90d,
-          cancellationRate90d,
-          // Risk assessment
-          riskScore: riskAssessment.riskScore,
-          riskLevel: riskAssessment.riskLevel,
-          riskFactors: riskAssessment.riskFactors,
-          recommendations: riskAssessment.recommendations,
-          alerts: riskAssessment.alerts,
-          // Activity patterns
-          bookingFrequency,
-          daysActive: daysSinceCreation,
-          // Status indicators
-          hasActiveSuspension: provider.activeSuspensions > 0,
-          hasUnresolvedIncidents: provider.unresolvedIncidents > 0,
-          hasRecentIncidents: provider.recentIncidents > 0,
-          // Risk rules
-          applicableRiskRules: applicableRules,
-        };
+        bookings90d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
+        completed90d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
+        cancelled90d: sql<number>`cast(count(case when ${bookings.status} = 'canceled' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
       })
-    );
+      .from(bookings)
+      .where(inArray(bookings.providerId, allProviderIds))
+      .groupBy(bookings.providerId);
+
+    const reviewsAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: reviews.providerId,
+        totalReviews: sql<number>`cast(count(*) as int)`,
+        avgRating: sql<number>`cast(avg(${reviews.rating}) as float)`,
+      })
+      .from(reviews)
+      .where(inArray(reviews.providerId, allProviderIds))
+      .groupBy(reviews.providerId);
+
+    const incidentsAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: trustIncidents.providerId,
+        totalIncidents: sql<number>`cast(count(*) as int)`,
+        unresolvedIncidents: sql<number>`cast(count(case when ${trustIncidents.resolved} = false then 1 end) as int)`,
+        recentIncidents: sql<number>`cast(count(case when ${trustIncidents.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+      })
+      .from(trustIncidents)
+      .where(inArray(trustIncidents.providerId, allProviderIds))
+      .groupBy(trustIncidents.providerId);
+
+    const suspensionsAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: providerSuspensions.providerId,
+        totalSuspensions: sql<number>`cast(count(*) as int)`,
+        activeSuspensions: sql<number>`cast(count(case when ${providerSuspensions.endDate} > now() or ${providerSuspensions.endDate} is null then 1 end) as int)`,
+      })
+      .from(providerSuspensions)
+      .where(inArray(providerSuspensions.providerId, allProviderIds))
+      .groupBy(providerSuspensions.providerId);
+
+    const disputesAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: bookings.providerId,
+        totalDisputes: sql<number>`cast(count(distinct ${disputes.id}) as int)`,
+        unresolvedDisputes: sql<number>`cast(count(case when ${disputes.status} != 'resolved' then 1 end) as int)`,
+      })
+      .from(disputes)
+      .innerJoin(bookings, eq(disputes.bookingId, bookings.id))
+      .where(inArray(bookings.providerId, allProviderIds))
+      .groupBy(bookings.providerId);
+
+    const refundsAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: bookings.providerId,
+        totalRefunds: sql<number>`cast(count(distinct ${refunds.id}) as int)`,
+        refundAmount: sql<number>`cast(coalesce(sum(${refunds.amount}), 0) as int)`,
+      })
+      .from(refunds)
+      .innerJoin(bookings, eq(refunds.bookingId, bookings.id))
+      .where(inArray(bookings.providerId, allProviderIds))
+      .groupBy(bookings.providerId);
+
+    const servicesAgg = allProviderIds.length === 0 ? [] : await db
+      .select({
+        providerId: services.providerId,
+        totalServices: sql<number>`cast(count(*) as int)`,
+      })
+      .from(services)
+      .where(inArray(services.providerId, allProviderIds))
+      .groupBy(services.providerId);
+
+    const bookingsByProviderId = new Map(bookingsAgg.map((r) => [r.providerId, r]));
+    const reviewsByProviderId = new Map(reviewsAgg.map((r) => [r.providerId, r]));
+    const incidentsByProviderId = new Map(incidentsAgg.map((r) => [r.providerId, r]));
+    const suspensionsByProviderId = new Map(suspensionsAgg.map((r) => [r.providerId, r]));
+    const disputesByProviderId = new Map(disputesAgg.map((r) => [r.providerId, r]));
+    const refundsByProviderId = new Map(refundsAgg.map((r) => [r.providerId, r]));
+    const servicesByProviderId = new Map(servicesAgg.map((r) => [r.providerId, r]));
+    let filteredProviders = baseProviders.map((provider) => {
+      const booking = bookingsByProviderId.get(provider.id);
+      const review = reviewsByProviderId.get(provider.id);
+      const incident = incidentsByProviderId.get(provider.id);
+      const suspension = suspensionsByProviderId.get(provider.id);
+      const dispute = disputesByProviderId.get(provider.id);
+      const refund = refundsByProviderId.get(provider.id);
+      const svc = servicesByProviderId.get(provider.id);
+
+      const totalBookings = Number(booking?.totalBookings ?? 0);
+      const completedBookings = Number(booking?.completedBookings ?? 0);
+      const cancelledBookings = Number(booking?.cancelledBookings ?? 0);
+
+      const bookings30d = Number(booking?.bookings30d ?? 0);
+      const completed30d = Number(booking?.completed30d ?? 0);
+      const cancelled30d = Number(booking?.cancelled30d ?? 0);
+
+      const bookings90d = Number(booking?.bookings90d ?? 0);
+      const completed90d = Number(booking?.completed90d ?? 0);
+      const cancelled90d = Number(booking?.cancelled90d ?? 0);
+
+      const totalReviews = Number(review?.totalReviews ?? 0);
+      const avgRating = review?.avgRating === null || review?.avgRating === undefined ? null : Number(review.avgRating);
+
+      const totalIncidents = Number(incident?.totalIncidents ?? 0);
+      const unresolvedIncidents = Number(incident?.unresolvedIncidents ?? 0);
+      const recentIncidents = Number(incident?.recentIncidents ?? 0);
+
+      const totalSuspensions = Number(suspension?.totalSuspensions ?? 0);
+      const activeSuspensions = Number(suspension?.activeSuspensions ?? 0);
+
+      const totalDisputes = Number(dispute?.totalDisputes ?? 0);
+      const unresolvedDisputes = Number(dispute?.unresolvedDisputes ?? 0);
+
+      const totalRefunds = Number(refund?.totalRefunds ?? 0);
+      const totalRefundAmount = Number(refund?.refundAmount ?? 0);
+
+      const totalServices = Number(svc?.totalServices ?? 0);
+
+      const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
+      const cancellationRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : 0;
+
+      const completionRate30d = bookings30d > 0 ? (completed30d / bookings30d) * 100 : 0;
+      const cancellationRate30d = bookings30d > 0 ? (cancelled30d / bookings30d) * 100 : 0;
+
+      const completionRate90d = bookings90d > 0 ? (completed90d / bookings90d) * 100 : 0;
+      const cancellationRate90d = bookings90d > 0 ? (cancelled90d / bookings90d) * 100 : 0;
+
+      const daysSinceCreation = Math.floor((now.getTime() - provider.createdAt.getTime()) / (1000 * 60 * 60 * 24));
+      const bookingFrequency = daysSinceCreation > 0 ? totalBookings / daysSinceCreation : 0;
+
+      const riskAssessment = RiskScoringEngine.assessFromMetrics({
+        providerId: provider.id,
+        trustScore: provider.trustScore ?? 0,
+        unresolvedIncidents,
+        recentIncidents,
+        completionRate,
+        cancellationRate,
+        totalSuspensions,
+        avgRating: avgRating ?? 0,
+        totalBookings,
+        daysActive: daysSinceCreation,
+      });
+
+      const applicableRules = enabledRiskRules.filter((rule) => {
+        if (rule.incidentType === "complaint" && totalIncidents > 0) return true;
+        if (rule.incidentType === "violation" && unresolvedIncidents > 0) return true;
+        if (rule.incidentType === "service_quality" && completionRate < 80) return true;
+        if (rule.incidentType === "review_abuse" && (avgRating ?? 5) < 3.0) return true;
+        return false;
+      });
+
+      return {
+        id: provider.id,
+        businessName: provider.businessName,
+        handle: provider.handle,
+        status: provider.status,
+        trustLevel: provider.trustLevel,
+        trustScore: provider.trustScore ?? 0,
+        createdAt: provider.createdAt,
+        user: {
+          email: provider.userEmail,
+          firstName: provider.userFirstName,
+          lastName: provider.userLastName,
+        },
+        totalServices,
+
+        totalBookings,
+        completedBookings,
+        cancelledBookings,
+
+        bookings30d,
+        completed30d,
+        cancelled30d,
+        bookings90d,
+        completed90d,
+        cancelled90d,
+
+        totalReviews,
+        avgRating,
+
+        totalIncidents,
+        unresolvedIncidents,
+        recentIncidents,
+        totalSuspensions,
+        activeSuspensions,
+        totalDisputes,
+        unresolvedDisputes,
+        totalRefunds,
+        totalRefundAmount,
+
+        completionRate,
+        cancellationRate,
+        completionRate30d,
+        cancellationRate30d,
+        completionRate90d,
+        cancellationRate90d,
+
+        riskScore: riskAssessment.riskScore,
+        riskLevel: riskAssessment.riskLevel,
+        riskFactors: riskAssessment.riskFactors,
+        recommendations: riskAssessment.recommendations,
+        alerts: riskAssessment.alerts,
+
+        bookingFrequency,
+        daysActive: daysSinceCreation,
+        hasActiveSuspension: activeSuspensions > 0,
+        hasUnresolvedIncidents: unresolvedIncidents > 0,
+        hasRecentIncidents: recentIncidents > 0,
+        applicableRiskRules: applicableRules,
+      };
+    });
 
     // Apply filters
     if (riskFilter !== "all") {
@@ -180,6 +295,30 @@ export async function GET(request: NextRequest) {
       filteredProviders = filteredProviders.filter(p => p.totalIncidents === 0);
     }
 
+    filteredProviders.sort((a, b) => {
+      const direction = sortOrder === "asc" ? 1 : -1;
+      const toNumber = (value: unknown) => Number(value ?? 0);
+
+      const aVal =
+        sortBy === "bookings" ? toNumber(a.totalBookings) :
+        sortBy === "cancellations" ? toNumber(a.cancelledBookings) :
+        sortBy === "reviews" ? toNumber(a.totalReviews) :
+        sortBy === "trust" ? toNumber(a.trustScore) :
+        sortBy === "risk" ? toNumber(a.riskScore) :
+        a.createdAt.getTime();
+
+      const bVal =
+        sortBy === "bookings" ? toNumber(b.totalBookings) :
+        sortBy === "cancellations" ? toNumber(b.cancelledBookings) :
+        sortBy === "reviews" ? toNumber(b.totalReviews) :
+        sortBy === "trust" ? toNumber(b.trustScore) :
+        sortBy === "risk" ? toNumber(b.riskScore) :
+        b.createdAt.getTime();
+
+      if (aVal === bVal) return 0;
+      return aVal > bVal ? direction : -direction;
+    });
+
     // Calculate platform-wide analytics
     const totalProviders = filteredProviders.length;
     const activeProviders = filteredProviders.filter(p => p.totalBookings > 0).length;
@@ -191,19 +330,6 @@ export async function GET(request: NextRequest) {
       totalBookings: filteredProviders.reduce((sum, p) => sum + p.totalBookings, 0),
       totalIncidents: filteredProviders.reduce((sum, p) => sum + p.totalIncidents, 0),
       highTrustProviders: filteredProviders.filter(p => p.trustScore >= 80).length,
-    };
-
-    // Calculate growth metrics (comparing 30d vs 90d periods)
-    const recentProviders = filteredProviders.filter(p => p.daysActive <= 90);
-    const establishedProviders = filteredProviders.filter(p => p.daysActive > 90);
-
-    const growthMetrics = {
-      newProviders30d: recentProviders.filter(p => p.daysActive <= 30).length,
-      newProviders90d: recentProviders.length,
-      avgBookingGrowth: establishedProviders.length > 0 ?
-        establishedProviders.reduce((sum, p) => sum + (p.bookings30d - p.bookings90d + p.bookings30d), 0) / establishedProviders.length : 0,
-      avgCompletionGrowth: establishedProviders.length > 0 ?
-        establishedProviders.reduce((sum, p) => sum + (p.completionRate30d - p.completionRate90d), 0) / establishedProviders.length : 0,
     };
 
     const providerIds = filteredProviders.map((p) => p.id);
@@ -252,6 +378,23 @@ export async function GET(request: NextRequest) {
         cancellationRate,
       });
     }
+
+    const recentProviders = filteredProviders.filter((p) => p.daysActive <= 90);
+    const growthLast30Bookings = bookingTimeSeries.slice(-30).reduce((sum, p) => sum + p.total, 0);
+    const growthPrev30Bookings = bookingTimeSeries.slice(-60, -30).reduce((sum, p) => sum + p.total, 0);
+    const last30CompletionAvg = bookingTimeSeries.slice(-30).reduce((sum, p) => sum + p.completionRate, 0) / 30;
+    const prev30CompletionAvg = bookingTimeSeries.slice(-60, -30).reduce((sum, p) => sum + p.completionRate, 0) / 30;
+    const avgBookingGrowth = growthPrev30Bookings > 0
+      ? ((growthLast30Bookings - growthPrev30Bookings) / growthPrev30Bookings) * 100
+      : growthLast30Bookings > 0 ? 100 : 0;
+    const avgCompletionGrowth = last30CompletionAvg - prev30CompletionAvg;
+
+    const growthMetrics = {
+      newProviders30d: recentProviders.filter((p) => p.daysActive <= 30).length,
+      newProviders90d: recentProviders.length,
+      avgBookingGrowth,
+      avgCompletionGrowth,
+    };
 
     // Activity patterns derived from bookings in the last 30 days
     const activityByHour = providerIds.length === 0 ? [] : await db

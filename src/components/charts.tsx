@@ -21,9 +21,10 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
   const maxValue = Math.max(...data.map(d => d.value));
   const minValue = Math.min(...data.map(d => d.value));
   const range = maxValue - minValue || 1;
+  const xDenominator = Math.max(1, data.length - 1);
 
   const points = data.map((point, index) => {
-    const x = (index / (data.length - 1)) * (width - 40) + 20;
+    const x = (index / xDenominator) * (width - 40) + 20;
     const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
     return `${x},${y}`;
   }).join(' ');
@@ -57,7 +58,7 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
 
         {/* Data points */}
         {data.map((point, index) => {
-          const x = (index / (data.length - 1)) * (width - 40) + 20;
+          const x = (index / xDenominator) * (width - 40) + 20;
           const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
           return (
             <circle
@@ -74,7 +75,7 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
         {/* X-axis labels */}
         {data.map((point, index) => {
           if (index % Math.ceil(data.length / 5) === 0 || index === data.length - 1) {
-            const x = (index / (data.length - 1)) * (width - 40) + 20;
+            const x = (index / xDenominator) * (width - 40) + 20;
             return (
               <text
                 key={`label-${index}`}
@@ -104,13 +105,14 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
   if (!data || data.length === 0) return <div>No data available</div>;
 
   const maxValue = Math.max(...data.map(d => d.value));
+  const safeMaxValue = maxValue || 1;
   const barWidth = (width - 40) / data.length - 10;
 
   return (
     <div className="bg-white p-4 rounded-lg border">
       <svg width={width} height={height}>
         {data.map((item, index) => {
-          const barHeight = (item.value / maxValue) * (height - 80);
+          const barHeight = (item.value / safeMaxValue) * (height - 80);
           const x = 20 + index * ((width - 40) / data.length);
           const y = height - 40 - barHeight;
 
@@ -168,6 +170,59 @@ export function PieChart({ data, width = 300, height = 300 }: PieChartProps) {
     "#3B82F6", "#EF4444", "#F59E0B", "#10B981", "#8B5CF6",
     "#F97316", "#06B6D4", "#84CC16", "#EC4899", "#6B7280"
   ];
+
+  if (total === 0) {
+    return (
+      <div className="bg-white p-4 rounded-lg border">
+        <svg width={width} height={height}>
+          <circle
+            cx={centerX}
+            cy={centerY}
+            r={radius}
+            fill="white"
+            stroke="#E5E7EB"
+            strokeWidth="2"
+          />
+          <circle
+            cx={centerX}
+            cy={centerY}
+            r={radius * 0.6}
+            fill="white"
+            stroke="#E5E7EB"
+            strokeWidth="2"
+          />
+          <text
+            x={centerX}
+            y={centerY - 10}
+            textAnchor="middle"
+            className="text-lg font-bold fill-gray-900"
+          >
+            0
+          </text>
+          <text
+            x={centerX}
+            y={centerY + 10}
+            textAnchor="middle"
+            className="text-sm fill-gray-600"
+          >
+            Total
+          </text>
+        </svg>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          {data.map((item, index) => {
+            const color = item.color || colors[index % colors.length];
+            return (
+              <div key={index} className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded" style={{ backgroundColor: color }} />
+                <span className="text-sm text-gray-700">{item.name}: 0.0%</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
 
   // Build pie segments with accumulated angles
   const segments = data.reduce((acc, item, index) => {

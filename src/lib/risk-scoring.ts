@@ -44,6 +44,14 @@ export class RiskScoringEngine {
    */
   static async calculateRiskScore(providerId: string): Promise<RiskAssessment> {
     const metrics = await this.getProviderMetrics(providerId);
+    return this.assessFromMetrics(metrics);
+  }
+
+  /**
+   * Calculate risk assessment from already-computed metrics.
+   * This avoids per-provider database queries and is ideal for list pages.
+   */
+  static assessFromMetrics(metrics: ProviderRiskMetrics): RiskAssessment {
     const riskScore = this.computeRiskScore(metrics);
     const riskLevel = this.getRiskLevel(riskScore);
     const riskFactors = this.identifyRiskFactors(metrics);

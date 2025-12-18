@@ -113,7 +113,6 @@ export function AutoRefreshToggle({
     { value: 30000, label: '30s' },
     { value: 60000, label: '1m' },
     { value: 300000, label: '5m' },
-    { value: 0, label: 'Off' }
   ];
 
   return (
@@ -135,11 +134,7 @@ export function AutoRefreshToggle({
           className="text-sm border border-gray-300 rounded px-2 py-1 focus:ring-blue-500 focus:border-blue-500"
         >
           {intervals.map(({ value, label }) => (
-            value === 0 ? (
-              <option key={value} value={value}>Manual only</option>
-            ) : (
-              <option key={value} value={value}>Every {label}</option>
-            )
+            <option key={value} value={value}>Every {label}</option>
           ))}
         </select>
       )}
