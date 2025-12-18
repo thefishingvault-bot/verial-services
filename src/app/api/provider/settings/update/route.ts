@@ -107,35 +107,28 @@ export async function PATCH(req: Request) {
       updateData.baseRegion = normalizedCoverageRegion;
     }
 
-    const updatedProvider = await db.transaction(async (tx) => {
-      const [providerRow] = await tx.update(providers)
-        .set(updateData)
-        .where(eq(providers.userId, userId))
-        .returning();
-
-      if (!providerRow) {
-        return null;
-      }
-
-      if (normalizedCoverageSuburbs !== undefined && normalizedCoverageRegion !== undefined) {
-        await tx.delete(providerSuburbs).where(eq(providerSuburbs.providerId, provider.id));
-
-        if (normalizedCoverageRegion && normalizedCoverageSuburbs.length > 0) {
-          await tx.insert(providerSuburbs).values(
-            normalizedCoverageSuburbs.map((suburb) => ({
-              providerId: provider.id,
-              region: normalizedCoverageRegion!,
-              suburb,
-            })),
-          );
-        }
-      }
-
-      return providerRow;
-    });
+    // NOTE: Neon HTTP driver does not support transactions. We perform updates sequentially.
+    const [updatedProvider] = await db.update(providers)
+      .set(updateData)
+      .where(eq(providers.userId, userId))
+      .returning();
 
     if (!updatedProvider) {
       return new NextResponse('Provider not found', { status: 404 });
+    }
+
+    if (normalizedCoverageSuburbs !== undefined && normalizedCoverageRegion !== undefined) {
+      await db.delete(providerSuburbs).where(eq(providerSuburbs.providerId, provider.id));
+
+      if (normalizedCoverageRegion && normalizedCoverageSuburbs.length > 0) {
+        await db.insert(providerSuburbs).values(
+          normalizedCoverageSuburbs.map((suburb) => ({
+            providerId: provider.id,
+            region: normalizedCoverageRegion,
+            suburb,
+          })),
+        );
+      }
     }
 
     console.log(`[API_PROVIDER_SETTINGS] Provider ${updatedProvider.id} updated coverage`);
