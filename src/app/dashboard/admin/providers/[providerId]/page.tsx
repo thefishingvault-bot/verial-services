@@ -14,8 +14,18 @@ import { parseParamsOrNotFound, ProviderIdParamSchema } from '@/lib/validation/a
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
 
-const formatDate = (date: Date | null) =>
-  date ? new Intl.DateTimeFormat('en-NZ', { dateStyle: 'medium' }).format(date) : '—';
+const toValidDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value as string | number);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDate = (value: unknown) => {
+  const date = toValidDate(value);
+  return date
+    ? new Intl.DateTimeFormat('en-NZ', { dateStyle: 'medium' }).format(date)
+    : '—';
+};
 
 export default async function AdminProviderDetailPage({
   params,
@@ -162,6 +172,7 @@ export default async function AdminProviderDetailPage({
     : 'Not specified';
 
   const providerSinceDate = owner?.createdAt ?? provider.createdAt;
+  const providerSinceSafe = toValidDate(providerSinceDate);
 
   return (
     <div className="space-y-6">
@@ -198,9 +209,9 @@ export default async function AdminProviderDetailPage({
                   <span>•</span>
                   <span>
                     Provider since{' '}
-                    {providerSinceDate
+                    {providerSinceSafe
                       ? new Intl.DateTimeFormat('en-NZ', { month: 'long', year: 'numeric' }).format(
-                          providerSinceDate,
+                          providerSinceSafe,
                         )
                       : 'Unknown'}
                   </span>
