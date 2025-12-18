@@ -23,11 +23,21 @@ type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
 const MAX_RECENT_DECISIONS = 30;
 
-const formatDateTime = (date: Date) =>
-  new Intl.DateTimeFormat('en-NZ', {
+const toValidDate = (value: unknown): Date | null => {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value as string | number);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const formatDateTimeNZ = (value: unknown) => {
+  const date = toValidDate(value);
+  if (!date) return '—';
+  return new Intl.DateTimeFormat('en-NZ', {
+    timeZone: 'Pacific/Auckland',
     dateStyle: 'medium',
     timeStyle: 'short',
   }).format(date);
+};
 
 export default async function AdminVerificationsPage({
   searchParams,
@@ -201,7 +211,7 @@ export default async function AdminVerificationsPage({
                         </div>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDateTime(p.createdAt)}
+                        {formatDateTimeNZ(p.createdAt)}
                       </TableCell>
                       <TableCell className="text-right">
                         <AdminVerificationActions providerId={p.id} status={p.status} />
@@ -274,7 +284,7 @@ export default async function AdminVerificationsPage({
                         </Badge>
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
-                        {formatDateTime(p.updatedAt)}
+                        {formatDateTimeNZ(p.updatedAt)}
                       </TableCell>
                     </TableRow>
                   ))}
