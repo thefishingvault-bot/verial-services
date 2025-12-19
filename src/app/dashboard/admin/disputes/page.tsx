@@ -1,15 +1,13 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { disputes, bookings, users, providers, services } from "@/db/schema";
-import { eq, desc, and, or, like, inArray } from "drizzle-orm";
+import { eq, desc, and, or, ilike, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -28,27 +26,46 @@ import {
   ArrowUpDown
 } from "lucide-react";
 
+export const dynamic = "force-dynamic";
+
+function formatSnake(value: string) {
+  return value
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export default async function AdminDisputesPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   const params = parseSearchParams(AdminDisputesSearchSchema, await searchParams);
   const statusFilter = params.status;
   const typeFilter = params.type;
   const searchQuery = params.search;
   const activeTab = params.tab;
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+  const [summary] = await db
+    .select({
+      totalDisputes: sql<number>`count(*)`,
+      openDisputes: sql<number>`count(*) filter (where ${disputes.status} = 'open')`,
+      underReviewDisputes: sql<number>`count(*) filter (where ${disputes.status} = 'under_review')`,
+      resolvedDisputesAllTime: sql<number>`count(*) filter (where ${disputes.status} = 'resolved')`,
+      resolvedDisputesPeriod: sql<number>`count(*) filter (where ${disputes.status} = 'resolved' and ${disputes.resolvedAt} >= ${thirtyDaysAgo})`,
+      urgentDisputes: sql<number>`count(*) filter (where ${disputes.status} = 'open' and ${disputes.createdAt} <= ${threeDaysAgo})`,
+      totalRefundedCents: sql<number>`coalesce(sum(${disputes.refundAmount}), 0)`,
+    })
+    .from(disputes);
 
   // Build where conditions
   const whereConditions = [];
@@ -64,14 +81,15 @@ export default async function AdminDisputesPage({
   if (searchQuery) {
     whereConditions.push(
       or(
-        like(providers.businessName, `%${searchQuery}%`),
-        like(disputes.description, `%${searchQuery}%`),
-        like(disputes.reason, `%${searchQuery}%`)
+        ilike(providers.businessName, `%${searchQuery}%`),
+        ilike(services.title, `%${searchQuery}%`),
+        ilike(disputes.description, `%${searchQuery}%`),
+        ilike(disputes.reason, `%${searchQuery}%`)
       )
     );
   }
 
-  // Fetch disputes with related data using separate queries to avoid complex joins
+  // Fetch disputes with booking/provider/service so search works correctly
   const baseDisputes = await db
     .select({
       id: disputes.id,
@@ -86,104 +104,94 @@ export default async function AdminDisputesPage({
       initiatorType: disputes.initiatorType,
       bookingId: disputes.bookingId,
       initiatorId: disputes.initiatorId,
+      bookingStatus: bookings.status,
+      bookingTotalAmount: bookings.priceAtBooking,
+      bookingScheduledAt: bookings.scheduledDate,
+      bookingCustomerId: bookings.userId,
+      service: {
+        id: services.id,
+        name: services.title,
+      },
+      provider: {
+        id: providers.id,
+        businessName: providers.businessName,
+        handle: providers.handle,
+      },
     })
     .from(disputes)
+    .innerJoin(bookings, eq(disputes.bookingId, bookings.id))
+    .innerJoin(services, eq(bookings.serviceId, services.id))
+    .innerJoin(providers, eq(bookings.providerId, providers.id))
     .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
     .orderBy(desc(disputes.createdAt))
     .limit(100);
 
-  // Get all related data in separate queries
-  const bookingIds = [...new Set(baseDisputes.map(d => d.bookingId))];
-  const initiatorIds = [...new Set(baseDisputes.map(d => d.initiatorId))];
+  const initiatorIds = [...new Set(baseDisputes.map((d) => d.initiatorId))];
+  const customerIds = [...new Set(baseDisputes.map((d) => d.bookingCustomerId))];
+  const userIds = [...new Set([...initiatorIds, ...customerIds])];
 
-  const bookingsData = bookingIds.length > 0 ? await db
-    .select({
-      id: bookings.id,
-      status: bookings.status,
-      totalAmount: bookings.priceAtBooking,
-      scheduledAt: bookings.scheduledDate,
-      serviceId: bookings.serviceId,
-      providerId: bookings.providerId,
-      userId: bookings.userId,
-    })
-    .from(bookings)
-    .where(inArray(bookings.id, bookingIds)) : [];
+  const userRows = userIds.length
+    ? await db
+        .select({
+          id: users.id,
+          firstName: users.firstName,
+          lastName: users.lastName,
+          email: users.email,
+        })
+        .from(users)
+        .where(inArray(users.id, userIds))
+    : [];
 
-  const servicesData = bookingsData.length > 0 ? await db
-    .select({
-      id: services.id,
-      name: services.title,
-    })
-    .from(services)
-    .where(inArray(services.id, bookingsData.map(b => b.serviceId))) : [];
-
-  const providersData = bookingsData.length > 0 ? await db
-    .select({
-      id: providers.id,
-      businessName: providers.businessName,
-      handle: providers.handle,
-    })
-    .from(providers)
-    .where(inArray(providers.id, bookingsData.map(b => b.providerId))) : [];
-
-  const initiatorsData = initiatorIds.length > 0 ? await db
-    .select({
-      id: users.id,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      email: users.email,
-    })
-    .from(users)
-    .where(inArray(users.id, initiatorIds)) : [];
-
-  const customerIds = [...new Set(bookingsData.map(b => b.userId))];
-  const customersData = customerIds.length > 0 ? await db
-    .select({
-      id: users.id,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      email: users.email,
-    })
-    .from(users)
-    .where(inArray(users.id, customerIds)) : [];
+  const usersById = new Map(userRows.map((u) => [u.id, u] as const));
 
   // Combine the data
-  const disputeList = baseDisputes.map(dispute => {
-    const booking = bookingsData.find(b => b.id === dispute.bookingId);
-    const service = booking ? servicesData.find(s => s.id === booking.serviceId) : null;
-    const provider = booking ? providersData.find(p => p.id === booking.providerId) : null;
-    const initiator = initiatorsData.find(i => i.id === dispute.initiatorId);
-    const customer = booking ? customersData.find(c => c.id === booking.userId) : null;
+  const disputeList = baseDisputes.map((dispute) => {
+    const initiator = usersById.get(dispute.initiatorId);
+    const customer = usersById.get(dispute.bookingCustomerId);
 
     return {
-      ...dispute,
-      booking: booking ? {
-        ...booking,
-        service: service || { id: '', name: '' },
-      } : { id: '', status: 'pending' as const, totalAmount: 0, scheduledAt: null, service: { id: '', name: '' } },
-      provider: provider || { id: '', businessName: '', handle: '' },
-      initiator: initiator || { id: '', firstName: null, lastName: null, email: '' },
-      customer: customer || { id: '', firstName: null, lastName: null, email: '' },
+      id: dispute.id,
+      reason: dispute.reason,
+      description: dispute.description,
+      amountDisputed: dispute.amountDisputed,
+      status: dispute.status,
+      adminDecision: dispute.adminDecision,
+      refundAmount: dispute.refundAmount,
+      createdAt: dispute.createdAt,
+      resolvedAt: dispute.resolvedAt,
+      initiatorType: dispute.initiatorType,
+      bookingId: dispute.bookingId,
+      initiatorId: dispute.initiatorId,
+      booking: {
+        id: dispute.bookingId,
+        status: dispute.bookingStatus,
+        totalAmount: dispute.bookingTotalAmount,
+        scheduledAt: dispute.bookingScheduledAt,
+        service: dispute.service,
+      },
+      provider: dispute.provider,
+      initiator: {
+        id: initiator?.id ?? dispute.initiatorId,
+        firstName: initiator?.firstName ?? null,
+        lastName: initiator?.lastName ?? null,
+        email: initiator?.email ?? "",
+      },
+      customer: {
+        id: customer?.id ?? dispute.bookingCustomerId,
+        firstName: customer?.firstName ?? null,
+        lastName: customer?.lastName ?? null,
+        email: customer?.email ?? "",
+      },
     };
   });
 
-  // Get summary stats
-  const totalDisputes = disputeList.length;
-  const openDisputes = disputeList.filter(d => d.status === "open").length;
-  const underReviewDisputes = disputeList.filter(d => d.status === "under_review").length;
-  const resolvedDisputes = disputeList.filter(d => d.status === "resolved").length;
-  const totalRefunded = disputeList
-    .filter(d => d.refundAmount)
-    .reduce((sum, d) => sum + (d.refundAmount || 0), 0);
-
-  // Calculate urgency based on days open (using createdAt only)
-  function getUrgentDisputes(list: typeof disputeList) {
-    return list.filter(d => {
-      const daysSinceCreation = (new Date().getTime() - d.createdAt.getTime()) / (1000 * 60 * 60 * 24);
-      return d.status === "open" && daysSinceCreation > 3;
-    }).length;
-  }
-  const urgentDisputes = getUrgentDisputes(disputeList);
+  const totalDisputes = summary?.totalDisputes ?? 0;
+  const openDisputes = summary?.openDisputes ?? 0;
+  const underReviewDisputes = summary?.underReviewDisputes ?? 0;
+  const resolvedDisputesAllTime = summary?.resolvedDisputesAllTime ?? 0;
+  const resolvedDisputesPeriod = summary?.resolvedDisputesPeriod ?? 0;
+  const urgentDisputes = summary?.urgentDisputes ?? 0;
+  const totalRefunded = summary?.totalRefundedCents ?? 0;
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -198,13 +206,19 @@ export default async function AdminDisputesPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <FileText className="mr-2 h-4 w-4" />
-            Export Report
+          <Button asChild variant="outline">
+            <Link
+              href={`/api/admin/disputes/export?status=${encodeURIComponent(statusFilter)}&type=${encodeURIComponent(typeFilter)}&search=${encodeURIComponent(searchQuery ?? "")}`}
+            >
+              <FileText className="mr-2 h-4 w-4" />
+              Export Report
+            </Link>
           </Button>
-          <Button variant="outline">
-            <MessageSquare className="mr-2 h-4 w-4" />
-            Templates
+          <Button asChild variant="outline">
+            <Link href="/dashboard/admin/templates">
+              <MessageSquare className="mr-2 h-4 w-4" />
+              Templates
+            </Link>
           </Button>
         </div>
       </div>
@@ -256,7 +270,7 @@ export default async function AdminDisputesPage({
             <CheckCircle className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{resolvedDisputes}</div>
+            <div className="text-2xl font-bold text-green-600">{resolvedDisputesPeriod}</div>
             <p className="text-xs text-muted-foreground">
               This period
             </p>
@@ -283,7 +297,7 @@ export default async function AdminDisputesPage({
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-purple-600">
-              {totalDisputes > 0 ? Math.round((resolvedDisputes / totalDisputes) * 100) : 0}%
+              {totalDisputes > 0 ? Math.round((resolvedDisputesAllTime / totalDisputes) * 100) : 0}%
             </div>
             <p className="text-xs text-muted-foreground">
               Success rate
@@ -308,62 +322,61 @@ export default async function AdminDisputesPage({
           <TabsList>
             <TabsTrigger value="all">All Disputes</TabsTrigger>
             <TabsTrigger value="open">Open ({openDisputes})</TabsTrigger>
-            <TabsTrigger value="review">Under Review ({underReviewDisputes})</TabsTrigger>
-            <TabsTrigger value="resolved">Resolved ({resolvedDisputes})</TabsTrigger>
+            <TabsTrigger value="under_review">Under Review ({underReviewDisputes})</TabsTrigger>
+            <TabsTrigger value="resolved">Resolved ({resolvedDisputesAllTime})</TabsTrigger>
           </TabsList>
 
           {/* Advanced Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
+          <form method="GET" className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
+                name="search"
                 placeholder="Search disputes..."
                 className="pl-9"
                 defaultValue={searchQuery}
               />
             </div>
-            <Select defaultValue={statusFilter}>
-              <SelectTrigger className="w-full sm:w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="open">Open</SelectItem>
-                <SelectItem value="under_review">Under Review</SelectItem>
-                <SelectItem value="resolved">Resolved</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select defaultValue={typeFilter}>
-              <SelectTrigger className="w-full sm:w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="customer">Customer</SelectItem>
-                <SelectItem value="provider">Provider</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+            <select
+              name="status"
+              defaultValue={statusFilter}
+              className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-32 md:text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="open">Open</option>
+              <option value="under_review">Under Review</option>
+              <option value="resolved">Resolved</option>
+            </select>
+            <select
+              name="type"
+              defaultValue={typeFilter}
+              className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-32 md:text-sm"
+            >
+              <option value="all">All Types</option>
+              <option value="customer">Customer</option>
+              <option value="provider">Provider</option>
+            </select>
+            <Button type="submit" variant="outline" size="sm" className="w-full sm:w-auto">
               <Filter className="h-4 w-4 mr-2" />
               More Filters
             </Button>
-          </div>
+          </form>
         </div>
 
         <TabsContent value="all" className="space-y-4">
-          <DisputesTable disputes={disputeList} />
+          <DisputesTable disputes={disputeList} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="open" className="space-y-4">
-          <DisputesTable disputes={disputeList.filter(d => d.status === "open")} />
+          <DisputesTable disputes={disputeList.filter(d => d.status === "open")} nowMs={nowMs} />
         </TabsContent>
 
-        <TabsContent value="review" className="space-y-4">
-          <DisputesTable disputes={disputeList.filter(d => d.status === "under_review")} />
+        <TabsContent value="under_review" className="space-y-4">
+          <DisputesTable disputes={disputeList.filter(d => d.status === "under_review")} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="resolved" className="space-y-4">
-          <DisputesTable disputes={disputeList.filter(d => d.status === "resolved")} />
+          <DisputesTable disputes={disputeList.filter(d => d.status === "resolved")} nowMs={nowMs} />
         </TabsContent>
       </Tabs>
     </div>
@@ -373,6 +386,7 @@ export default async function AdminDisputesPage({
 // Separate component for the disputes table
 function DisputesTable({
   disputes,
+  nowMs,
 }: {
   disputes: Array<{
     id: string;
@@ -412,6 +426,7 @@ function DisputesTable({
       email: string;
     };
   }>;
+  nowMs: number;
 }) {
   return (
     <Card>
@@ -443,7 +458,7 @@ function DisputesTable({
             </TableHeader>
             <TableBody>
               {disputes.map((dispute) => {
-                const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+                const daysSinceCreation = (nowMs - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
                 const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
                 const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000; // $50+
                 return (
@@ -474,7 +489,7 @@ function DisputesTable({
                     <TableCell>
                       <div className="space-y-1">
                         <div className="font-medium capitalize">
-                          {dispute.reason.replace("_", " ")}
+                          {formatSnake(dispute.reason)}
                         </div>
                         <div className="text-sm text-muted-foreground line-clamp-2">
                           {dispute.description}
@@ -504,11 +519,11 @@ function DisputesTable({
                         dispute.status === "resolved" ? "default" :
                         "outline"
                       }>
-                        {dispute.status.replace("_", " ")}
+                        {formatSnake(dispute.status)}
                       </Badge>
                       {dispute.adminDecision && (
                         <div className="text-xs text-muted-foreground mt-1 capitalize">
-                          {dispute.adminDecision.replace("_", " ")}
+                          {formatSnake(dispute.adminDecision)}
                         </div>
                       )}
                     </TableCell>
@@ -574,7 +589,7 @@ function DisputesTable({
         {/* Mobile Cards */}
         <div className="grid gap-3 lg:hidden">
           {disputes.map((dispute) => {
-            const daysSinceCreation = (new Date().getTime() - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            const daysSinceCreation = (nowMs - dispute.createdAt.getTime()) / (1000 * 60 * 60 * 24);
             const isUrgent = dispute.status === "open" && daysSinceCreation > 3;
             const isHighPriority = dispute.amountDisputed && dispute.amountDisputed > 5000;
             return (
@@ -594,7 +609,7 @@ function DisputesTable({
                       dispute.status === "resolved" ? "default" :
                       "outline"
                     }>
-                      {dispute.status.replace("_", " ")}
+                      {formatSnake(dispute.status)}
                     </Badge>
                   </div>
 

@@ -29,7 +29,7 @@ export function parseSearchParams<T extends z.ZodTypeAny>(schema: T, raw: unknow
 export const ProviderIdParamSchema = z.object({ providerId: providerId() });
 export const BookingIdParamSchema = z.object({ bookingId: uuid() });
 export const DisputeIdParamSchema = z.object({ disputeId: uuid() });
-export const RuleIdParamSchema = z.object({ ruleId: uuid() });
+export const RuleIdParamSchema = z.object({ ruleId: z.string().min(1) });
 
 export const AdminProvidersSearchSchema = z.object({
   q: z.string().trim().optional().default(""),
