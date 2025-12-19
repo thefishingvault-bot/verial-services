@@ -1,26 +1,17 @@
-import { currentUser } from "@clerk/nextjs/server";
-import { requireAdmin } from "@/lib/admin";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
 import { ArrowLeft, Save } from "lucide-react";
+import { requireAdmin } from "@/lib/admin-auth";
+
+export const dynamic = "force-dynamic";
 
 export default async function NewRiskRulePage() {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   return (
     <div className="container mx-auto py-8 max-w-2xl">
@@ -65,35 +56,43 @@ export default async function NewRiskRulePage() {
 
               <div className="space-y-2">
                 <Label htmlFor="incidentType">Incident Type *</Label>
-                <Select name="incidentType" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select incident type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="complaint">Customer Complaint</SelectItem>
-                    <SelectItem value="service_violation">Service Violation</SelectItem>
-                    <SelectItem value="review_abuse">Review Abuse</SelectItem>
-                    <SelectItem value="repeated_offenses">Repeated Offenses</SelectItem>
-                    <SelectItem value="payment_issue">Payment Issue</SelectItem>
-                    <SelectItem value="communication_failure">Communication Failure</SelectItem>
-                    <SelectItem value="other">Other</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  id="incidentType"
+                  name="incidentType"
+                  required
+                  defaultValue=""
+                  className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                >
+                  <option value="" disabled>
+                    Select incident type
+                  </option>
+                  <option value="complaint">Customer Complaint</option>
+                  <option value="service_violation">Service Violation</option>
+                  <option value="review_abuse">Review Abuse</option>
+                  <option value="repeated_offenses">Repeated Offenses</option>
+                  <option value="payment_issue">Payment Issue</option>
+                  <option value="communication_failure">Communication Failure</option>
+                  <option value="other">Other</option>
+                </select>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="severity">Severity *</Label>
-                <Select name="severity" required>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select severity" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="critical">Critical</SelectItem>
-                  </SelectContent>
-                </Select>
+                <select
+                  id="severity"
+                  name="severity"
+                  required
+                  defaultValue=""
+                  className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+                >
+                  <option value="" disabled>
+                    Select severity
+                  </option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
               </div>
 
               <div className="space-y-2">
@@ -114,7 +113,13 @@ export default async function NewRiskRulePage() {
 
             <div className="space-y-4">
               <div className="flex items-center space-x-2">
-                <Checkbox id="autoSuspend" name="autoSuspend" />
+                <input
+                  id="autoSuspend"
+                  name="autoSuspend"
+                  value="true"
+                  type="checkbox"
+                  className="size-4 shrink-0 rounded-[4px] border border-input bg-transparent shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                />
                 <Label htmlFor="autoSuspend">Automatically suspend provider</Label>
               </div>
 

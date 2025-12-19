@@ -3,7 +3,8 @@ import { db } from "@/lib/db";
 import { riskRules } from "@/db/schema";
 import { nanoid } from "nanoid";
 import { requireAdmin } from "@/lib/admin-auth";
-import { TrustRuleSchema, invalidResponse, parseBody } from "@/lib/validation/admin";
+import { TrustRuleSchema, invalidResponse, parseForm } from "@/lib/validation/admin";
+import { ensureUserExistsInDb } from "@/lib/user-sync";
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,10 +12,13 @@ export async function POST(request: NextRequest) {
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
 
-    const parsed = await parseBody(TrustRuleSchema, request);
+    await ensureUserExistsInDb(userId!, "admin");
+
+    const parsed = await parseForm(TrustRuleSchema, request);
     if (!parsed.ok) return invalidResponse(parsed.error);
 
     const { name, incidentType, severity, trustScorePenalty, autoSuspend, suspendDurationDays } = parsed.data;
+    const normalizedSuspendDurationDays = autoSuspend ? suspendDurationDays : null;
 
     // Create the rule
     const ruleId = `rrule_${nanoid()}`;
@@ -25,7 +29,7 @@ export async function POST(request: NextRequest) {
       severity,
       trustScorePenalty: trustScorePenalty || 0,
       autoSuspend: autoSuspend || false,
-      suspendDurationDays: suspendDurationDays || null,
+      suspendDurationDays: normalizedSuspendDurationDays,
       enabled: true,
       createdBy: userId!,
     });

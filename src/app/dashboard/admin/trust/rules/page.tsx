@@ -1,6 +1,4 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
 import { riskRules, users } from "@/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { redirect } from "next/navigation";
@@ -11,18 +9,22 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Settings, Shield, CheckCircle, AlertTriangle, ArrowLeft, Plus } from "lucide-react";
+import { requireAdmin } from "@/lib/admin-auth";
+
+export const dynamic = "force-dynamic";
+
+function formatIncidentType(value: string) {
+  return value
+    .replace(/_/g, " ")
+    .split(" ")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 export default async function AdminRiskRulesPage() {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   // Fetch all risk rules with creator info
   const rules = await db
@@ -151,7 +153,7 @@ export default async function AdminRiskRulesPage() {
                   </TableCell>
                   <TableCell>
                     <span className="capitalize">
-                      {rule.incidentType.replace("_", " ")}
+                      {formatIncidentType(rule.incidentType)}
                     </span>
                   </TableCell>
                   <TableCell>
@@ -165,7 +167,11 @@ export default async function AdminRiskRulesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <span className="text-red-600 font-medium">-{rule.trustScorePenalty}</span>
+                    {rule.trustScorePenalty > 0 ? (
+                      <span className="text-red-600 font-medium">-{rule.trustScorePenalty}</span>
+                    ) : (
+                      <span className="text-muted-foreground">0</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={rule.autoSuspend ? "destructive" : "secondary"}>
@@ -173,7 +179,11 @@ export default async function AdminRiskRulesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {rule.suspendDurationDays ? `${rule.suspendDurationDays} days` : "Indefinite"}
+                    {!rule.autoSuspend
+                      ? "—"
+                      : rule.suspendDurationDays
+                        ? `${rule.suspendDurationDays} days`
+                        : "Indefinite"}
                   </TableCell>
                   <TableCell>
                     <Badge variant={rule.enabled ? "default" : "secondary"}>

@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { riskRules } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
-import { RuleIdSchema, TrustRuleSchema, invalidResponse, parseBody, parseParams } from "@/lib/validation/admin";
+import { RuleIdSchema, TrustRuleSchema, invalidResponse, parseForm, parseParams } from "@/lib/validation/admin";
 
 export async function POST(
   request: NextRequest,
@@ -16,8 +16,12 @@ export async function POST(
     const parsedParams = parseParams(RuleIdSchema, await params);
     if (!parsedParams.ok) return invalidResponse(parsedParams.error);
 
-    const parsedBody = await parseBody(TrustRuleSchema, request);
-    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const parsedForm = await parseForm(TrustRuleSchema, request);
+    if (!parsedForm.ok) return invalidResponse(parsedForm.error);
+
+    const normalizedSuspendDurationDays = parsedForm.data.autoSuspend
+      ? parsedForm.data.suspendDurationDays
+      : null;
 
     // Check if rule exists
     const existingRule = await db
@@ -34,12 +38,12 @@ export async function POST(
     await db
       .update(riskRules)
       .set({
-        name: parsedBody.data.name,
-        incidentType: parsedBody.data.incidentType,
-        severity: parsedBody.data.severity,
-        trustScorePenalty: parsedBody.data.trustScorePenalty,
-        autoSuspend: parsedBody.data.autoSuspend,
-        suspendDurationDays: parsedBody.data.suspendDurationDays,
+        name: parsedForm.data.name,
+        incidentType: parsedForm.data.incidentType,
+        severity: parsedForm.data.severity,
+        trustScorePenalty: parsedForm.data.trustScorePenalty,
+        autoSuspend: parsedForm.data.autoSuspend,
+        suspendDurationDays: normalizedSuspendDurationDays,
         updatedAt: new Date(),
       })
       .where(eq(riskRules.id, parsedParams.data.ruleId));

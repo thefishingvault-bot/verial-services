@@ -23,12 +23,16 @@ export const TrustRuleSchema = z.object({
   name: z.string().trim().min(1).max(200),
   incidentType: z.string().trim().min(1).max(100),
   severity: z.enum(["low", "medium", "high", "critical"]),
-  trustScorePenalty: z.coerce.number().int().nonnegative().default(0),
+  trustScorePenalty: z.coerce.number().int().nonnegative().max(100).default(0),
   autoSuspend: z.coerce.boolean().default(false),
   suspendDurationDays: z
-    .union([z.coerce.number().int().nonnegative(), z.null()])
+    .union([z.coerce.number().int().positive(), z.string().length(0), z.null()])
     .optional()
-    .transform((v) => (v === undefined ? null : v)),
+    .transform((v) => {
+      if (v === undefined || v === null) return null;
+      if (typeof v === "string") return null;
+      return v;
+    }),
 });
 
 export const VerifyProviderSchema = z.object({
