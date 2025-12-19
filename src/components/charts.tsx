@@ -20,13 +20,28 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
 
   const maxValue = Math.max(...data.map(d => d.value));
   const minValue = Math.min(...data.map(d => d.value));
-  const range = maxValue - minValue || 1;
+  const range = maxValue - minValue;
+  const normalizedValue = (value: number) => {
+    if (range === 0) return 0.5;
+    return (value - minValue) / range;
+  };
+  const margin = { top: 16, right: 16, bottom: 32, left: 28 };
+  const chartWidth = Math.max(1, width - margin.left - margin.right);
+  const chartHeight = Math.max(1, height - margin.top - margin.bottom);
   const xDenominator = Math.max(1, data.length - 1);
+  const showPoints = data.length <= 31;
+
+  const xForIndex = (index: number) => {
+    if (data.length === 1) return margin.left + chartWidth / 2;
+    return margin.left + (index / xDenominator) * chartWidth;
+  };
+  const yForValue = (value: number) => {
+    const n = normalizedValue(value);
+    return margin.top + (1 - n) * chartHeight;
+  };
 
   const points = data.map((point, index) => {
-    const x = (index / xDenominator) * (width - 40) + 20;
-    const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
-    return `${x},${y}`;
+    return `${xForIndex(index)},${yForValue(point.value)}`;
   }).join(' ');
 
   return (
@@ -36,10 +51,10 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
         {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
           <line
             key={i}
-            x1="20"
-            y1={height - 40 - ratio * (height - 80) + 20}
-            x2={width - 20}
-            y2={height - 40 - ratio * (height - 80) + 20}
+            x1={margin.left}
+            y1={margin.top + (1 - ratio) * chartHeight}
+            x2={margin.left + chartWidth}
+            y2={margin.top + (1 - ratio) * chartHeight}
             stroke="#E5E7EB"
             strokeWidth="1"
             opacity="0.5"
@@ -57,30 +72,26 @@ export function LineChart({ data, width = 400, height = 200, color = "#3B82F6" }
         />
 
         {/* Data points */}
-        {data.map((point, index) => {
-          const x = (index / xDenominator) * (width - 40) + 20;
-          const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
-          return (
-            <circle
-              key={index}
-              cx={x}
-              cy={y}
-              r="4"
-              fill={color}
-              className="hover:r-6 transition-all cursor-pointer"
-            />
-          );
-        })}
+        {showPoints && data.map((point, index) => (
+          <circle
+            key={index}
+            cx={xForIndex(index)}
+            cy={yForValue(point.value)}
+            r="4"
+            fill={color}
+            className="hover:r-6 transition-all cursor-pointer"
+          />
+        ))}
 
         {/* X-axis labels */}
         {data.map((point, index) => {
           if (index % Math.ceil(data.length / 5) === 0 || index === data.length - 1) {
-            const x = (index / xDenominator) * (width - 40) + 20;
+            const x = xForIndex(index);
             return (
               <text
                 key={`label-${index}`}
                 x={x}
-                y={height - 10}
+                y={margin.top + chartHeight + 22}
                 textAnchor="middle"
                 className="text-xs fill-gray-600"
               >
@@ -109,7 +120,7 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
   const margin = {
     top: 16,
     right: 16,
-    bottom: 64,
+    bottom: 88,
     left: 28,
   };
   const chartWidth = Math.max(1, width - margin.left - margin.right);
@@ -117,6 +128,7 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
   const slotWidth = chartWidth / Math.max(1, data.length);
   const barWidth = Math.max(8, slotWidth - 12);
   const rotateLabels = data.length > 4 || data.some((d) => d.name.length > 12);
+  const labelY = margin.top + chartHeight + 56;
 
   return (
     <div className="bg-white p-4 rounded-lg border">
@@ -147,11 +159,12 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
               </text>
               <text
                 x={x + barWidth / 2}
-                y={margin.top + chartHeight + 36}
+                y={labelY}
                 textAnchor="middle"
                 className="text-xs fill-gray-600"
+                dominantBaseline="hanging"
                 transform={rotateLabels
-                  ? `rotate(-45, ${x + barWidth / 2}, ${margin.top + chartHeight + 36})`
+                  ? `rotate(-45, ${x + barWidth / 2}, ${labelY})`
                   : undefined
                 }
               >
@@ -345,27 +358,44 @@ export function AreaChart({ data, width = 400, height = 200, color = "#3B82F6", 
 
   const maxValue = Math.max(...data.map(d => d.value));
   const minValue = Math.min(...data.map(d => d.value));
-  const range = maxValue - minValue || 1;
+  const range = maxValue - minValue;
+  const normalizedValue = (value: number) => {
+    if (range === 0) return 0.5;
+    return (value - minValue) / range;
+  };
+  const margin = { top: 16, right: 16, bottom: 32, left: 28 };
+  const chartWidth = Math.max(1, width - margin.left - margin.right);
+  const chartHeight = Math.max(1, height - margin.top - margin.bottom);
+  const xDenominator = Math.max(1, data.length - 1);
+  const showPoints = data.length <= 31;
+
+  const xForIndex = (index: number) => {
+    if (data.length === 1) return margin.left + chartWidth / 2;
+    return margin.left + (index / xDenominator) * chartWidth;
+  };
+  const yForValue = (value: number) => {
+    const n = normalizedValue(value);
+    return margin.top + (1 - n) * chartHeight;
+  };
 
   const points = data.map((point, index) => {
-    const x = (index / (data.length - 1)) * (width - 40) + 20;
-    const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
-    return `${x},${y}`;
+    return `${xForIndex(index)},${yForValue(point.value)}`;
   }).join(' ');
 
-  const areaPoints = points + ` ${width - 20},${height - 20} 20,${height - 20}`;
+  const baselineY = margin.top + chartHeight;
+  const areaPoints = points + ` ${margin.left + chartWidth},${baselineY} ${margin.left},${baselineY}`;
 
   return (
     <div className="bg-white p-4 rounded-lg border">
-      <svg width={width} height={height}>
+      <svg width={width} height={height} className="overflow-visible">
         {/* Grid lines */}
         {[0, 0.25, 0.5, 0.75, 1].map((ratio, i) => (
           <line
             key={i}
-            x1="20"
-            y1={height - 40 - ratio * (height - 80) + 20}
-            x2={width - 20}
-            y2={height - 40 - ratio * (height - 80) + 20}
+            x1={margin.left}
+            y1={margin.top + (1 - ratio) * chartHeight}
+            x2={margin.left + chartWidth}
+            y2={margin.top + (1 - ratio) * chartHeight}
             stroke="#E5E7EB"
             strokeWidth="1"
             opacity="0.5"
@@ -390,20 +420,16 @@ export function AreaChart({ data, width = 400, height = 200, color = "#3B82F6", 
         />
 
         {/* Data points */}
-        {data.map((point, index) => {
-          const x = (index / (data.length - 1)) * (width - 40) + 20;
-          const y = height - 40 - ((point.value - minValue) / range) * (height - 80) + 20;
-          return (
-            <circle
-              key={index}
-              cx={x}
-              cy={y}
-              r="3"
-              fill={color}
-              className="hover:r-5 transition-all cursor-pointer"
-            />
-          );
-        })}
+        {showPoints && data.map((point, index) => (
+          <circle
+            key={index}
+            cx={xForIndex(index)}
+            cy={yForValue(point.value)}
+            r="3"
+            fill={color}
+            className="hover:r-5 transition-all cursor-pointer"
+          />
+        ))}
       </svg>
     </div>
   );
