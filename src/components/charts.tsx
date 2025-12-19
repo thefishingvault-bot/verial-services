@@ -106,15 +106,25 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
 
   const maxValue = Math.max(...data.map(d => d.value));
   const safeMaxValue = maxValue || 1;
-  const barWidth = (width - 40) / data.length - 10;
+  const margin = {
+    top: 16,
+    right: 16,
+    bottom: 64,
+    left: 28,
+  };
+  const chartWidth = Math.max(1, width - margin.left - margin.right);
+  const chartHeight = Math.max(1, height - margin.top - margin.bottom);
+  const slotWidth = chartWidth / Math.max(1, data.length);
+  const barWidth = Math.max(8, slotWidth - 12);
+  const rotateLabels = data.length > 4 || data.some((d) => d.name.length > 12);
 
   return (
     <div className="bg-white p-4 rounded-lg border">
-      <svg width={width} height={height}>
+      <svg width={width} height={height} className="overflow-visible">
         {data.map((item, index) => {
-          const barHeight = (item.value / safeMaxValue) * (height - 80);
-          const x = 20 + index * ((width - 40) / data.length);
-          const y = height - 40 - barHeight;
+          const barHeight = (item.value / safeMaxValue) * chartHeight;
+          const x = margin.left + index * slotWidth + (slotWidth - barWidth) / 2;
+          const y = margin.top + chartHeight - barHeight;
 
           return (
             <g key={index}>
@@ -137,12 +147,15 @@ export function BarChart({ data, width = 400, height = 200 }: BarChartProps) {
               </text>
               <text
                 x={x + barWidth / 2}
-                y={height - 20}
+                y={margin.top + chartHeight + 36}
                 textAnchor="middle"
                 className="text-xs fill-gray-600"
-                transform={`rotate(-45, ${x + barWidth / 2}, ${height - 20})`}
+                transform={rotateLabels
+                  ? `rotate(-45, ${x + barWidth / 2}, ${margin.top + chartHeight + 36})`
+                  : undefined
+                }
               >
-                {item.name.length > 10 ? item.name.substring(0, 10) + '...' : item.name}
+                {item.name.length > 14 ? item.name.substring(0, 14) + '...' : item.name}
               </text>
             </g>
           );
