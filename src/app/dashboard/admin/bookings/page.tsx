@@ -1,15 +1,13 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { bookings, users, providers, services, bookingStatusEnum } from "@/db/schema";
-import { eq, desc, and, or, like, inArray } from "drizzle-orm";
+import { eq, desc, and, or, ilike, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -19,7 +17,6 @@ import {
   DollarSign,
   Eye,
   Filter,
-  Search,
   Users,
   TrendingUp,
   ArrowUpDown
@@ -28,31 +25,63 @@ import { AdminBookingsSearchSchema, parseSearchParams } from "@/lib/validation/a
 
 type BookingStatusValue = (typeof bookingStatusEnum.enumValues)[number];
 
+export const dynamic = "force-dynamic";
+
+function formatBookingStatus(status: string) {
+  if (status === "canceled_customer") return "Canceled (Customer)";
+  if (status === "canceled_provider") return "Canceled (Provider)";
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 export default async function AdminBookingsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   const params = parseSearchParams(AdminBookingsSearchSchema, await searchParams);
   const statusFilter = params.status;
   const searchQuery = params.search;
-  const activeTab = params.tab;
+  const canceledStatuses: BookingStatusValue[] = ["canceled_customer", "canceled_provider"];
+
+  const activeTab =
+    statusFilter === "pending"
+      ? "pending"
+      : statusFilter === "accepted"
+        ? "confirmed"
+        : statusFilter === "paid"
+          ? "paid"
+          : statusFilter === "completed"
+            ? "completed"
+            : statusFilter === "canceled" || canceledStatuses.includes(statusFilter as BookingStatusValue)
+              ? "canceled"
+              : "all";
+
+  const now = new Date();
+  const nowMs = now.getTime();
+  const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+  const [summary] = await db
+    .select({
+      totalBookings: sql<number>`count(*)`,
+      pendingBookings: sql<number>`count(*) filter (where ${bookings.status} = 'pending')`,
+      acceptedBookings: sql<number>`count(*) filter (where ${bookings.status} = 'accepted')`,
+      paidBookings: sql<number>`count(*) filter (where ${bookings.status} = 'paid')`,
+      completedBookings: sql<number>`count(*) filter (where ${bookings.status} = 'completed')`,
+      canceledBookings: sql<number>`count(*) filter (where ${bookings.status} in ('canceled_customer','canceled_provider'))`,
+      recentBookings: sql<number>`count(*) filter (where ${bookings.createdAt} >= ${sevenDaysAgo})`,
+      totalRevenueCents: sql<number>`coalesce(sum(${bookings.priceAtBooking}) filter (where ${bookings.status} in ('paid','completed')), 0)`,
+    })
+    .from(bookings);
 
   // Build where conditions
   const whereConditions = [];
-
-  const canceledStatuses: BookingStatusValue[] = ["canceled_customer", "canceled_provider"];
 
   if (statusFilter === "canceled") {
     whereConditions.push(inArray(bookings.status, canceledStatuses));
@@ -70,12 +99,13 @@ export default async function AdminBookingsPage({
   if (searchQuery) {
     whereConditions.push(
       or(
-        like(bookings.id, `%${searchQuery}%`),
-        like(users.firstName, `%${searchQuery}%`),
-        like(users.lastName, `%${searchQuery}%`),
-        like(users.email, `%${searchQuery}%`),
-        like(providers.businessName, `%${searchQuery}%`),
-        like(services.title, `%${searchQuery}%`)
+        ilike(bookings.id, `%${searchQuery}%`),
+        ilike(users.firstName, `%${searchQuery}%`),
+        ilike(users.lastName, `%${searchQuery}%`),
+        ilike(users.email, `%${searchQuery}%`),
+        ilike(providers.businessName, `%${searchQuery}%`),
+        ilike(providers.handle, `%${searchQuery}%`),
+        ilike(services.title, `%${searchQuery}%`)
       )
     );
   }
@@ -111,22 +141,14 @@ export default async function AdminBookingsPage({
     .orderBy(desc(bookings.createdAt))
     .limit(100);
 
-  // Get summary stats
-  const totalBookings = bookingsData.length;
-  const pendingBookings = bookingsData.filter(b => b.status === "pending").length;
-  const confirmedBookings = bookingsData.filter(b => b.status === "accepted").length;
-  const paidBookings = bookingsData.filter(b => b.status === "paid").length;
-  const completedBookings = bookingsData.filter(b => b.status === "completed").length;
-  const canceledBookings = bookingsData.filter(
-    b => b.status === "canceled_customer" || b.status === "canceled_provider",
-  ).length;
-  const totalRevenue = bookingsData
-    .filter(b => b.status === "paid" || b.status === "completed")
-    .reduce((sum, b) => sum + (b.priceAtBooking || 0), 0);
-
-  // Calculate recent bookings (last 7 days)
-  const sevenDaysAgo = new Date(new Date().getTime() - 7 * 24 * 60 * 60 * 1000);
-  const recentBookings = bookingsData.filter(b => b.createdAt >= sevenDaysAgo).length;
+  const totalBookings = summary?.totalBookings ?? 0;
+  const pendingBookings = summary?.pendingBookings ?? 0;
+  const confirmedBookings = summary?.acceptedBookings ?? 0;
+  const paidBookings = summary?.paidBookings ?? 0;
+  const completedBookings = summary?.completedBookings ?? 0;
+  const canceledBookings = summary?.canceledBookings ?? 0;
+  const recentBookings = summary?.recentBookings ?? 0;
+  const totalRevenue = summary?.totalRevenueCents ?? 0;
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -141,9 +163,13 @@ export default async function AdminBookingsPage({
           </div>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline">
-            <Calendar className="mr-2 h-4 w-4" />
-            Export Report
+          <Button asChild variant="outline">
+            <Link
+              href={`/api/admin/bookings/export?status=${encodeURIComponent(statusFilter)}&search=${encodeURIComponent(searchQuery ?? "")}`}
+            >
+              <Calendar className="mr-2 h-4 w-4" />
+              Export Report
+            </Link>
           </Button>
         </div>
       </div>
@@ -230,69 +256,90 @@ export default async function AdminBookingsPage({
       </div>
 
       {/* Main Content */}
-      <Tabs defaultValue={activeTab} className="space-y-4">
+      <Tabs value={activeTab} className="space-y-4">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <TabsList>
-            <TabsTrigger value="all">All Bookings ({totalBookings})</TabsTrigger>
-            <TabsTrigger value="pending">Pending ({pendingBookings})</TabsTrigger>
-            <TabsTrigger value="confirmed">Accepted ({confirmedBookings})</TabsTrigger>
-            <TabsTrigger value="paid">Paid ({paidBookings})</TabsTrigger>
-            <TabsTrigger value="completed">Completed ({completedBookings})</TabsTrigger>
-            <TabsTrigger value="canceled">Canceled ({canceledBookings})</TabsTrigger>
+            <TabsTrigger
+              value="all"
+              asChild
+            >
+              <Link href={`/dashboard/admin/bookings?status=all&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                All Bookings ({totalBookings})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="pending" asChild>
+              <Link href={`/dashboard/admin/bookings?status=pending&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                Pending ({pendingBookings})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="confirmed" asChild>
+              <Link href={`/dashboard/admin/bookings?status=accepted&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                Accepted ({confirmedBookings})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="paid" asChild>
+              <Link href={`/dashboard/admin/bookings?status=paid&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                Paid ({paidBookings})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="completed" asChild>
+              <Link href={`/dashboard/admin/bookings?status=completed&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                Completed ({completedBookings})
+              </Link>
+            </TabsTrigger>
+            <TabsTrigger value="canceled" asChild>
+              <Link href={`/dashboard/admin/bookings?status=canceled&search=${encodeURIComponent(searchQuery ?? "")}`}>
+                Canceled ({canceledBookings})
+              </Link>
+            </TabsTrigger>
           </TabsList>
 
           {/* Advanced Filters */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                placeholder="Search bookings..."
-                className="pl-9"
-                defaultValue={searchQuery}
-              />
+          <form method="GET" className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
+            <div className="w-full sm:w-64">
+              <Input name="search" placeholder="Search bookings..." defaultValue={searchQuery} />
             </div>
-            <Select defaultValue={statusFilter}>
-              <SelectTrigger className="w-full sm:w-32">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Status</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="confirmed">Accepted</SelectItem>
-                <SelectItem value="paid">Paid</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-                <SelectItem value="canceled">Canceled</SelectItem>
-              </SelectContent>
-            </Select>
-            <Button variant="outline" size="sm" className="w-full sm:w-auto">
+            <select
+              name="status"
+              defaultValue={statusFilter}
+              className="border-input dark:bg-input/30 h-9 w-full rounded-md border bg-transparent px-3 py-1 text-base shadow-xs outline-none transition-[color,box-shadow] focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 sm:w-40 md:text-sm"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="accepted">Accepted</option>
+              <option value="paid">Paid</option>
+              <option value="completed">Completed</option>
+              <option value="canceled">Canceled</option>
+            </select>
+            <Button type="submit" variant="outline" size="sm" className="w-full sm:w-auto">
               <Filter className="h-4 w-4 mr-2" />
-              More Filters
+              Filter
             </Button>
-          </div>
+          </form>
         </div>
 
         <TabsContent value="all" className="space-y-4">
-          <BookingsTable bookings={bookingsData} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="pending" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "pending")} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="confirmed" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "accepted")} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="paid" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "paid")} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="completed" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => b.status === "completed")} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
 
         <TabsContent value="canceled" className="space-y-4">
-          <BookingsTable bookings={bookingsData.filter(b => canceledStatuses.includes(b.status))} />
+          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
         </TabsContent>
       </Tabs>
     </div>
@@ -301,6 +348,7 @@ export default async function AdminBookingsPage({
 // Separate component for the bookings table
 function BookingsTable({
   bookings,
+  nowMs,
 }: {
   bookings: Array<{
     id: string;
@@ -320,6 +368,7 @@ function BookingsTable({
     providerHandle: string | null;
     serviceTitle: string | null;
   }>;
+  nowMs: number;
 }) {
   return (
     <Card>
@@ -352,10 +401,10 @@ function BookingsTable({
             </TableHeader>
             <TableBody>
               {bookings.map((booking) => {
-                const daysSinceCreation = (new Date().getTime() - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+                const daysSinceCreation = (nowMs - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
                 const isRecent = daysSinceCreation < 1; // Less than 24 hours
                 return (
-                  <TableRow key={booking.id} className={isRecent ? "bg-blue-50" : ""}>
+                  <TableRow key={booking.id} className={isRecent ? "bg-muted/30" : ""}>
                     <TableCell>
                       <div className="space-y-1">
                         <div className="font-medium font-mono text-sm">{booking.id}</div>
@@ -417,7 +466,7 @@ function BookingsTable({
                             : "secondary"
                         }
                       >
-                        {booking.status}
+                        {formatBookingStatus(booking.status)}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -457,10 +506,10 @@ function BookingsTable({
         {/* Mobile Cards */}
         <div className="grid gap-3 lg:hidden">
           {bookings.map((booking) => {
-            const daysSinceCreation = (new Date().getTime() - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
+            const daysSinceCreation = (nowMs - booking.createdAt.getTime()) / (1000 * 60 * 60 * 24);
             const isRecent = daysSinceCreation < 1;
             return (
-              <Card key={booking.id} className={isRecent ? "border-blue-200 bg-blue-50" : undefined}>
+              <Card key={booking.id} className={isRecent ? "bg-muted/30" : undefined}>
                 <CardContent className="p-4 space-y-3">
                   <div className="flex items-center justify-between gap-2">
                     <div>
@@ -485,7 +534,7 @@ function BookingsTable({
                           : "secondary"
                       }
                     >
-                      {booking.status}
+                      {formatBookingStatus(booking.status)}
                     </Badge>
                   </div>
 
