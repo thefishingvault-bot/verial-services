@@ -18,7 +18,6 @@ import {
   Clock,
   DollarSign,
   Filter,
-  Search,
   Shield,
   TrendingUp,
   MessageSquare,
@@ -328,14 +327,8 @@ export default async function AdminDisputesPage({
 
           {/* Advanced Filters */}
           <form method="GET" className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
-            <div className="relative w-full sm:w-64">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
-              <Input
-                name="search"
-                placeholder="Search disputes..."
-                className="pl-9"
-                defaultValue={searchQuery}
-              />
+            <div className="w-full sm:w-64">
+              <Input name="search" placeholder="Search disputes..." defaultValue={searchQuery} />
             </div>
             <select
               name="status"
