@@ -170,6 +170,7 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
             items={items}
             operationType={operationType}
             selectedIds={selectedIds}
+            acting={acting}
             onSelectAll={handleSelectAll}
             onSelectItem={handleSelectItem}
             onBulkAction={handleBulkAction}
@@ -184,6 +185,7 @@ interface BulkOperationsTableProps {
   items: (ProviderRow | BookingRow)[];
   operationType: 'providers' | 'bookings';
   selectedIds: string[];
+  acting: boolean;
   onSelectAll: (checked: boolean) => void;
   onSelectItem: (id: string, checked: boolean) => void;
   onBulkAction: (action: string) => void;
@@ -193,6 +195,7 @@ function BulkOperationsTable({
   items,
   operationType,
   selectedIds,
+  acting,
   onSelectAll,
   onSelectItem,
   onBulkAction,
@@ -333,7 +336,7 @@ function BulkOperationsTable({
               <Checkbox
                 checked={selectedIds.length === items.length && items.length > 0}
                 onCheckedChange={onSelectAll}
-                  disabled={acting}
+                disabled={acting}
               />
             </TableHead>
             {operationType === 'providers' ? (

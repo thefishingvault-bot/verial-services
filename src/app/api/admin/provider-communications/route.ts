@@ -1,18 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { providerCommunications, scheduledCommunications, providers } from '@/db/schema';
-import { sql, desc, inArray } from 'drizzle-orm';
+import { bookings, messageTemplates, providerCommunications, providers, scheduledCommunications, users } from '@/db/schema';
+import { and, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { sendEmail } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { requireAdmin } from '@/lib/admin-auth';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
+import { z } from 'zod';
 
-interface BulkMessageRequest {
-  subject: string;
-  message: string;
-  type: 'email' | 'notification' | 'sms';
-  providerIds: string[];
-  scheduledFor?: string;
-  templateId?: string;
+const ProviderIdSchema = z
+  .string()
+  .min(1)
+  .regex(/^prov_[A-Za-z0-9_]+$/, 'Invalid provider id');
+
+const BulkMessageRequestSchema = z.object({
+  subject: z.string().trim().min(1).max(255),
+  message: z.string().trim().min(1),
+  type: z.enum(['email', 'notification']),
+  providerIds: z.array(ProviderIdSchema).min(1).max(200),
+  scheduledFor: z.string().trim().optional(),
+  templateId: z.string().trim().optional(),
+});
+
+function makeProviderCommId() {
+  return `pcomm_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function makeScheduledCommId() {
+  return `scomm_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
+
+function riskFromTrustScore(score: number) {
+  if (score >= 80) return 'low' as const;
+  if (score >= 60) return 'medium' as const;
+  if (score >= 40) return 'high' as const;
+  return 'critical' as const;
 }
 
 export async function POST(request: NextRequest) {
@@ -21,40 +43,41 @@ export async function POST(request: NextRequest) {
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
 
-    const body: BulkMessageRequest = await request.json();
-    const { subject, message, type, providerIds, scheduledFor, templateId } = body;
+    await ensureUserExistsInDb(userId!, 'admin');
 
-    if (!subject || !message || !providerIds.length) {
+    const raw = await request.json().catch(() => null);
+    const parsedBody = BulkMessageRequestSchema.safeParse(raw);
+    if (!parsedBody.success) {
       return NextResponse.json(
-        { error: 'Subject, message, and provider IDs are required' },
-        { status: 400 }
+        { error: 'Invalid request body', details: parsedBody.error.flatten() },
+        { status: 400 },
       );
     }
 
+    const { subject, message, type, providerIds, scheduledFor, templateId } = parsedBody.data;
+
     // Get provider details
-    const providersList = await db.query.providers.findMany({
-      where: inArray(providers.id, providerIds),
-      with: {
-        user: {
-          columns: {
-            email: true,
-            firstName: true,
-            lastName: true
-          }
-        }
-      },
-      columns: {
-        id: true,
-        businessName: true,
-        userId: true
-      }
-    });
+    const providersList = await db
+      .select({
+        id: providers.id,
+        businessName: providers.businessName,
+        userId: providers.userId,
+        email: users.email,
+        firstName: users.firstName,
+        lastName: users.lastName,
+      })
+      .from(providers)
+      .innerJoin(users, eq(providers.userId, users.id))
+      .where(inArray(providers.id, providerIds));
 
     if (providersList.length === 0) {
       return NextResponse.json({ error: 'No valid providers found' }, { status: 400 });
     }
 
     const scheduledDate = scheduledFor ? new Date(scheduledFor) : null;
+    if (scheduledDate && Number.isNaN(scheduledDate.getTime())) {
+      return NextResponse.json({ error: 'Invalid scheduledFor timestamp' }, { status: 400 });
+    }
     const shouldSendNow = !scheduledDate || scheduledDate <= new Date();
 
     if (shouldSendNow) {
@@ -64,17 +87,17 @@ export async function POST(request: NextRequest) {
           try {
             const personalizedMessage = message
               .replace(/{provider_name}/g, provider.businessName)
-              .replace(/{first_name}/g, provider.user.firstName || '')
-              .replace(/{last_name}/g, provider.user.lastName || '');
+              .replace(/{first_name}/g, provider.firstName || '')
+              .replace(/{last_name}/g, provider.lastName || '');
 
             const personalizedSubject = subject
               .replace(/{provider_name}/g, provider.businessName)
-              .replace(/{first_name}/g, provider.user.firstName || '')
-              .replace(/{last_name}/g, provider.user.lastName || '');
+              .replace(/{first_name}/g, provider.firstName || '')
+              .replace(/{last_name}/g, provider.lastName || '');
 
             if (type === 'email') {
               await sendEmail({
-                to: provider.user.email,
+                to: provider.email,
                 subject: personalizedSubject,
                 html: personalizedMessage.replace(/\n/g, '<br>')
               });
@@ -84,14 +107,11 @@ export async function POST(request: NextRequest) {
                 message: `${personalizedSubject}: ${personalizedMessage}`,
                 href: '/dashboard/notifications'
               });
-            } else if (type === 'sms') {
-              // Implement SMS sending logic here
-              console.log(`SMS to ${provider.user.email}: ${personalizedMessage}`);
             }
 
             // Log the communication
             await db.insert(providerCommunications).values({
-              id: `pcomm_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`,
+              id: makeProviderCommId(),
               providerId: provider.id,
               type,
               subject: personalizedSubject,
@@ -107,7 +127,7 @@ export async function POST(request: NextRequest) {
 
             // Log failed communication
             await db.insert(providerCommunications).values({
-              id: `pcomm_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`,
+              id: makeProviderCommId(),
               providerId: provider.id,
               type,
               subject,
@@ -135,7 +155,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Schedule message for later
       await db.insert(scheduledCommunications).values({
-        id: `scomm_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`,
+        id: makeScheduledCommId(),
         subject,
         message,
         type,
@@ -167,6 +187,128 @@ export async function GET(request: NextRequest) {
     if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(request.url);
+    const kind = searchParams.get('kind') || 'history';
+
+    if (kind === 'templates') {
+      const rows = await db
+        .select({
+          id: messageTemplates.id,
+          name: messageTemplates.name,
+          subject: messageTemplates.subject,
+          body: messageTemplates.body,
+          category: messageTemplates.category,
+          variables: messageTemplates.variables,
+          updatedAt: messageTemplates.updatedAt,
+        })
+        .from(messageTemplates)
+        .orderBy(desc(messageTemplates.updatedAt));
+
+      return NextResponse.json({ templates: rows });
+    }
+
+    if (kind === 'providers') {
+      const q = (searchParams.get('q') || '').trim();
+      const status = (searchParams.get('status') || 'all').trim();
+      const risk = (searchParams.get('risk') || 'all').trim();
+      const page = Math.max(1, Number.parseInt(searchParams.get('page') || '1', 10) || 1);
+      const limit = Math.min(100, Math.max(1, Number.parseInt(searchParams.get('limit') || '50', 10) || 50));
+
+      const whereClauses = [] as Array<ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof sql>>;
+
+      if (q) {
+        const like = `%${q}%`;
+        whereClauses.push(
+          sql`(
+            ${providers.businessName} ILIKE ${like}
+            OR ${providers.handle} ILIKE ${like}
+            OR ${users.email} ILIKE ${like}
+          )`,
+        );
+      }
+
+      if (status !== 'all') {
+        if (status === 'suspended') {
+          whereClauses.push(eq(providers.isSuspended, true));
+        } else if (status === 'approved' || status === 'pending' || status === 'rejected') {
+          whereClauses.push(eq(providers.status, status as 'approved' | 'pending' | 'rejected'));
+        }
+      }
+
+      if (risk !== 'all') {
+        if (risk === 'low') whereClauses.push(sql`${providers.trustScore} >= 80`);
+        if (risk === 'medium') whereClauses.push(sql`${providers.trustScore} BETWEEN 60 AND 79`);
+        if (risk === 'high') whereClauses.push(sql`${providers.trustScore} BETWEEN 40 AND 59`);
+        if (risk === 'critical') whereClauses.push(sql`${providers.trustScore} < 40`);
+      }
+
+      const where = whereClauses.length ? and(...whereClauses) : undefined;
+
+      const [rows, totalProvidersRes, totalMessagesRes] = await Promise.all([
+        db
+          .select({
+            id: providers.id,
+            businessName: providers.businessName,
+            handle: providers.handle,
+            email: users.email,
+            status: providers.status,
+            isSuspended: providers.isSuspended,
+            trustScore: providers.trustScore,
+            trustLevel: providers.trustLevel,
+            createdAt: providers.createdAt,
+            totalBookings: sql<number>`COUNT(${bookings.id})`,
+            lastActivity: sql<Date | null>`MAX(${bookings.createdAt})`,
+          })
+          .from(providers)
+          .innerJoin(users, eq(providers.userId, users.id))
+          .leftJoin(bookings, eq(bookings.providerId, providers.id))
+          .where(where)
+          .groupBy(
+            providers.id,
+            providers.businessName,
+            providers.handle,
+            users.email,
+            providers.status,
+            providers.isSuspended,
+            providers.trustScore,
+            providers.trustLevel,
+            providers.createdAt,
+          )
+          .orderBy(desc(providers.createdAt))
+          .limit(limit)
+          .offset((page - 1) * limit),
+        db
+          .select({ count: sql<number>`COUNT(*)` })
+          .from(providers)
+          .innerJoin(users, eq(providers.userId, users.id))
+          .where(where),
+        db.select({ count: sql<number>`COUNT(*)` }).from(providerCommunications),
+      ]);
+
+      const providersOut = rows.map((p) => ({
+        id: p.id,
+        businessName: p.businessName,
+        handle: p.handle,
+        email: p.email,
+        status: p.isSuspended ? 'suspended' : p.status,
+        riskLevel: riskFromTrustScore(p.trustScore ?? 0),
+        totalBookings: Number(p.totalBookings ?? 0),
+        trustScore: p.trustScore ?? 0,
+        lastActivity: p.lastActivity,
+      }));
+
+      return NextResponse.json({
+        providers: providersOut,
+        totals: {
+          totalProviders: totalProvidersRes[0]?.count ?? 0,
+          totalMessagesSent: totalMessagesRes[0]?.count ?? 0,
+        },
+        pagination: {
+          page,
+          limit,
+        },
+      });
+    }
+
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const providerId = searchParams.get('providerId');
@@ -174,12 +316,27 @@ export async function GET(request: NextRequest) {
     const where = providerId ? sql`${providerCommunications.providerId} = ${providerId}` : undefined;
 
     const [communications, totalResult] = await Promise.all([
-      db.query.providerCommunications.findMany({
-        where,
-        orderBy: [desc(providerCommunications.sentAt)],
-        limit,
-        offset: (page - 1) * limit
-      }),
+      db
+        .select({
+          id: providerCommunications.id,
+          providerId: providerCommunications.providerId,
+          providerName: providers.businessName,
+          providerHandle: providers.handle,
+          type: providerCommunications.type,
+          subject: providerCommunications.subject,
+          message: providerCommunications.message,
+          sentAt: providerCommunications.sentAt,
+          status: providerCommunications.status,
+          error: providerCommunications.error,
+          response: providerCommunications.response,
+          responseAt: providerCommunications.responseAt,
+        })
+        .from(providerCommunications)
+        .innerJoin(providers, eq(providerCommunications.providerId, providers.id))
+        .where(where)
+        .orderBy(desc(providerCommunications.sentAt))
+        .limit(limit)
+        .offset((page - 1) * limit),
       db.select({ count: sql<number>`count(*)` }).from(providerCommunications).where(where)
     ]);
 
