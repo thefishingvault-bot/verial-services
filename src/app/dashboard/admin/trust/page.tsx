@@ -1,40 +1,52 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
-import { requireAdmin } from "@/lib/admin";
 import { trustIncidents, providers, users, bookings } from "@/db/schema";
-import { eq, desc, and, or, like, inArray } from "drizzle-orm";
+import { asc, desc, and, or, ilike, eq, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AlertTriangle, CheckCircle, Shield, Search, Settings } from "lucide-react";
 import { AdminTrustIncidentsSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export default async function AdminTrustIncidentsPage({
   searchParams,
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   const params = parseSearchParams(AdminTrustIncidentsSearchSchema, await searchParams);
   const statusFilter = params.status;
   const typeFilter = params.type;
   const severityFilter = params.severity;
   const searchQuery = params.search;
+
+  const [summaryRow, distinctTypes] = await Promise.all([
+    db
+      .select({
+        total: sql<number>`COUNT(*)`,
+        unresolved: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`,
+        resolved: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = true)`,
+        criticalOpen: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false AND ${trustIncidents.severity} = 'critical')`,
+      })
+      .from(trustIncidents)
+      .then((rows) => rows[0] ?? { total: 0, unresolved: 0, resolved: 0, criticalOpen: 0 }),
+    db
+      .select({ incidentType: trustIncidents.incidentType })
+      .from(trustIncidents)
+      .groupBy(trustIncidents.incidentType)
+      .orderBy(asc(trustIncidents.incidentType))
+      .then((rows) => rows.map((r) => r.incidentType).filter(Boolean)),
+  ]);
+
+  const baseIncidentTypes = ["complaint", "violation", "review_abuse", "service_quality"];
+  const known = new Set(baseIncidentTypes);
+  const extraIncidentTypes = distinctTypes.filter((t) => !known.has(t));
 
   // Build where conditions
   const whereConditions = [];
@@ -56,8 +68,8 @@ export default async function AdminTrustIncidentsPage({
   if (searchQuery) {
     whereConditions.push(
       or(
-        like(providers.businessName, `%${searchQuery}%`),
-        like(trustIncidents.description, `%${searchQuery}%`)
+        ilike(providers.businessName, `%${searchQuery}%`),
+        ilike(trustIncidents.description, `%${searchQuery}%`)
       )
     );
   }
@@ -76,6 +88,7 @@ export default async function AdminTrustIncidentsPage({
       reportedBy: trustIncidents.reportedBy,
       resolvedBy: trustIncidents.resolvedBy,
       provider: {
+        id: providers.id,
         businessName: providers.businessName,
         handle: providers.handle,
       },
@@ -118,11 +131,11 @@ export default async function AdminTrustIncidentsPage({
     resolver: incident.resolvedBy ? userMap.get(incident.resolvedBy) : null,
   }));
 
-  // Get summary stats
-  const totalIncidents = incidentsWithUsers.length;
-  const resolvedIncidents = incidentsWithUsers.filter(i => i.resolved).length;
-  const unresolvedIncidents = totalIncidents - resolvedIncidents;
-  const criticalIncidents = incidentsWithUsers.filter(i => i.severity === "critical").length;
+  // Summary stats (all-time, not limited to current filter)
+  const totalIncidents = Number(summaryRow.total ?? 0);
+  const unresolvedIncidents = Number(summaryRow.unresolved ?? 0);
+  const resolvedIncidents = Number(summaryRow.resolved ?? 0);
+  const criticalIncidents = Number(summaryRow.criticalOpen ?? 0);
 
   return (
     <div className="container mx-auto py-8 space-y-6">
@@ -204,51 +217,53 @@ export default async function AdminTrustIncidentsPage({
           <CardDescription>Filter incidents by status, type, severity, or search</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="flex flex-wrap gap-4">
+          <form className="flex flex-wrap gap-4" method="GET">
             <div className="space-y-2">
               <label className="text-sm font-medium">Status</label>
-              <Select name="status" defaultValue={statusFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Status</SelectItem>
-                  <SelectItem value="resolved">Resolved</SelectItem>
-                  <SelectItem value="unresolved">Unresolved</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                name="status"
+                defaultValue={statusFilter}
+                className="w-40 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">All Status</option>
+                <option value="resolved">Resolved</option>
+                <option value="unresolved">Unresolved</option>
+              </select>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Type</label>
-              <Select name="type" defaultValue={typeFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="complaint">Complaint</SelectItem>
-                  <SelectItem value="violation">Violation</SelectItem>
-                  <SelectItem value="review_abuse">Review Abuse</SelectItem>
-                  <SelectItem value="service_quality">Service Quality</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                name="type"
+                defaultValue={typeFilter}
+                className="w-40 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">All Types</option>
+                <option value="complaint">Complaint</option>
+                <option value="violation">Violation</option>
+                <option value="review_abuse">Review Abuse</option>
+                <option value="service_quality">Service Quality</option>
+                {extraIncidentTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t.replace(/_/g, " ")}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div className="space-y-2">
               <label className="text-sm font-medium">Severity</label>
-              <Select name="severity" defaultValue={severityFilter}>
-                <SelectTrigger className="w-40">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Severities</SelectItem>
-                  <SelectItem value="low">Low</SelectItem>
-                  <SelectItem value="medium">Medium</SelectItem>
-                  <SelectItem value="high">High</SelectItem>
-                  <SelectItem value="critical">Critical</SelectItem>
-                </SelectContent>
-              </Select>
+              <select
+                name="severity"
+                defaultValue={severityFilter}
+                className="w-40 h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="all">All Severities</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
+                <option value="critical">Critical</option>
+              </select>
             </div>
 
             <div className="space-y-2">
@@ -359,7 +374,7 @@ export default async function AdminTrustIncidentsPage({
                         </Badge>
                       )}
                       <Button asChild variant="outline" size="sm">
-                        <Link href={`/dashboard/admin/providers/${incident.provider.handle}`}>
+                        <Link href={`/dashboard/admin/providers/${incident.provider.id}`}>
                           View Provider
                         </Link>
                       </Button>

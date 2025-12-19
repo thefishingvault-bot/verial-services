@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { providers, users, providerSuspensions } from "@/db/schema";
-import { eq, desc, and, isNotNull, lte } from "drizzle-orm";
+import { eq, desc, and, isNotNull, lte, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ensureUserExistsInDb } from "@/lib/user-sync";
@@ -69,7 +69,7 @@ export default async function AdminProviderSuspensionsPage() {
 
     await db.insert(providerSuspensions).values(
       expiredSuspensions.map((p) => ({
-        id: `psusp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        id: sql<string>`concat('psusp_', md5(random()::text || clock_timestamp()::text))`,
         providerId: p.id,
         action: "unsuspend",
         reason: p.suspensionReason ?? "Auto-unsuspended (end date reached)",
