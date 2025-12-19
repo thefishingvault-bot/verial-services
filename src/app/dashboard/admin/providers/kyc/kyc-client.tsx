@@ -28,6 +28,9 @@ type KycProvider = {
   riskLevel: "low" | "medium" | "high" | "critical";
   totalBookings: number;
   completionRate: number;
+  cancellationRate: number;
+  totalReviews: number;
+  avgRating: number;
   totalIncidents: number;
   unresolvedIncidents: number;
   createdAt: Date;
@@ -81,6 +84,14 @@ type KycAnalytics = {
     kycVerifications30d: number;
     kycRejections30d: number;
     avgProcessingTime: number;
+  };
+  timelineSeries?: {
+    points: Array<{
+      name: string;
+      submissions: number;
+      verifications: number;
+      rejections: number;
+    }>;
   };
 };
 
@@ -258,8 +269,9 @@ export default function AdminKycStatusPage() {
   const sortBy = (searchParams.get("sort") as SortOption) || "kyc_status";
   const sortOrder = searchParams.get("order") === "asc" ? "asc" : "desc";
 
-  const fetchProviders = useCallback(async () => {
-    setLoading(true);
+  const fetchProviders = useCallback(async (opts?: { silent?: boolean }) => {
+    const silent = Boolean(opts?.silent);
+    if (!silent) setLoading(true);
     setError(null);
 
     try {
@@ -286,13 +298,22 @@ export default function AdminKycStatusPage() {
       console.error("Error fetching KYC providers:", err);
       setError("Something went wrong while loading KYC providers.");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, [sortBy, sortOrder]);
 
   useEffect(() => {
     fetchProviders();
   }, [fetchProviders]);
+
+  // Auto-refresh data (safe interval-based polling)
+  useEffect(() => {
+    if (!autoRefreshEnabled) return;
+    const id = window.setInterval(() => {
+      fetchProviders({ silent: true });
+    }, refreshInterval);
+    return () => window.clearInterval(id);
+  }, [autoRefreshEnabled, refreshInterval, fetchProviders]);
 
   useEffect(() => {
     // Load scheduled reports on component mount
@@ -311,15 +332,12 @@ export default function AdminKycStatusPage() {
         trustScore: p.trustScore,
         completionRate: p.completionRate,
         totalBookings: p.totalBookings,
-        cancellationRate: 0, // Not available in KYC data
-        totalReviews: 0, // Not available in KYC data
-        avgRating: null,
+        cancellationRate: p.cancellationRate,
+        totalReviews: p.totalReviews,
+        avgRating: p.avgRating,
         daysActive: p.daysActive,
         status: p.status,
         unresolvedIncidents: p.unresolvedIncidents,
-        recentIncidents: 0, // Not available in KYC data
-        totalDisputes: 0, // Not available in KYC data
-        applicableRiskRules: [], // Not available in KYC data
         alerts: p.kycAlerts,
         recommendations: p.kycRecommendations,
         createdAt: p.createdAt,
@@ -347,7 +365,7 @@ export default function AdminKycStatusPage() {
         provider.riskLevel,
         provider.riskScore,
         provider.trustScore,
-        provider.completionRate.toFixed(2),
+        Number(provider.completionRate ?? 0).toFixed(2),
         provider.totalBookings,
         provider.daysActive,
         provider.status,
@@ -468,7 +486,7 @@ export default function AdminKycStatusPage() {
               ${providers.map(provider => `
                 <tr class="risk-${provider.riskLevel}">
                   <td>${provider.businessName}<br><small>@${provider.handle}</small></td>
-                  <td>${provider.kycStatus.replace('_', ' ').toUpperCase()}</td>
+                  <td>${provider.kycStatus.replace(/_/g, ' ').toUpperCase()}</td>
                   <td>${provider.riskLevel.toUpperCase()}</td>
                   <td>${provider.kycCompletionPercentage}%</td>
                   <td>${provider.missingDocuments.length > 0 ? provider.missingDocuments.join(', ') : 'None'}</td>
@@ -763,17 +781,24 @@ export default function AdminKycStatusPage() {
     p.documentVerificationStatus.bank === 'missing'
   ).length;
 
+  const asPercent = (numerator: number, denominator: number) => {
+    if (!denominator || denominator <= 0) return 0;
+    const raw = (numerator / denominator) * 100;
+    if (!Number.isFinite(raw) || raw < 0) return 0;
+    return Math.min(100, raw);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold">KYC Status Dashboard v2</h1>
           <p className="text-gray-600">
             Comprehensive KYC monitoring, risk assessment, and compliance management.
           </p>
         </div>
-        <div className="flex gap-4 items-center">
+        <div className="flex flex-wrap items-start justify-start gap-3 md:items-center md:justify-end">
           {/* Real-time Status */}
           <div className="flex flex-col items-end space-y-1">
             <LiveActivityIndicator
@@ -867,7 +892,7 @@ export default function AdminKycStatusPage() {
             <div className="text-green-500">✅</div>
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {((verifiedProviders / totalProviders) * 100).toFixed(1)}% completion rate
+            {totalProviders > 0 ? ((verifiedProviders / totalProviders) * 100).toFixed(1) : "0.0"}% completion rate
           </div>
         </div>
 
@@ -964,7 +989,14 @@ export default function AdminKycStatusPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">KYC Status</label>
-            <select className="w-full border px-3 py-2 rounded">
+            <select
+              className="w-full border px-3 py-2 rounded"
+              value={kycStatusFilter.length === 1 ? kycStatusFilter[0] : "all"}
+              onChange={(e) => {
+                const value = e.target.value;
+                setKycStatusFilter(value === "all" ? [] : [value]);
+              }}
+            >
               <option value="all">All Status</option>
               <option value="verified">Verified</option>
               <option value="pending_review">Pending Review</option>
@@ -976,7 +1008,14 @@ export default function AdminKycStatusPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Risk Level</label>
-            <select className="w-full border px-3 py-2 rounded">
+            <select
+              className="w-full border px-3 py-2 rounded"
+              value={riskLevelFilter.length === 1 ? riskLevelFilter[0] : "all"}
+              onChange={(e) => {
+                const value = e.target.value;
+                setRiskLevelFilter(value === "all" ? [] : [value]);
+              }}
+            >
               <option value="all">All Risks</option>
               <option value="critical">Critical</option>
               <option value="high">High</option>
@@ -987,7 +1026,19 @@ export default function AdminKycStatusPage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Documents</label>
-            <select className="w-full border px-3 py-2 rounded">
+            <select
+              className="w-full border px-3 py-2 rounded"
+              value={documentStatusFilter.length === 1 ? documentStatusFilter[0] : "all"}
+              onChange={(e) => {
+                const value = e.target.value;
+                const mapped =
+                  value === "all" ? [] :
+                  value === "complete" ? ["all_verified"] :
+                  value === "missing" ? ["any_missing"] :
+                  value === "pending" ? ["any_pending"] : [];
+                setDocumentStatusFilter(mapped);
+              }}
+            >
               <option value="all">All</option>
               <option value="complete">Complete</option>
               <option value="missing">Missing</option>
@@ -1266,18 +1317,17 @@ export default function AdminKycStatusPage() {
           <div>
             <h4 className="text-md font-medium text-gray-900 mb-3">KYC Processing Trends</h4>
             <LineChart
-              data={[
-                { name: 'Day 1', value: 85 },
-                { name: 'Day 7', value: 87 },
-                { name: 'Day 14', value: 82 },
-                { name: 'Day 21', value: 89 },
-                { name: 'Day 28', value: 91 },
-                { name: 'Day 30', value: 92 }
-              ]}
+              data={(analytics?.timelineSeries?.points ?? []).map((p) => ({
+                name: p.name,
+                value: p.verifications,
+              }))}
               width={300}
               height={150}
               color="#10B981"
             />
+            <div className="text-xs text-gray-500 mt-2">
+              Weekly verifications (last 6 weeks)
+            </div>
           </div>
 
           <div>
@@ -1290,7 +1340,7 @@ export default function AdminKycStatusPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-green-600 h-2 rounded-full"
-                      style={{ width: `${((analytics?.documentStatus.identityVerified || 0) / totalProviders) * 100}%` }}
+                      style={{ width: `${asPercent((analytics?.documentStatus.identityVerified || 0) as number, totalProviders)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1302,7 +1352,7 @@ export default function AdminKycStatusPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-blue-600 h-2 rounded-full"
-                      style={{ width: `${((analytics?.documentStatus.businessVerified || 0) / totalProviders) * 100}%` }}
+                      style={{ width: `${asPercent((analytics?.documentStatus.businessVerified || 0) as number, totalProviders)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1314,7 +1364,7 @@ export default function AdminKycStatusPage() {
                   <div className="w-20 bg-gray-200 rounded-full h-2">
                     <div
                       className="bg-purple-600 h-2 rounded-full"
-                      style={{ width: `${((analytics?.documentStatus.bankVerified || 0) / totalProviders) * 100}%` }}
+                      style={{ width: `${asPercent((analytics?.documentStatus.bankVerified || 0) as number, totalProviders)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -1359,12 +1409,27 @@ export default function AdminKycStatusPage() {
                     ))}
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700">
-                      Review KYC
-                    </button>
-                    <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
-                      Contact Provider
-                    </button>
+                      <a
+                        href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                        className="text-xs bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+                      >
+                        Review KYC
+                      </a>
+                      {provider.user.email ? (
+                        <a
+                          href={`mailto:${provider.user.email}`}
+                          className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                        >
+                          Contact Provider
+                        </a>
+                      ) : (
+                        <a
+                          href={`/dashboard/admin/providers/${provider.id}`}
+                          className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                        >
+                          View Provider
+                        </a>
+                      )}
                     <a
                       href={`/dashboard/admin/providers/${provider.id}`}
                       className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
@@ -1414,12 +1479,18 @@ export default function AdminKycStatusPage() {
                     )}
                   </div>
                   <div className="mt-3 flex gap-2">
-                    <button className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
+                    <a
+                      href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                      className="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    >
                       Apply All
-                    </button>
-                    <button className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700">
+                    </a>
+                    <a
+                      href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                      className="text-xs bg-gray-600 text-white px-3 py-1 rounded hover:bg-gray-700"
+                    >
                       Review
-                    </button>
+                    </a>
                   </div>
                 </div>
               ))}
@@ -1461,6 +1532,7 @@ export default function AdminKycStatusPage() {
       </div>
 
       {/* Provider List */}
+      <div id="pending-review">
       {viewMode === "table" ? (
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="w-full">
@@ -1596,14 +1668,20 @@ export default function AdminKycStatusPage() {
                         View
                       </a>
                       {provider.kycStatus === "pending_review" && (
-                        <button className="text-green-600 hover:text-green-900">
+                        <a
+                          href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                          className="text-green-600 hover:text-green-900"
+                        >
                           Review
-                        </button>
+                        </a>
                       )}
                       {provider.kycStatus === "verified" && (
-                        <button className="text-gray-600 hover:text-gray-900">
+                        <a
+                          href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                          className="text-gray-600 hover:text-gray-900"
+                        >
                           Update
-                        </button>
+                        </a>
                       )}
                     </div>
                   </td>
@@ -1704,9 +1782,12 @@ export default function AdminKycStatusPage() {
                     View Details
                   </a>
                   {provider.kycStatus === "pending_review" && (
-                    <button className="flex-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700">
+                    <a
+                      href={`/dashboard/admin/providers/${provider.id}#kyc`}
+                      className="flex-1 px-3 py-1 bg-green-600 text-white text-sm rounded hover:bg-green-700 text-center"
+                    >
                       Review KYC
-                    </button>
+                    </a>
                   )}
                 </div>
               </div>
@@ -1714,6 +1795,7 @@ export default function AdminKycStatusPage() {
           ))}
         </div>
       )}
+      </div>
 
       {/* Scheduled Reports Modal */}
       {showScheduleModal && (

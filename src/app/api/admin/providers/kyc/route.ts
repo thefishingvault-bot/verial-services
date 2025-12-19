@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { eq, desc, asc } from "drizzle-orm";
-import { providers, users, bookings, reviews } from "@/db/schema";
+import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { bookings, providers, reviews, trustIncidents, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProvidersKycQuerySchema, invalidResponse, parseQuery } from "@/lib/validation/admin";
 
@@ -25,7 +25,8 @@ export async function GET(request: NextRequest) {
         orderBy = order === "asc" ? asc(providers.kycStatus) : desc(providers.kycStatus);
         break;
       case "risk_score":
-        orderBy = order === "asc" ? asc(providers.trustScore) : desc(providers.trustScore);
+        // Computed after we build riskScore per provider
+        orderBy = desc(providers.createdAt);
         break;
       case "created":
         orderBy = order === "asc" ? asc(providers.createdAt) : desc(providers.createdAt);
@@ -64,34 +65,142 @@ export async function GET(request: NextRequest) {
       .leftJoin(users, eq(providers.userId, users.id))
       .orderBy(orderBy);
 
+    const providerIds = allProviders.map((p) => p.id);
+
+    const toWeekKey = (date: Date) => {
+      const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+      const day = d.getUTCDay();
+      const offset = (day + 6) % 7; // Monday as week start
+      d.setUTCDate(d.getUTCDate() - offset);
+      return d.toISOString().slice(0, 10);
+    };
+
+    const weeksBack = 5; // current week + 5 previous weeks = 6 points
+    const now = new Date();
+    const start = new Date(now);
+    start.setUTCDate(start.getUTCDate() - weeksBack * 7);
+    const seriesStartWeekKey = toWeekKey(start);
+    const seriesStartDate = new Date(seriesStartWeekKey + "T00:00:00.000Z");
+
+    const [bookingAggRows, reviewAggRows, incidentAggRows, submissionSeriesRows, verificationSeriesRows, rejectionSeriesRows] = await Promise.all([
+      providerIds.length
+        ? db
+            .select({
+              providerId: bookings.providerId,
+              totalBookings: sql<number>`COUNT(*)`,
+              completedBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} = 'completed')`,
+              canceledBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} IN ('canceled_customer', 'canceled_provider'))`,
+            })
+            .from(bookings)
+            .where(inArray(bookings.providerId, providerIds))
+            .groupBy(bookings.providerId)
+        : Promise.resolve([]),
+      providerIds.length
+        ? db
+            .select({
+              providerId: reviews.providerId,
+              totalReviews: sql<number>`COUNT(*) FILTER (WHERE ${reviews.isHidden} = false)`,
+              avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+            })
+            .from(reviews)
+            .where(inArray(reviews.providerId, providerIds))
+            .groupBy(reviews.providerId)
+        : Promise.resolve([]),
+      providerIds.length
+        ? db
+            .select({
+              providerId: trustIncidents.providerId,
+              totalIncidents: sql<number>`COUNT(*)`,
+              unresolvedIncidents: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`,
+            })
+            .from(trustIncidents)
+            .where(inArray(trustIncidents.providerId, providerIds))
+            .groupBy(trustIncidents.providerId)
+        : Promise.resolve([]),
+      db
+        .select({
+          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycSubmittedAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(providers)
+        .where(and(isNotNull(providers.kycSubmittedAt), gte(providers.kycSubmittedAt, seriesStartDate)))
+        .groupBy(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)
+        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)),
+      db
+        .select({
+          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycVerifiedAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(providers)
+        .where(and(isNotNull(providers.kycVerifiedAt), gte(providers.kycVerifiedAt, seriesStartDate)))
+        .groupBy(sql`DATE_TRUNC('week', ${providers.kycVerifiedAt})`)
+        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycVerifiedAt})`)),
+      db
+        .select({
+          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycSubmittedAt}), 'YYYY-MM-DD')`,
+          count: sql<number>`COUNT(*)`,
+        })
+        .from(providers)
+        .where(
+          and(
+            eq(providers.kycStatus, "rejected"),
+            isNotNull(providers.kycSubmittedAt),
+            gte(providers.kycSubmittedAt, seriesStartDate),
+          ),
+        )
+        .groupBy(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)
+        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)),
+    ]);
+
+    const bookingAgg = new Map(
+      bookingAggRows.map((r) => [
+        r.providerId,
+        {
+          totalBookings: Number(r.totalBookings ?? 0),
+          completedBookings: Number(r.completedBookings ?? 0),
+          canceledBookings: Number(r.canceledBookings ?? 0),
+        },
+      ]),
+    );
+
+    const reviewAgg = new Map(
+      reviewAggRows.map((r) => [
+        r.providerId,
+        {
+          totalReviews: Number(r.totalReviews ?? 0),
+          avgRating: Number(r.avgRating ?? 0),
+        },
+      ]),
+    );
+
+    const incidentAgg = new Map(
+      incidentAggRows.map((r) => [
+        r.providerId,
+        {
+          totalIncidents: Number(r.totalIncidents ?? 0),
+          unresolvedIncidents: Number(r.unresolvedIncidents ?? 0),
+        },
+      ]),
+    );
+
     // Calculate additional metrics for each provider
-    const providersWithMetrics = await Promise.all(
-      allProviders.map(async (provider) => {
-        // Get booking metrics
-        const providerBookings = await db
-          .select({
-            id: bookings.id,
-            status: bookings.status,
-            createdAt: bookings.createdAt,
-          })
-          .from(bookings)
-          .where(eq(bookings.providerId, provider.id));
+    const providersWithMetrics = allProviders.map((provider) => {
+        const bookingRow = bookingAgg.get(provider.id) ?? {
+          totalBookings: 0,
+          completedBookings: 0,
+          canceledBookings: 0,
+        };
 
-        const totalBookings = providerBookings.length;
-        const completedBookings = providerBookings.filter(b => b.status === "completed").length;
+        const totalBookings = bookingRow.totalBookings;
+        const completedBookings = bookingRow.completedBookings;
+        const canceledBookings = bookingRow.canceledBookings;
+
         const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
+        const cancellationRate = totalBookings > 0 ? (canceledBookings / totalBookings) * 100 : 0;
 
-        // Get review metrics
-        const providerReviews = await db
-          .select({
-            rating: reviews.rating,
-          })
-          .from(reviews)
-          .where(eq(reviews.providerId, provider.id));
-
-        const avgRating = providerReviews.length > 0
-          ? providerReviews.reduce((sum, r) => sum + r.rating, 0) / providerReviews.length
-          : 0;
+        const reviewRow = reviewAgg.get(provider.id) ?? { totalReviews: 0, avgRating: 0 };
+        const totalReviews = reviewRow.totalReviews;
+        const avgRating = reviewRow.avgRating;
 
         // Calculate KYC completion percentage
         let kycCompletionPercentage = 0;
@@ -101,11 +210,33 @@ export async function GET(request: NextRequest) {
         const kycAlerts: string[] = [];
         const complianceFlags: string[] = [];
 
-        // Document verification status
+        // Document verification status (best-effort, based on available fields)
+        const identityStatus = provider.identityDocumentUrl
+          ? provider.kycStatus === "verified"
+            ? ("verified" as const)
+            : provider.kycStatus === "rejected"
+              ? ("rejected" as const)
+              : ("pending" as const)
+          : ("missing" as const);
+
+        const businessStatus = provider.businessDocumentUrl
+          ? provider.kycStatus === "verified"
+            ? ("verified" as const)
+            : provider.kycStatus === "rejected"
+              ? ("rejected" as const)
+              : ("pending" as const)
+          : ("missing" as const);
+
+        const bankStatus = provider.stripeConnectId
+          ? provider.chargesEnabled && provider.payoutsEnabled
+            ? ("verified" as const)
+            : ("pending" as const)
+          : ("missing" as const);
+
         const documentVerificationStatus = {
-          identity: provider.identityDocumentUrl ? "verified" : "missing" as const,
-          business: provider.businessDocumentUrl ? "verified" : "missing" as const,
-          bank: provider.stripeConnectId ? "verified" : "missing" as const,
+          identity: identityStatus,
+          business: businessStatus,
+          bank: bankStatus,
         };
 
         // Calculate completion based on available data
@@ -120,9 +251,9 @@ export async function GET(request: NextRequest) {
         kycCompletionPercentage = Math.round((completedSteps / totalSteps) * 100);
 
         // Determine missing documents
-        if (!provider.identityDocumentUrl) missingDocuments.push("Identity Document");
-        if (!provider.businessDocumentUrl) missingDocuments.push("Business Document");
-        if (!provider.stripeConnectId) missingDocuments.push("Bank Account Verification");
+        if (identityStatus === "missing") missingDocuments.push("Identity Document");
+        if (businessStatus === "missing") missingDocuments.push("Business Document");
+        if (bankStatus === "missing") missingDocuments.push("Bank Account Verification");
 
         // Calculate KYC age (days since submitted)
         const kycAge = provider.kycSubmittedAt
@@ -154,6 +285,11 @@ export async function GET(request: NextRequest) {
         if (completionRate < 70) {
           calculatedRiskScore += 15;
           kycRiskFactors.push("Low booking completion rate");
+        }
+
+        if (cancellationRate > 20 && totalBookings >= 5) {
+          calculatedRiskScore += 10;
+          kycRiskFactors.push("High cancellation rate");
         }
 
         if (totalBookings < 5) {
@@ -209,9 +345,14 @@ export async function GET(request: NextRequest) {
         // Calculate days active
         const daysActive = Math.floor((Date.now() - provider.createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
-        // Get unresolved incidents (simplified - in real app this would be from incidents table)
-        const unresolvedIncidents = 0; // Placeholder
-        const totalIncidents = 0; // Placeholder
+        const incidentRow = incidentAgg.get(provider.id) ?? { totalIncidents: 0, unresolvedIncidents: 0 };
+        const unresolvedIncidents = incidentRow.unresolvedIncidents;
+        const totalIncidents = incidentRow.totalIncidents;
+
+        if (unresolvedIncidents > 0) {
+          calculatedRiskScore += Math.min(20, unresolvedIncidents * 5);
+          kycRiskFactors.push("Unresolved trust incidents");
+        }
 
         // Stripe onboarding status
         let stripeOnboardingStatus: "not_started" | "in_progress" | "completed" | "failed" = "not_started";
@@ -223,6 +364,8 @@ export async function GET(request: NextRequest) {
           ...provider,
           totalBookings,
           completionRate,
+          cancellationRate,
+          totalReviews,
           avgRating,
           kycCompletionPercentage,
           missingDocuments,
@@ -239,8 +382,14 @@ export async function GET(request: NextRequest) {
           riskLevel: calculatedRiskLevel,
           riskScore: calculatedRiskScore,
         };
-      })
-    );
+      });
+
+    if (sort === "risk_score") {
+      providersWithMetrics.sort((a, b) => {
+        const diff = (a.riskScore ?? 0) - (b.riskScore ?? 0);
+        return order === "asc" ? diff : -diff;
+      });
+    }
 
     // Calculate platform-wide analytics
     const totalProviders = providersWithMetrics.length;
@@ -282,8 +431,8 @@ export async function GET(request: NextRequest) {
       p.kycVerifiedAt && p.kycVerifiedAt >= thirtyDaysAgo
     ).length;
 
-    const recentRejections = providersWithMetrics.filter(p =>
-      p.kycStatus === "rejected" && p.createdAt >= thirtyDaysAgo
+    const recentRejections = providersWithMetrics.filter((p) =>
+      p.kycStatus === "rejected" && p.kycSubmittedAt && p.kycSubmittedAt >= thirtyDaysAgo,
     ).length;
 
     // Calculate average processing time
@@ -313,6 +462,30 @@ export async function GET(request: NextRequest) {
       },
       riskDistribution,
       documentStatus,
+      timelineSeries: (() => {
+        const mk = (rows: Array<{ weekStart: string; count: number }>) =>
+          new Map(rows.map((r) => [String(r.weekStart), Number(r.count ?? 0)]));
+
+        const submissionsByWeek = mk(submissionSeriesRows);
+        const verificationsByWeek = mk(verificationSeriesRows);
+        const rejectionsByWeek = mk(rejectionSeriesRows);
+
+        const points: Array<{ name: string; submissions: number; verifications: number; rejections: number }> = [];
+        const startWeek = new Date(seriesStartDate);
+        for (let i = 0; i <= weeksBack; i++) {
+          const d = new Date(startWeek);
+          d.setUTCDate(d.getUTCDate() + i * 7);
+          const key = d.toISOString().slice(0, 10);
+          points.push({
+            name: key,
+            submissions: submissionsByWeek.get(key) ?? 0,
+            verifications: verificationsByWeek.get(key) ?? 0,
+            rejections: rejectionsByWeek.get(key) ?? 0,
+          });
+        }
+
+        return { points };
+      })(),
       timelineMetrics: {
         kycSubmissions30d: recentSubmissions,
         kycVerifications30d: recentVerifications,

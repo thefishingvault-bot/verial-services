@@ -403,7 +403,7 @@ export default async function AdminProviderDetailPage({
                 )}
               </div>
 
-              <div>
+              <div id="kyc">
                 <div className="text-xs text-muted-foreground">KYC</div>
                 <div className="space-y-1">
                   <div className="capitalize">

@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { bookings, messages, providers, services } from "@/db/schema";
 import { eq, inArray, sql } from "drizzle-orm";
 import { differenceInYears } from "date-fns";
+import { isProviderCurrentlySuspended } from "@/lib/suspension";
 
 export type ProviderStats = {
   completionRate: number | null;
@@ -16,6 +17,7 @@ export type ProviderStats = {
 };
 
 export async function getProviderStats(providerId: string, client = db): Promise<ProviderStats | null> {
+  const now = new Date();
   const provider = await client.query.providers.findFirst({
     where: eq(providers.id, providerId),
     columns: {
@@ -26,12 +28,14 @@ export async function getProviderStats(providerId: string, client = db): Promise
       trustLevel: true,
       trustScore: true,
       isSuspended: true,
+      suspensionStartDate: true,
+      suspensionEndDate: true,
     },
   });
 
   if (!provider) return null;
 
-  if (provider.isSuspended) {
+  if (isProviderCurrentlySuspended(provider, now)) {
     const yearsActive = provider.createdAt
       ? Math.max(differenceInYears(new Date(), provider.createdAt), 0)
       : null;

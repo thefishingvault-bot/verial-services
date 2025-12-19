@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNull, ne, or, sql, lt, lte } from "drizzle-orm";
+import { isProviderCurrentlySuspended } from "@/lib/suspension";
 import type { SQL } from "drizzle-orm";
 
 import { bookings, messageThreads, messages, providers, services, users } from "@/db/schema";
@@ -66,7 +67,7 @@ export async function canMessage(userId: string, bookingId: string) {
     where: eq(bookings.id, bookingId),
     columns: { id: true, status: true, userId: true, providerId: true, scheduledDate: true, createdAt: true, updatedAt: true },
     with: {
-      provider: { columns: { userId: true, isSuspended: true, id: true } },
+      provider: { columns: { userId: true, isSuspended: true, suspensionStartDate: true, suspensionEndDate: true, id: true } },
     },
   });
 
@@ -78,7 +79,7 @@ export async function canMessage(userId: string, bookingId: string) {
     return { ok: false, reason: "Messaging unavailable for this booking" } as const;
   }
 
-  if (booking.provider.isSuspended) {
+  if (isProviderCurrentlySuspended(booking.provider)) {
     return { ok: false, reason: "Provider suspended" } as const;
   }
 

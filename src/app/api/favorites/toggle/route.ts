@@ -4,6 +4,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { providers, serviceFavorites, services } from "@/db/schema";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { isProviderCurrentlySuspended } from "@/lib/suspension";
 
 export const runtime = "nodejs";
 
@@ -37,12 +38,17 @@ export async function POST(req: Request) {
     columns: { id: true, providerId: true },
     with: {
       provider: {
-        columns: { status: true, isSuspended: true },
+        columns: { status: true, isSuspended: true, suspensionStartDate: true, suspensionEndDate: true },
       },
     },
   });
 
-  if (!service || !service.provider || service.provider.status !== "approved" || service.provider.isSuspended) {
+  if (
+    !service ||
+    !service.provider ||
+    service.provider.status !== "approved" ||
+    isProviderCurrentlySuspended(service.provider)
+  ) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
   }
 

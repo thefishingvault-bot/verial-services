@@ -8,6 +8,7 @@ import { sendEmail } from "@/lib/email";
 import { createNotificationOnce } from "@/lib/notifications";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { isProviderCurrentlySuspended } from "@/lib/suspension";
 
 export const runtime = "nodejs";
 
@@ -72,6 +73,9 @@ export async function POST(req: Request) {
             columns: {
               id: true,
               userId: true,
+              isSuspended: true,
+              suspensionStartDate: true,
+              suspensionEndDate: true,
             },
             with: {
               user: { columns: { email: true } },
@@ -81,6 +85,10 @@ export async function POST(req: Request) {
       });
       if (!service) {
         throw new Error("Service not found");
+      }
+
+      if (service.provider && isProviderCurrentlySuspended(service.provider)) {
+        throw new Error("PROVIDER_SUSPENDED");
       }
 
       // 3. Check that a user is not booking their own service
@@ -242,6 +250,10 @@ export async function POST(req: Request) {
 
     if (message.startsWith("Provider is")) {
       return new NextResponse(message, { status: 400 });
+    }
+
+    if (message === "PROVIDER_SUSPENDED") {
+      return new NextResponse("Provider is currently suspended", { status: 403 });
     }
 
     return new NextResponse("Internal Server Error", { status: 500 });

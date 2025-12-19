@@ -3,6 +3,8 @@ import { and, desc, eq } from "drizzle-orm";
 import { bookings, providers, reviews, services } from "@/db/schema";
 import { getUserFavoriteServices, type FavoriteService } from "@/lib/favorites";
 import { db } from "@/lib/db";
+import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
+  const now = new Date();
 import { canTransition, type BookingStatus } from "@/lib/booking-state";
 import { getDashboardRecommendations, type RecommendationCardData } from "@/lib/recommendations";
 import { getUnreadCount } from "@/lib/notifications";
@@ -165,7 +167,7 @@ async function fetchBookingsForUser(userId: string): Promise<BookingRow[]> {
       and(
         eq(bookings.userId, userId),
         eq(providers.status, "approved"),
-        eq(providers.isSuspended, false),
+          providerNotCurrentlySuspendedWhere(now),
       ),
     )
     .orderBy(desc(bookings.createdAt));

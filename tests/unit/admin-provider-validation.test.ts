@@ -24,7 +24,7 @@ describe("admin provider validation", () => {
 
   it("accepts valid verification payload", async () => {
     const { PATCH } = await import("@/app/api/admin/providers/[providerId]/verification/route");
-    const res = await PATCH(new NextRequest("http://localhost/api/admin/providers/550e8400-e29b-41d4-a716-446655440000/verification", { method: "PATCH", body: JSON.stringify({ isVerified: true }) }), { params: Promise.resolve({ providerId: "550e8400-e29b-41d4-a716-446655440000" }) } as any);
+    const res = await PATCH(new NextRequest("http://localhost/api/admin/providers/prov_1/verification", { method: "PATCH", body: JSON.stringify({ isVerified: true }) }), { params: Promise.resolve({ providerId: "prov_1" }) } as any);
     expect(res.status).toBe(200);
     expect(dbMock.update).toHaveBeenCalled();
   });
@@ -33,7 +33,7 @@ describe("admin provider validation", () => {
     const { POST } = await import("@/app/api/admin/providers/[providerId]/suspend/route");
     const form = new FormData();
     form.set("startDate", new Date().toISOString());
-    const res = await POST(new NextRequest("http://localhost/api/admin/providers/550e8400-e29b-41d4-a716-446655440000/suspend", { method: "POST", body: form as any }), { params: Promise.resolve({ providerId: "550e8400-e29b-41d4-a716-446655440000" }) } as any);
+    const res = await POST(new NextRequest("http://localhost/api/admin/providers/prov_1/suspend", { method: "POST", body: form as any }), { params: Promise.resolve({ providerId: "prov_1" }) } as any);
     expect(res.status).toBe(400);
   });
 

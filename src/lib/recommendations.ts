@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { bookings, providers, reviews, serviceFavorites, services } from "@/db/schema";
 import { db } from "@/lib/db";
 import { FAVORITE_BOOST, scoreService, type RankableService } from "@/lib/ranking";
+import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 
 type ServiceCategory = (typeof services.$inferSelect)["category"];
 
@@ -77,6 +78,7 @@ function buildReason(opts: {
 }
 
 export async function getRecommendedServicesForUser(userId: string, limit = 6): Promise<RecommendationCardData[]> {
+  const now = new Date();
   const { favoriteServiceIds, favoriteCategories, bookingCategories, bookedProviders } = await getEngagementSignals(userId);
 
   const preferredCategories = Array.from(new Set([...favoriteCategories, ...bookingCategories]));
@@ -110,7 +112,7 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
     .where(
       and(
         eq(providers.status, "approved"),
-        eq(providers.isSuspended, false),
+        providerNotCurrentlySuspendedWhere(now),
         preferredCategories.length > 0
           ? inArray(services.category, preferredCategories)
           : sql`1=1`,

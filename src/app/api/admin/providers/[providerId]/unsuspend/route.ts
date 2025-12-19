@@ -4,6 +4,7 @@ import { providers, providerSuspensions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProviderIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
+import { ensureUserExistsInDb } from "@/lib/user-sync";
 
 export async function POST(
   request: NextRequest,
@@ -13,6 +14,8 @@ export async function POST(
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
+
+    await ensureUserExistsInDb(userId!, "admin");
 
     const parsedParams = parseParams(ProviderIdSchema, await params);
     if (!parsedParams.ok) return invalidResponse(parsedParams.error);

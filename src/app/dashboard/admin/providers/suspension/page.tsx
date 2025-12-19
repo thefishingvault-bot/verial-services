@@ -3,6 +3,7 @@ import { providers, users, providerSuspensions } from "@/db/schema";
 import { eq, desc, and, isNotNull, lte } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import { requireAdmin } from "@/lib/admin-auth";
+import { ensureUserExistsInDb } from "@/lib/user-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -29,6 +30,8 @@ function toDateInputValue(value: Date) {
 export default async function AdminProviderSuspensionsPage() {
   const admin = await requireAdmin();
   if (!admin.isAdmin) redirect("/dashboard");
+
+  await ensureUserExistsInDb(admin.userId!, "admin");
 
   const now = new Date();
 

@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { serviceFavorites, services, providers, reviews } from "@/db/schema";
 import { scoreService, type RankableService } from "@/lib/ranking";
+import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 
 export type FavoriteSort = "recent" | "top";
 
@@ -34,6 +35,7 @@ export type FavoriteService = {
 };
 
 export async function getUserFavoriteServices(userId: string, sort: FavoriteSort = "recent", client = db) {
+  const now = new Date();
   const rows = await client
     .select({
       id: services.id,
@@ -68,7 +70,7 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       and(
         eq(serviceFavorites.userId, userId),
         eq(providers.status, "approved"),
-        eq(providers.isSuspended, false),
+        providerNotCurrentlySuspendedWhere(now),
       ),
     )
     .groupBy(

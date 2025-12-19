@@ -8,6 +8,7 @@ import { createNotification } from "@/lib/notifications";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
 import { stripe } from "@/lib/stripe";
 import { getDay } from "date-fns";
+import { isProviderCurrentlySuspended } from "@/lib/suspension";
 
 export const runtime = "nodejs";
 
@@ -48,6 +49,10 @@ export async function PATCH(req: Request) {
     });
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    if (action === "accept" && isProviderCurrentlySuspended(provider)) {
+      return new NextResponse("Provider is currently suspended", { status: 403 });
     }
 
     // Fetch the booking with context to validate ownership and transition

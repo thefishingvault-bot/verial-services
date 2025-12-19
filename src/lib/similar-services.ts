@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { providers, reviews, services, serviceFavorites } from "@/db/schema";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { sortServicesByScore } from "@/lib/ranking";
+import { isProviderCurrentlySuspended, providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 
 export type SimilarService = {
   id: string;
@@ -24,24 +25,25 @@ export type SimilarService = {
 };
 
 export async function getSimilarServices(serviceId: string, client = db): Promise<SimilarService[] | null> {
+  const now = new Date();
   const baseService = await client.query.services.findFirst({
     where: eq(services.id, serviceId),
     with: {
       provider: {
-        columns: { status: true, isSuspended: true },
+        columns: { status: true, isSuspended: true, suspensionStartDate: true, suspensionEndDate: true },
       },
     },
     columns: { id: true, category: true, region: true, suburb: true },
   });
 
   if (!baseService || !baseService.provider) return null;
-  if (baseService.provider.isSuspended || baseService.provider.status !== "approved") return [];
+  if (isProviderCurrentlySuspended(baseService.provider, now) || baseService.provider.status !== "approved") return [];
 
   const predicates = [
     eq(services.category, baseService.category),
     ne(services.id, baseService.id),
     eq(providers.status, "approved"),
-    eq(providers.isSuspended, false),
+    providerNotCurrentlySuspendedWhere(now),
   ];
 
   if (baseService.region) {

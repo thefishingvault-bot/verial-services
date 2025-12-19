@@ -21,6 +21,7 @@ import { getProviderStats } from "@/lib/provider-stats";
 import { getSimilarServices, type SimilarService } from "@/lib/similar-services";
 import { getTrustBadge } from "@/lib/utils";
 import { getTrustTier } from "@/lib/trust";
+import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 import {
   providers,
   providerTimeOffs,
@@ -181,7 +182,7 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
     .innerJoin(providers, eq(services.providerId, providers.id))
     .leftJoin(reviews, eq(reviews.serviceId, services.id))
     .leftJoin(serviceFavorites, eq(serviceFavorites.serviceId, services.id))
-    .where(and(eq(services.slug, slug), eq(providers.status, "approved"), eq(providers.isSuspended, false)))
+      .where(and(eq(services.slug, slug), eq(providers.status, "approved"), providerNotCurrentlySuspendedWhere(new Date())))
     .groupBy(services.id, providers.id)
     .limit(1);
 
