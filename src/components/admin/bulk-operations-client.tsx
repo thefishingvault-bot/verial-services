@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useToast } from '@/components/ui/use-toast';
 
 interface ProviderRow {
   id: string;
@@ -48,6 +49,8 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
   const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [acting, setActing] = useState(false);
+  const { toast } = useToast();
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -94,6 +97,8 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
   const handleBulkAction = async (action: string) => {
     if (selectedIds.length === 0) return;
 
+    setActing(true);
+
     try {
       const response = await fetch('/api/admin/bulk/action', {
         method: 'POST',
@@ -106,15 +111,32 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
       });
 
       if (response.ok) {
-        alert(`Successfully performed ${action} on ${selectedIds.length} ${operationType}`);
+        const data = await response.json().catch(() => null);
+        const affected = typeof data?.affected === 'number' ? data.affected : selectedIds.length;
+
+        toast({
+          title: 'Bulk action complete',
+          description: `${action} applied to ${affected} ${operationType}.`,
+        });
         setSelectedIds([]);
         fetchItems(); // Refresh the data
       } else {
-        alert('Failed to perform bulk action');
+        const data = await response.json().catch(() => null);
+        toast({
+          title: 'Bulk action failed',
+          description: data?.error ? String(data.error) : 'Failed to perform bulk action.',
+          variant: 'destructive',
+        });
       }
     } catch (error) {
       console.error('Error performing bulk action:', error);
-      alert('Error performing bulk action');
+      toast({
+        title: 'Bulk action failed',
+        description: 'Network error while performing bulk action.',
+        variant: 'destructive',
+      });
+    } finally {
+      setActing(false);
     }
   };
 
@@ -201,7 +223,7 @@ function BulkOperationsTable({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onBulkAction('suspend')}>
+                      <AlertDialogAction onClick={() => onBulkAction('suspend')} disabled={acting}>
                         Suspend
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -223,7 +245,7 @@ function BulkOperationsTable({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onBulkAction('unsuspend')}>
+                      <AlertDialogAction onClick={() => onBulkAction('unsuspend')} disabled={acting}>
                         Unsuspend
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -245,7 +267,7 @@ function BulkOperationsTable({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onBulkAction('reject')}>
+                      <AlertDialogAction onClick={() => onBulkAction('reject')} disabled={acting}>
                         Reject
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -264,12 +286,12 @@ function BulkOperationsTable({
                     <AlertDialogHeader>
                       <AlertDialogTitle>Cancel Bookings</AlertDialogTitle>
                       <AlertDialogDescription>
-                        This will cancel {selectedIds.length} bookings. Refunds will be processed automatically.
+                        This will cancel {selectedIds.length} bookings. Any refunds, if applicable, must be processed separately.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onBulkAction('cancel')}>
+                      <AlertDialogAction onClick={() => onBulkAction('cancel')} disabled={acting}>
                         Cancel
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -291,7 +313,7 @@ function BulkOperationsTable({
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => onBulkAction('complete')}>
+                      <AlertDialogAction onClick={() => onBulkAction('complete')} disabled={acting}>
                         Complete
                       </AlertDialogAction>
                     </AlertDialogFooter>
@@ -311,6 +333,7 @@ function BulkOperationsTable({
               <Checkbox
                 checked={selectedIds.length === items.length && items.length > 0}
                 onCheckedChange={onSelectAll}
+                  disabled={acting}
               />
             </TableHead>
             {operationType === 'providers' ? (
@@ -339,6 +362,7 @@ function BulkOperationsTable({
                 <Checkbox
                   checked={selectedIds.includes(item.id)}
                   onCheckedChange={(checked) => onSelectItem(item.id, checked as boolean)}
+                  disabled={acting}
                 />
               </TableCell>
               {operationType === 'providers' ? (

@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { providers, users, bookings, services, bookingStatusEnum } from '@/db/schema';
-import { eq, and, or, ilike, sql } from 'drizzle-orm';
+import { eq, and, or, ilike, sql, inArray } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 
@@ -82,12 +82,24 @@ export async function GET(req: Request) {
     } else if (type === 'bookings') {
       // Build where conditions for bookings
       const whereConditions = [];
-      const statusFilter = bookingStatusEnum.enumValues.find(
-        (value): value is (typeof bookingStatusEnum.enumValues)[number] => value === status,
-      );
+      const normalizedStatus = status === 'confirmed' ? 'accepted' : status;
+      const canceledStatuses: (typeof bookingStatusEnum.enumValues)[number][] = [
+        'canceled_customer',
+        'canceled_provider',
+      ];
 
-      if (status !== 'all' && statusFilter) {
-        whereConditions.push(eq(bookings.status, statusFilter));
+      if (normalizedStatus !== 'all') {
+        if (normalizedStatus === 'canceled') {
+          whereConditions.push(inArray(bookings.status, canceledStatuses));
+        } else {
+          const statusFilter = bookingStatusEnum.enumValues.find(
+            (value): value is (typeof bookingStatusEnum.enumValues)[number] => value === normalizedStatus,
+          );
+
+          if (statusFilter) {
+            whereConditions.push(eq(bookings.status, statusFilter));
+          }
+        }
       }
 
       if (q) {
@@ -107,7 +119,7 @@ export async function GET(req: Request) {
           id: bookings.id,
           status: bookings.status,
           scheduledDate: bookings.scheduledDate,
-          priceAtBooking: bookings.priceAtBooking,
+          totalAmount: bookings.priceAtBooking,
           providerName: providers.businessName,
           customerEmail: users.email,
           serviceTitle: services.title,

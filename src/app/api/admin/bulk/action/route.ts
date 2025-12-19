@@ -1,88 +1,182 @@
 import { db } from '@/lib/db';
-import { providers, bookings } from '@/db/schema';
-import { inArray } from 'drizzle-orm';
+import { bookings, bookingStatusEnum, providers, providerSuspensions } from '@/db/schema';
+import { and, eq, inArray } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
+import { z } from 'zod';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
+
+const BulkActionSchema = z
+  .object({
+    type: z.enum(['providers', 'bookings']),
+    action: z.string().min(1),
+    ids: z.array(z.string().min(1)).min(1).max(200),
+  })
+  .transform((data) => ({
+    ...data,
+    ids: Array.from(new Set(data.ids)),
+  }));
+
+function makeProviderSuspensionId() {
+  return `psusp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
+}
 
 export async function POST(req: Request) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const { type, action, ids } = await req.json();
+    await ensureUserExistsInDb(admin.userId!, 'admin');
 
-    if (!type || !action || !Array.isArray(ids) || ids.length === 0) {
-      return new NextResponse('Missing required fields', { status: 400 });
+    const raw = await req.json().catch(() => null);
+    const parsed = BulkActionSchema.safeParse(raw);
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid request body', details: parsed.error.flatten() },
+        { status: 400 },
+      );
     }
+
+    const { type, action, ids } = parsed.data;
 
     if (type === 'providers') {
       if (action === 'suspend') {
-        await db.update(providers)
-          .set({
-            isSuspended: true,
-            suspensionReason: 'Bulk suspension by admin',
-            suspensionStartDate: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(inArray(providers.id, ids));
+        const now = new Date();
+        const updated = await db.transaction(async (tx) => {
+          const updatedProviders = await tx
+            .update(providers)
+            .set({
+              isSuspended: true,
+              suspensionReason: 'Bulk suspension by admin',
+              suspensionStartDate: now,
+              suspensionEndDate: null,
+              updatedAt: now,
+            })
+            .where(and(inArray(providers.id, ids), eq(providers.isSuspended, false)))
+            .returning({ id: providers.id });
 
-        console.log(`[API_ADMIN_BULK] Suspended ${ids.length} providers`);
-        return NextResponse.json({ success: true, affected: ids.length });
+          if (updatedProviders.length > 0) {
+            await tx.insert(providerSuspensions).values(
+              updatedProviders.map(({ id }) => ({
+                id: makeProviderSuspensionId(),
+                providerId: id,
+                action: 'suspend',
+                reason: 'Bulk suspension by admin',
+                startDate: now,
+                endDate: null,
+                performedBy: admin.userId!,
+              })),
+            );
+          }
+
+          return updatedProviders.length;
+        });
+
+        console.log(`[API_ADMIN_BULK] Suspended ${updated} providers`);
+        return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
 
       if (action === 'unsuspend') {
-        await db.update(providers)
-          .set({
-            isSuspended: false,
-            suspensionReason: null,
-            suspensionStartDate: null,
-            suspensionEndDate: null,
-            updatedAt: new Date(),
-          })
-          .where(inArray(providers.id, ids));
+        const now = new Date();
+        const updated = await db.transaction(async (tx) => {
+          const prior = await tx
+            .select({
+              id: providers.id,
+              reason: providers.suspensionReason,
+              startDate: providers.suspensionStartDate,
+              endDate: providers.suspensionEndDate,
+            })
+            .from(providers)
+            .where(and(inArray(providers.id, ids), eq(providers.isSuspended, true)));
 
-        console.log(`[API_ADMIN_BULK] Unsuspended ${ids.length} providers`);
-        return NextResponse.json({ success: true, affected: ids.length });
+          if (prior.length === 0) return 0;
+
+          await tx
+            .update(providers)
+            .set({
+              isSuspended: false,
+              suspensionReason: null,
+              suspensionStartDate: null,
+              suspensionEndDate: null,
+              updatedAt: now,
+            })
+            .where(inArray(
+              providers.id,
+              prior.map((p) => p.id),
+            ));
+
+          await tx.insert(providerSuspensions).values(
+            prior.map((p) => ({
+              id: makeProviderSuspensionId(),
+              providerId: p.id,
+              action: 'unsuspend',
+              performedBy: admin.userId!,
+              reason: p.reason,
+              startDate: p.startDate,
+              endDate: p.endDate,
+            })),
+          );
+
+          return prior.length;
+        });
+
+        console.log(`[API_ADMIN_BULK] Unsuspended ${updated} providers`);
+        return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
 
       if (action === 'reject') {
-        await db.update(providers)
+        const now = new Date();
+        const updated = await db
+          .update(providers)
           .set({
             status: 'rejected',
-            updatedAt: new Date(),
+            updatedAt: now,
           })
-          .where(inArray(providers.id, ids));
+          .where(and(inArray(providers.id, ids), eq(providers.status, 'pending')))
+          .returning({ id: providers.id });
 
-        console.log(`[API_ADMIN_BULK] Rejected ${ids.length} provider applications`);
-        return NextResponse.json({ success: true, affected: ids.length });
+        console.log(`[API_ADMIN_BULK] Rejected ${updated.length} provider applications`);
+        return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
     } else if (type === 'bookings') {
       if (action === 'cancel') {
-        await db.update(bookings)
+        const now = new Date();
+        const cancellableStatuses: (typeof bookingStatusEnum.enumValues)[number][] = [
+          'pending',
+          'accepted',
+          'paid',
+        ];
+
+        const updated = await db
+          .update(bookings)
           .set({
             status: 'canceled_provider',
-            updatedAt: new Date(),
+            updatedAt: now,
           })
-          .where(inArray(bookings.id, ids));
+          .where(and(inArray(bookings.id, ids), inArray(bookings.status, cancellableStatuses)))
+          .returning({ id: bookings.id });
 
-        console.log(`[API_ADMIN_BULK] Canceled ${ids.length} bookings`);
-        return NextResponse.json({ success: true, affected: ids.length });
+        console.log(`[API_ADMIN_BULK] Canceled ${updated.length} bookings`);
+        return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
 
       if (action === 'complete') {
-        await db.update(bookings)
+        const now = new Date();
+        const updated = await db
+          .update(bookings)
           .set({
             status: 'completed',
-            updatedAt: new Date(),
+            updatedAt: now,
           })
-          .where(inArray(bookings.id, ids));
+          .where(and(inArray(bookings.id, ids), eq(bookings.status, 'paid')))
+          .returning({ id: bookings.id });
 
-        console.log(`[API_ADMIN_BULK] Marked ${ids.length} bookings as completed`);
-        return NextResponse.json({ success: true, affected: ids.length });
+        console.log(`[API_ADMIN_BULK] Marked ${updated.length} bookings as completed`);
+        return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
     }
 
-    return new NextResponse('Invalid action or type', { status: 400 });
+    return NextResponse.json({ error: 'Invalid action or type' }, { status: 400 });
   } catch (error) {
     console.error('[API_ADMIN_BULK_ACTION]', error);
     return new NextResponse('Internal Server Error', { status: 500 });

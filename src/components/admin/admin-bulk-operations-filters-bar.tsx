@@ -14,11 +14,13 @@ interface AdminBulkOperationsFiltersBarProps {
     region?: string;
     q?: string;
   };
+  regionOptions?: string[];
 }
 
 export function AdminBulkOperationsFiltersBar({
   operationType,
   searchParams,
+  regionOptions,
 }: AdminBulkOperationsFiltersBarProps) {
   const router = useRouter();
   const currentParams = useSearchParams();
@@ -79,7 +81,7 @@ export function AdminBulkOperationsFiltersBar({
                 ) : (
                   <>
                     <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="accepted">Confirmed</SelectItem>
                     <SelectItem value="paid">Paid</SelectItem>
                     <SelectItem value="completed">Completed</SelectItem>
                     <SelectItem value="canceled">Canceled</SelectItem>
@@ -98,51 +100,11 @@ export function AdminBulkOperationsFiltersBar({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Regions</SelectItem>
-                  <SelectItem value="Auckland">Auckland</SelectItem>
-                  <SelectItem value="Wellington">Wellington</SelectItem>
-                  <SelectItem value="Christchurch">Christchurch</SelectItem>
-                  <SelectItem value="Dunedin">Dunedin</SelectItem>
-                  <SelectItem value="Hamilton">Hamilton</SelectItem>
-                  <SelectItem value="Tauranga">Tauranga</SelectItem>
-                  <SelectItem value="Napier">Napier</SelectItem>
-                  <SelectItem value="Palmerston North">Palmerston North</SelectItem>
-                  <SelectItem value="Nelson">Nelson</SelectItem>
-                  <SelectItem value="Rotorua">Rotorua</SelectItem>
-                  <SelectItem value="New Plymouth">New Plymouth</SelectItem>
-                  <SelectItem value="Whangarei">Whangarei</SelectItem>
-                  <SelectItem value="Invercargill">Invercargill</SelectItem>
-                  <SelectItem value="Whanganui">Whanganui</SelectItem>
-                  <SelectItem value="Gisborne">Gisborne</SelectItem>
-                  <SelectItem value="Timaru">Timaru</SelectItem>
-                  <SelectItem value="Blenheim">Blenheim</SelectItem>
-                  <SelectItem value="Pukekohe">Pukekohe</SelectItem>
-                  <SelectItem value="Taupo">Taupo</SelectItem>
-                  <SelectItem value="Masterton">Masterton</SelectItem>
-                  <SelectItem value="Levin">Levin</SelectItem>
-                  <SelectItem value="Ashburton">Ashburton</SelectItem>
-                  <SelectItem value="Whakatane">Whakatane</SelectItem>
-                  <SelectItem value="Matamata">Matamata</SelectItem>
-                  <SelectItem value="Waiuku">Waiuku</SelectItem>
-                  <SelectItem value="Te Awamutu">Te Awamutu</SelectItem>
-                  <SelectItem value="Huntly">Huntly</SelectItem>
-                  <SelectItem value="Feilding">Feilding</SelectItem>
-                  <SelectItem value="Dargaville">Dargaville</SelectItem>
-                  <SelectItem value="Kerikeri">Kerikeri</SelectItem>
-                  <SelectItem value="Kaitaia">Kaitaia</SelectItem>
-                  <SelectItem value="Te Anau">Te Anau</SelectItem>
-                  <SelectItem value="Wanaka">Wanaka</SelectItem>
-                  <SelectItem value="Franz Josef">Franz Josef</SelectItem>
-                  <SelectItem value="Queenstown">Queenstown</SelectItem>
-                  <SelectItem value="Arrowtown">Arrowtown</SelectItem>
-                  <SelectItem value="Cromwell">Cromwell</SelectItem>
-                  <SelectItem value="Alexandra">Alexandra</SelectItem>
-                  <SelectItem value="Balclutha">Balclutha</SelectItem>
-                  <SelectItem value="Milton">Milton</SelectItem>
-                  <SelectItem value="Lawrence">Lawrence</SelectItem>
-                  <SelectItem value="Ranfurly">Ranfurly</SelectItem>
-                  <SelectItem value="Roxburgh">Roxburgh</SelectItem>
-                  <SelectItem value="Tapanui">Tapanui</SelectItem>
-                  <SelectItem value="Wyndham">Wyndham</SelectItem>
+                  {(regionOptions ?? []).map((r) => (
+                    <SelectItem key={r} value={r}>
+                      {r}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
