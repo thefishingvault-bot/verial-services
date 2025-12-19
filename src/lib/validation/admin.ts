@@ -51,6 +51,14 @@ export const ProviderSuspensionSchema = z.object({
     .union([z.coerce.date(), z.string().length(0), z.null()])
     .optional()
     .transform((v) => (v instanceof Date ? v : null)),
+}).superRefine((data, ctx) => {
+  if (data.endDate && data.endDate < data.startDate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["endDate"],
+      message: "End date must be on or after the start date",
+    });
+  }
 });
 
 export const DisputeResolveSchema = z.object({

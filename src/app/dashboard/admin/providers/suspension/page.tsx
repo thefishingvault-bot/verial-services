@@ -1,19 +1,80 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { db } from "@/lib/db";
 import { providers, users, providerSuspensions } from "@/db/schema";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, and, isNotNull, lte } from "drizzle-orm";
 import { redirect } from "next/navigation";
+import { requireAdmin } from "@/lib/admin-auth";
 
-// TODO: Replace with actual role check utility if needed
-type ClerkUser = { publicMetadata?: { role?: string } };
-function isAdmin(user: ClerkUser | null | undefined): boolean {
-  return user?.publicMetadata?.role === "admin";
+export const dynamic = "force-dynamic";
+
+const nzDate = new Intl.DateTimeFormat("en-NZ", {
+  timeZone: "Pacific/Auckland",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function formatDate(value: Date | null | undefined, fallback: string) {
+  if (!value) return fallback;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return fallback;
+  return nzDate.format(d);
+}
+
+function toDateInputValue(value: Date) {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return new Date().toISOString().split("T")[0];
+  return d.toISOString().split("T")[0];
 }
 
 export default async function AdminProviderSuspensionsPage() {
-  const user = await currentUser();
-  if (!isAdmin(user)) {
-    redirect("/dashboard");
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
+
+  const now = new Date();
+
+  // Auto-clear expired suspensions so the rest of the app stays consistent.
+  // This keeps providers from being stuck in limited mode after endDate passes.
+  const expiredSuspensions = await db
+    .select({
+      id: providers.id,
+      suspensionReason: providers.suspensionReason,
+      suspensionStartDate: providers.suspensionStartDate,
+      suspensionEndDate: providers.suspensionEndDate,
+    })
+    .from(providers)
+    .where(and(
+      eq(providers.isSuspended, true),
+      isNotNull(providers.suspensionEndDate),
+      lte(providers.suspensionEndDate, now),
+    ));
+
+  if (expiredSuspensions.length > 0) {
+    await db
+      .update(providers)
+      .set({
+        isSuspended: false,
+        suspensionReason: null,
+        suspensionStartDate: null,
+        suspensionEndDate: null,
+        updatedAt: now,
+      })
+      .where(and(
+        eq(providers.isSuspended, true),
+        isNotNull(providers.suspensionEndDate),
+        lte(providers.suspensionEndDate, now),
+      ));
+
+    await db.insert(providerSuspensions).values(
+      expiredSuspensions.map((p) => ({
+        id: `psusp_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`,
+        providerId: p.id,
+        action: "unsuspend",
+        reason: p.suspensionReason ?? "Auto-unsuspended (end date reached)",
+        startDate: p.suspensionStartDate,
+        endDate: p.suspensionEndDate,
+        performedBy: admin.userId!,
+      }))
+    );
   }
 
   // Fetch all providers with suspension status
@@ -37,6 +98,24 @@ export default async function AdminProviderSuspensionsPage() {
     .innerJoin(users, eq(providers.userId, users.id))
     .orderBy(desc(providers.createdAt));
 
+  const providersWithDerivedSuspension = allProviders.map((p) => {
+    const start = p.suspensionStartDate ? new Date(p.suspensionStartDate) : null;
+    const end = p.suspensionEndDate ? new Date(p.suspensionEndDate) : null;
+    const startsInFuture = !!(start && start.getTime() > now.getTime());
+    const expired = !!(end && end.getTime() <= now.getTime());
+    const active = p.isSuspended && !expired && !startsInFuture;
+    const scheduled = p.isSuspended && startsInFuture;
+
+    return {
+      ...p,
+      _suspension: {
+        active,
+        scheduled,
+        expired,
+      },
+    };
+  });
+
   // Fetch suspension audit log
   const suspensionLog = await db
     .select({
@@ -58,7 +137,7 @@ export default async function AdminProviderSuspensionsPage() {
     })
     .from(providerSuspensions)
     .innerJoin(providers, eq(providerSuspensions.providerId, providers.id))
-    .innerJoin(users, eq(providerSuspensions.performedBy, users.id))
+    .leftJoin(users, eq(providerSuspensions.performedBy, users.id))
     .orderBy(desc(providerSuspensions.createdAt))
     .limit(50);
 
@@ -105,8 +184,8 @@ export default async function AdminProviderSuspensionsPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {allProviders
-                .filter(provider => provider.isSuspended)
+              {providersWithDerivedSuspension
+                .filter(provider => provider._suspension.active || provider._suspension.scheduled)
                 .map((provider) => (
                   <tr key={provider.id}>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -114,17 +193,19 @@ export default async function AdminProviderSuspensionsPage() {
                         <div className="text-sm font-medium text-gray-900">
                           {provider.businessName}
                         </div>
-                        <div className="text-sm text-gray-500">@{provider.handle}</div>
+                        <div className="text-sm text-gray-500">
+                          @{provider.handle}{provider.user?.email ? ` · ${provider.user.email}` : ""}
+                        </div>
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {provider.suspensionReason || "No reason provided"}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {provider.suspensionStartDate?.toLocaleDateString() || "N/A"}
+                      {formatDate(provider.suspensionStartDate, "N/A")}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {provider.suspensionEndDate?.toLocaleDateString() || "Indefinite"}
+                      {formatDate(provider.suspensionEndDate, "Indefinite")}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                       <form action={`/api/admin/providers/${provider.id}/unsuspend`} method="POST" className="inline">
@@ -144,7 +225,7 @@ export default async function AdminProviderSuspensionsPage() {
                     </td>
                   </tr>
                 ))}
-              {allProviders.filter(provider => provider.isSuspended).length === 0 && (
+              {providersWithDerivedSuspension.filter(provider => provider._suspension.active || provider._suspension.scheduled).length === 0 && (
                 <tr>
                   <td colSpan={5} className="px-6 py-4 text-center text-sm text-gray-500">
                     No providers are currently suspended.
@@ -185,14 +266,16 @@ export default async function AdminProviderSuspensionsPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {allProviders.map((provider) => (
+              {providersWithDerivedSuspension.map((provider) => (
                 <tr key={provider.id}>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
                         {provider.businessName}
                       </div>
-                      <div className="text-sm text-gray-500">@{provider.handle}</div>
+                      <div className="text-sm text-gray-500">
+                        @{provider.handle}{provider.user?.email ? ` · ${provider.user.email}` : ""}
+                      </div>
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
@@ -205,38 +288,59 @@ export default async function AdminProviderSuspensionsPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                      provider.isSuspended ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
-                    }`}>
-                      {provider.isSuspended ? "Suspended" : "Active"}
-                    </span>
+                    {!provider.isSuspended ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        Active
+                      </span>
+                    ) : provider._suspension.scheduled ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800">
+                        Scheduled
+                      </span>
+                    ) : provider._suspension.active ? (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+                        Suspended
+                      </span>
+                    ) : (
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                        Expired
+                      </span>
+                    )}
+                    {provider.isSuspended && (
+                      <div className="mt-1 text-xs text-gray-500">
+                        {provider.suspensionReason ? provider.suspensionReason : "No reason"}
+                        {provider.suspensionStartDate ? ` · Start: ${formatDate(provider.suspensionStartDate, "N/A")}` : ""}
+                        {provider.suspensionEndDate ? ` · End: ${formatDate(provider.suspensionEndDate, "N/A")}` : ""}
+                      </div>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                     {!provider.isSuspended ? (
-                      <form action={`/api/admin/providers/${provider.id}/suspend`} method="POST" className="inline">
+                      <form action={`/api/admin/providers/${provider.id}/suspend`} method="POST" className="flex flex-wrap items-center gap-2">
                         <input
                           type="text"
                           name="reason"
-                          placeholder="Suspension reason"
+                          placeholder="Reason"
                           required
-                          className="mr-2 px-2 py-1 border border-gray-300 rounded text-sm"
+                          className="min-w-[200px] flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                         />
-                        <input
-                          type="date"
-                          name="startDate"
-                          required
-                          defaultValue={new Date().toISOString().split('T')[0]}
-                          className="mr-2 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
-                        <input
-                          type="date"
-                          name="endDate"
-                          placeholder="Optional end date"
-                          className="mr-2 px-2 py-1 border border-gray-300 rounded text-sm"
-                        />
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="date"
+                            name="startDate"
+                            required
+                            defaultValue={toDateInputValue(now)}
+                            className="px-2 py-1 border border-gray-300 rounded text-sm"
+                          />
+                          <input
+                            type="date"
+                            name="endDate"
+                            className="px-2 py-1 border border-gray-300 rounded text-sm"
+                            aria-label="End date (optional)"
+                          />
+                        </div>
                         <button
                           type="submit"
-                          className="text-red-600 hover:text-red-900"
+                          className="text-red-600 hover:text-red-900 whitespace-nowrap"
                         >
                           Suspend
                         </button>
@@ -294,11 +398,11 @@ export default async function AdminProviderSuspensionsPage() {
                         {log.reason && ` for: ${log.reason}`}
                       </p>
                       <p className="text-xs text-gray-500">
-                        By {log.performer.firstName} {log.performer.lastName} ({log.performer.email}) on {log.createdAt.toLocaleDateString()}
+                        By {log.performer?.firstName ?? "Unknown"} {log.performer?.lastName ?? ""} ({log.performer?.email ?? "unknown"}) on {formatDate(log.createdAt, "N/A")}
                       </p>
                       {(log.startDate || log.endDate) && (
                         <p className="text-xs text-gray-500">
-                          Period: {log.startDate?.toLocaleDateString() || "N/A"} - {log.endDate?.toLocaleDateString() || "Indefinite"}
+                          Period: {formatDate(log.startDate, "N/A")} - {formatDate(log.endDate, "Indefinite")}
                         </p>
                       )}
                     </div>

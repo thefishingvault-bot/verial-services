@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { providers, providerSuspensions } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
+import { ProviderIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
 
 export async function POST(
   request: NextRequest,
@@ -13,7 +14,9 @@ export async function POST(
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
 
-    const { providerId } = await params;
+    const parsedParams = parseParams(ProviderIdSchema, await params);
+    if (!parsedParams.ok) return invalidResponse(parsedParams.error);
+    const { providerId } = parsedParams.data;
 
     // Check if provider exists and is suspended
     const provider = await db
@@ -29,6 +32,12 @@ export async function POST(
     if (!provider[0].isSuspended) {
       return NextResponse.json({ error: "Provider is not suspended" }, { status: 400 });
     }
+
+    const priorSuspension = {
+      reason: provider[0].suspensionReason,
+      startDate: provider[0].suspensionStartDate,
+      endDate: provider[0].suspensionEndDate,
+    };
 
     // Update provider to unsuspended
     await db
@@ -48,6 +57,9 @@ export async function POST(
       providerId,
       action: "unsuspend",
       performedBy: userId!,
+      reason: priorSuspension.reason,
+      startDate: priorSuspension.startDate,
+      endDate: priorSuspension.endDate,
     });
 
     // Redirect back to the suspensions page
