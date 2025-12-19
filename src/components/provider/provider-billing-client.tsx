@@ -44,12 +44,24 @@ export default function ProviderBillingClient() {
     try {
       setLoading(true);
       const res = await fetch("/api/provider/subscription/status", { cache: "no-store" });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) {
+        const contentType = res.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          const json = await res.json().catch(() => ({}));
+          const message = (json as any)?.error || (json as any)?.message || "Failed to load billing status";
+          throw new Error(message);
+        }
+        throw new Error(await res.text());
+      }
       const json = (await res.json()) as SubscriptionStatusResponse;
       setData(json);
     } catch (err) {
       console.error("[PROVIDER_BILLING_STATUS]", err);
-      toast({ title: "Error", description: "Failed to load billing status", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to load billing status",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
