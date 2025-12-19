@@ -1,6 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings, providerEarnings } from "@/db/schema";
+import { bookings, providerEarnings, providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -10,6 +10,7 @@ import { createNotification, createNotificationOnce } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
+import { planFromStripePriceId } from "@/lib/provider-subscription";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
@@ -112,6 +113,70 @@ export async function POST(req: Request) {
 
   // Handle the event
   switch (event.type) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+
+      // Only handle subscription checkouts here (booking payments are PaymentIntents)
+      if (session.mode !== "subscription") break;
+
+      const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+      const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
+      if (!customerId || !subscriptionId) break;
+
+      try {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const priceId = subscription.items.data?.[0]?.price?.id ?? null;
+        const plan = planFromStripePriceId(priceId) ?? "starter";
+
+        await db
+          .update(providers)
+          .set({
+            plan,
+            stripeCustomerId: customerId,
+            stripeSubscriptionId: subscription.id,
+            stripeSubscriptionStatus: subscription.status,
+            stripeSubscriptionPriceId: priceId,
+            stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+            stripeSubscriptionUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(providers.stripeCustomerId, customerId));
+      } catch (err) {
+        console.warn("[API_STRIPE_WEBHOOK] Failed to sync checkout subscription", err);
+      }
+
+      break;
+    }
+
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = event.data.object as Stripe.Subscription;
+      const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
+
+      const priceId = subscription.items.data?.[0]?.price?.id ?? null;
+      const inferredPlan = planFromStripePriceId(priceId);
+      const plan = event.type === "customer.subscription.deleted" ? "starter" : (inferredPlan ?? "starter");
+
+      await db
+        .update(providers)
+        .set({
+          plan,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscription.id,
+          stripeSubscriptionStatus: subscription.status,
+          stripeSubscriptionPriceId: priceId,
+          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+          stripeSubscriptionUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.stripeCustomerId, customerId));
+
+      break;
+    }
+
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
       const { bookingId, userId } = paymentIntent.metadata;
@@ -157,9 +222,15 @@ export async function POST(req: Request) {
 
         // Compute earnings deterministically using stored price and GST settings
         const chargesGst = existing.service?.chargesGst ?? existing.provider?.chargesGst ?? true;
+        const platformFeeBps = Number.parseInt(
+          paymentIntent.metadata?.platform_fee_bps || process.env.PLATFORM_FEE_BPS || "1000",
+          10,
+        );
+
         const breakdown = calculateEarnings({
           amountInCents: existing.priceAtBooking,
           chargesGst,
+          platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
         });
 
         const piWithCharges = paymentIntent as Stripe.PaymentIntent & {

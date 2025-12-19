@@ -1,6 +1,10 @@
 import { stripe } from "@/lib/stripe";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { providers } from "@/db/schema";
+import { eq } from "drizzle-orm";
+import { getPlatformFeeBpsForPlan } from "@/lib/provider-subscription";
 
 // This route is for creating a Payment Intent for a *platform* charge.
 // This will be adapted later for Connect (destination charges).
@@ -23,8 +27,13 @@ export async function POST(req: Request) {
       return new NextResponse("Amount must be at least $1.00 NZD", { status: 400 });
     }
 
-    // As per spec: 10% platform fee
-    const feeBps = process.env.PLATFORM_FEE_BPS ? parseInt(process.env.PLATFORM_FEE_BPS) : 1000;
+    const provider = await db.query.providers.findFirst({
+      where: eq(providers.stripeConnectId, providerStripeId),
+      columns: { plan: true },
+    });
+
+    // Platform fee can be reduced/removed for subscribed providers
+    const feeBps = getPlatformFeeBpsForPlan((provider?.plan as any) ?? "starter");
     const applicationFeeAmount = Math.ceil(amount * (feeBps / 10000));
 
     // Create the Payment Intent

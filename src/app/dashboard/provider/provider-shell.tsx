@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { cn } from "@/lib/utils";
 import { UserButton } from "@clerk/nextjs";
-import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare } from "lucide-react";
+import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare, CreditCard } from "lucide-react";
 
 const providerNav = [
   { href: "/dashboard/provider", label: "Overview", icon: Home },
@@ -13,6 +13,7 @@ const providerNav = [
   { href: "/dashboard/provider/calendar", label: "Calendar", icon: Briefcase },
   { href: "/dashboard/provider/services", label: "Services", icon: Briefcase },
   { href: "/dashboard/provider/earnings", label: "Earnings", icon: BarChart3 },
+  { href: "/dashboard/provider/billing", label: "Billing", icon: CreditCard },
   { href: "/dashboard/provider/messages", label: "Messages", icon: MessageSquare },
   { href: "/dashboard/provider/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/provider/profile", label: "Provider Profile", icon: User },

@@ -62,6 +62,11 @@ Create a `.env.local` at the project root and populate the required variables.
 - `STRIPE_WEBHOOK_SECRET` – Core payments webhook
 - `STRIPE_CONNECT_WEBHOOK_SECRET` – Connect account webhook
 
+**Stripe Billing (Provider subscriptions)**
+
+- `STRIPE_PRICE_PRO_MONTHLY` – Stripe Price ID for the Pro monthly plan
+- `STRIPE_PRICE_ELITE_MONTHLY` – Stripe Price ID for the Elite monthly plan
+
 **Cloudflare R2 (file uploads)**
 
 - `R2_ACCESS_KEY_ID`

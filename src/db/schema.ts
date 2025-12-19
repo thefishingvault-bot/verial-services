@@ -27,6 +27,8 @@ export const kycStatusEnum = pgEnum("kyc_status", [
   "rejected"
 ]);
 
+export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elite"]);
+
 // --- TABLES ---
 
 /**
@@ -75,6 +77,16 @@ export const providers = pgTable("providers", {
   payoutsEnabled: boolean("payouts_enabled").default(false).notNull(),
   chargesGst: boolean("charges_gst").default(true).notNull(), // Default to inclusive
   gstNumber: varchar("gst_number", { length: 50 }),
+
+  // Provider subscriptions (Stripe Billing)
+  plan: providerPlanEnum("plan").default("starter").notNull(),
+  stripeCustomerId: varchar("stripe_customer_id", { length: 255 }).unique(),
+  stripeSubscriptionId: varchar("stripe_subscription_id", { length: 255 }).unique(),
+  stripeSubscriptionStatus: varchar("stripe_subscription_status", { length: 50 }),
+  stripeSubscriptionPriceId: varchar("stripe_subscription_price_id", { length: 255 }),
+  stripeCurrentPeriodEnd: timestamp("stripe_current_period_end"),
+  stripeCancelAtPeriodEnd: boolean("stripe_cancel_at_period_end").default(false).notNull(),
+  stripeSubscriptionUpdatedAt: timestamp("stripe_subscription_updated_at").defaultNow().notNull(),
 
   // KYC / Identity
   kycStatus: kycStatusEnum("kyc_status").default("not_started").notNull(),
