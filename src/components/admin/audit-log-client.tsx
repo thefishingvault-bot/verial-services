@@ -51,7 +51,11 @@ const AUDIT_ACTIONS = [
   { value: 'all', label: 'All Actions' },
   { value: 'PROVIDER_SUSPEND', label: 'Provider Suspension' },
   { value: 'PROVIDER_UNSUSPEND', label: 'Provider Unsuspension' },
+  { value: 'PROVIDER_COMMUNICATION_SEND', label: 'Provider Communication (Send)' },
+  { value: 'PROVIDER_COMMUNICATION_SCHEDULE', label: 'Provider Communication (Schedule)' },
   { value: 'BROADCAST_SEND', label: 'Broadcast Message' },
+  { value: 'BOOKING_CANCEL', label: 'Booking Canceled' },
+  { value: 'BOOKING_COMPLETE', label: 'Booking Completed' },
   { value: 'TEMPLATE_CREATE', label: 'Template Created' },
   { value: 'TEMPLATE_UPDATE', label: 'Template Updated' },
   { value: 'TEMPLATE_DELETE', label: 'Template Deleted' },
@@ -62,6 +66,7 @@ const AUDIT_ACTIONS = [
 const AUDIT_RESOURCES = [
   { value: 'all', label: 'All Resources' },
   { value: 'provider', label: 'Providers' },
+  { value: 'booking', label: 'Bookings' },
   { value: 'user', label: 'Users' },
   { value: 'notification', label: 'Notifications' },
   { value: 'template', label: 'Templates' },
@@ -145,7 +150,7 @@ export default function AuditLogClient() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="logs" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-2 md:inline-grid md:w-fit">
           <TabsTrigger value="logs">Audit Logs</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
@@ -322,7 +327,7 @@ export default function AuditLogClient() {
                   {(!data?.logs || data.logs.length === 0) && (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                        No audit events found matching the current filters
+                        No audit events found. Try widening filters, then perform an admin action (e.g., create a template, send a broadcast).
                       </TableCell>
                     </TableRow>
                   )}

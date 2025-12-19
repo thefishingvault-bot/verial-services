@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Edit, Trash2, Search, FileText } from 'lucide-react';
+import { Plus, Edit, Trash2, FileText } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
 interface Template {
@@ -253,7 +253,7 @@ export default function TemplateManagerClient() {
   return (
     <div className="space-y-6">
       <Tabs defaultValue="templates" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-2 md:inline-grid md:w-fit">
           <TabsTrigger value="templates">Templates</TabsTrigger>
           <TabsTrigger value="analytics">Analytics</TabsTrigger>
         </TabsList>
@@ -261,13 +261,11 @@ export default function TemplateManagerClient() {
         <TabsContent value="templates" className="space-y-6">
           <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
             <div className="flex flex-col sm:flex-row gap-4 flex-1">
-              <div className="relative flex-1 max-w-sm">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+              <div className="flex-1 max-w-md">
                 <Input
                   placeholder="Search templates..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-9"
                 />
               </div>
               <Select value={selectedCategory} onValueChange={setSelectedCategory}>
@@ -384,9 +382,19 @@ export default function TemplateManagerClient() {
               </Card>
             ))}
             {(!data?.templates || data.templates.length === 0) && (
-              <div className="text-center py-8 text-muted-foreground">
-                No templates found. Create your first template to get started.
-              </div>
+              <Card>
+                <CardContent className="py-10">
+                  <div className="text-center space-y-3">
+                    <div className="text-muted-foreground">
+                      No templates found. Create your first template to get started.
+                    </div>
+                    <Button onClick={() => setIsCreateDialogOpen(true)}>
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Template
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
             )}
           </div>
         </TabsContent>
