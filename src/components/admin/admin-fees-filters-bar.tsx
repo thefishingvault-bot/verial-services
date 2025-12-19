@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Filter, Search, X } from 'lucide-react';
+import { Calendar, Filter, X } from 'lucide-react';
 
 export function AdminFeesFiltersBar() {
   const router = useRouter();
@@ -143,11 +143,9 @@ export function AdminFeesFiltersBar() {
         {/* Provider Filter */}
         <div className="space-y-2">
           <div className="text-sm font-medium text-muted-foreground">Provider Filter</div>
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <div className="max-w-sm">
             <Input
               placeholder="Search providers..."
-              className="pl-9"
               defaultValue={providerFilter}
               onBlur={(event) => {
                 updateParams({ provider: event.target.value || null });

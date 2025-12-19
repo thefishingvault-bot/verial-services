@@ -1,4 +1,3 @@
-import { currentUser } from '@clerk/nextjs/server';
 import { redirect } from 'next/navigation';
 import { Suspense } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -6,7 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { AdminFeesFiltersBar } from '@/components/admin/admin-fees-filters-bar';
-import { requireAdmin } from '@/lib/admin';
+import { requireAdmin } from '@/lib/admin-auth';
 import { AdminFeesSearchSchema, parseSearchParams } from '@/lib/validation/admin-loader-schemas';
 import {
   getAdminFeesReport,
@@ -26,6 +25,9 @@ import {
   PieChart,
   ArrowUpDown
 } from 'lucide-react';
+import Link from 'next/link';
+
+export const dynamic = 'force-dynamic';
 
 type SearchParams = Promise<Record<string, string | string[] | undefined>>;
 
@@ -33,7 +35,8 @@ interface DailyBucket {
   date: string;
   gross: number;
   fees: number;
-  netToVerial: number;
+  gst: number;
+  netToProviders: number;
 }
 
 const formatCurrency = (cents: number) =>
@@ -44,16 +47,8 @@ export default async function AdminFeesPage({
 }: {
   searchParams: SearchParams;
 }) {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect('/dashboard');
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect('/dashboard');
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect('/dashboard');
 
   const params = parseSearchParams(AdminFeesSearchSchema, await searchParams);
 
@@ -101,8 +96,6 @@ export default async function AdminFeesPage({
   const fromIso = startDate.toISOString().split('T')[0];
   const toIso = endDate.toISOString().split('T')[0];
 
-  console.log('[ADMIN_FEES] Loading report for dates:', fromIso, 'to', toIso);
-
   let reportData: FeeReportRow[];
   const year = endDate.getUTCFullYear();
   let summary: FeesSummary | null = null;
@@ -129,38 +122,71 @@ export default async function AdminFeesPage({
 
   const dailyMap = new Map<string, DailyBucket>();
 
+  const gstBps = parseInt(process.env.GST_BPS || '1500', 10);
+  const periodTotals = reportData.reduce(
+    (acc, row) => {
+      const gst = Math.ceil((row.platformFee * gstBps) / 10000);
+      acc.gross += row.totalAmount;
+      acc.fees += row.platformFee;
+      acc.gst += gst;
+      return acc;
+    },
+    { gross: 0, fees: 0, gst: 0 },
+  );
+
+  const periodNetToProviders = Math.max(0, periodTotals.gross - periodTotals.fees - periodTotals.gst);
+  const periodNetToVerial = periodTotals.fees;
+  const periodFeeRate = periodTotals.gross > 0 ? periodTotals.fees / periodTotals.gross : 0;
+
   for (const row of reportData) {
     const dateKey = row.paidAt.split('T')[0];
     const gross = row.totalAmount;
     const fees = row.platformFee;
-    const net = fees;
+    const gst = Math.ceil((fees * gstBps) / 10000);
+    const netToProviders = Math.max(0, gross - fees - gst);
 
     const existingDay = dailyMap.get(dateKey) ?? {
       date: dateKey,
       gross: 0,
       fees: 0,
-      netToVerial: 0,
+      gst: 0,
+      netToProviders: 0,
     };
     existingDay.gross += gross;
     existingDay.fees += fees;
-    existingDay.netToVerial += net;
+    existingDay.gst += gst;
+    existingDay.netToProviders += netToProviders;
     dailyMap.set(dateKey, existingDay);
   }
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
   const providerFilter = params.provider?.toLowerCase() ?? '';
 
-  const providers = providersByYear
-    .map((p) => ({
-      providerName: p.providerName ?? p.providerId,
-      totalGross: p.totalGross,
-      totalFees: p.totalFee,
-      totalNetToVerial: p.totalNet,
-    }))
-    .filter((p) =>
-      providerFilter
-        ? p.providerName.toLowerCase().includes(providerFilter)
-        : true,
-    )
+  const providerMap = new Map<
+    string,
+    { providerName: string; totalGross: number; totalFees: number; totalGst: number; totalNetToProviders: number }
+  >();
+
+  for (const row of reportData) {
+    const key = row.providerName;
+    const fees = row.platformFee;
+    const gst = Math.ceil((fees * gstBps) / 10000);
+    const gross = row.totalAmount;
+    const existing = providerMap.get(key) ?? {
+      providerName: key,
+      totalGross: 0,
+      totalFees: 0,
+      totalGst: 0,
+      totalNetToProviders: 0,
+    };
+    existing.totalGross += gross;
+    existing.totalFees += fees;
+    existing.totalGst += gst;
+    existing.totalNetToProviders += Math.max(0, gross - fees - gst);
+    providerMap.set(key, existing);
+  }
+
+  const providers = Array.from(providerMap.values())
+    .filter((p) => (providerFilter ? p.providerName.toLowerCase().includes(providerFilter) : true))
     .sort((a, b) => b.totalGross - a.totalGross);
 
   return (
@@ -177,14 +203,18 @@ export default async function AdminFeesPage({
         </div>
         <div className="flex gap-2">
           <Button variant="outline" asChild>
-            <a href={`/api/admin/fees/by-provider?year=${year}&format=csv`}>
+            <a
+              href={`/api/admin/fees/by-provider?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}${params.provider ? `&provider=${encodeURIComponent(params.provider)}` : ''}&format=csv`}
+            >
               <Download className="mr-2 h-4 w-4" />
               Export Providers CSV
             </a>
           </Button>
-          <Button variant="outline">
-            <BarChart3 className="mr-2 h-4 w-4" />
-            Advanced Analytics
+          <Button variant="outline" asChild>
+            <Link href="/dashboard/admin/revenue-analytics">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Advanced Analytics
+            </Link>
           </Button>
         </div>
       </div>
@@ -202,7 +232,7 @@ export default async function AdminFeesPage({
             <DollarSign className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{formatCurrency(totalGross)}</div>
+            <div className="text-2xl font-bold">{formatCurrency(periodTotals.gross)}</div>
             <p className="text-xs text-muted-foreground">
               Total booking value
             </p>
@@ -215,7 +245,7 @@ export default async function AdminFeesPage({
             <TrendingUp className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-green-600">{formatCurrency(totalFees)}</div>
+            <div className="text-2xl font-bold text-green-600">{formatCurrency(periodTotals.fees)}</div>
             <p className="text-xs text-muted-foreground">
               Revenue collected
             </p>
@@ -228,7 +258,7 @@ export default async function AdminFeesPage({
             <Users className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-blue-600">{formatCurrency(netToProviders)}</div>
+            <div className="text-2xl font-bold text-blue-600">{formatCurrency(periodNetToProviders)}</div>
             <p className="text-xs text-muted-foreground">
               Paid to providers
             </p>
@@ -241,9 +271,9 @@ export default async function AdminFeesPage({
             <PieChart className="h-4 w-4 text-purple-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-purple-600">{formatCurrency(netToVerial)}</div>
+            <div className="text-2xl font-bold text-purple-600">{formatCurrency(periodNetToVerial)}</div>
             <p className="text-xs text-muted-foreground">
-              Platform margin: {(averageFeeRate * 100).toFixed(1)}%
+              Platform margin: {(periodFeeRate * 100).toFixed(1)}%
             </p>
           </CardContent>
         </Card>
@@ -254,7 +284,7 @@ export default async function AdminFeesPage({
             <TrendingUp className="h-4 w-4 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-amber-600">{formatCurrency(totalGst)}</div>
+            <div className="text-2xl font-bold text-amber-600">{formatCurrency(periodTotals.gst)}</div>
             <p className="text-xs text-muted-foreground">Collected GST on platform fees</p>
           </CardContent>
         </Card>
@@ -325,7 +355,7 @@ export default async function AdminFeesPage({
                     </TableHead>
                     <TableHead className="text-right">Gross Volume</TableHead>
                     <TableHead className="text-right">Platform Fees</TableHead>
-                    <TableHead className="text-right">Net Revenue</TableHead>
+                    <TableHead className="text-right">Net to Providers</TableHead>
                     <TableHead className="text-right">Fee Rate</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -348,7 +378,7 @@ export default async function AdminFeesPage({
                           {formatCurrency(d.fees)}
                         </TableCell>
                         <TableCell className="text-right text-purple-600 font-medium">
-                          {formatCurrency(d.netToVerial)}
+                          {formatCurrency(d.netToProviders)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge variant="outline" className="text-xs">
@@ -396,7 +426,7 @@ export default async function AdminFeesPage({
                     </TableHead>
                     <TableHead className="text-right">Gross Volume</TableHead>
                     <TableHead className="text-right">Platform Fees</TableHead>
-                    <TableHead className="text-right">Net Revenue</TableHead>
+                    <TableHead className="text-right">Net to Providers</TableHead>
                     <TableHead className="text-right">Fee Rate</TableHead>
                     <TableHead className="text-right">Contribution</TableHead>
                   </TableRow>
@@ -404,7 +434,7 @@ export default async function AdminFeesPage({
                 <TableBody>
                   {providers.map((p) => {
                     const feeRate = p.totalGross > 0 ? (p.totalFees / p.totalGross) * 100 : 0;
-                    const contributionPercent = totalFees > 0 ? (p.totalFees / totalFees) * 100 : 0;
+                    const contributionPercent = periodTotals.fees > 0 ? (p.totalFees / periodTotals.fees) * 100 : 0;
                     return (
                       <TableRow key={p.providerName}>
                         <TableCell>
@@ -417,7 +447,7 @@ export default async function AdminFeesPage({
                           {formatCurrency(p.totalFees)}
                         </TableCell>
                         <TableCell className="text-right text-purple-600 font-medium">
-                          {formatCurrency(p.totalNetToVerial)}
+                          {formatCurrency(p.totalNetToProviders)}
                         </TableCell>
                         <TableCell className="text-right">
                           <Badge variant="outline" className="text-xs">

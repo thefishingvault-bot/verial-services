@@ -92,7 +92,20 @@ export const FeesReportQuerySchema = z.object({
 
 export const FeesByProviderQuerySchema = z.object({
   year: z.coerce.number().int().optional(),
+  from: z.string().trim().optional(),
+  to: z.string().trim().optional(),
+  provider: z.string().trim().optional(),
   format: z.enum(["csv"]).optional(),
+}).superRefine((data, ctx) => {
+  const hasFrom = !!data.from;
+  const hasTo = !!data.to;
+  if (hasFrom !== hasTo) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: [hasFrom ? "to" : "from"],
+      message: "Both from and to are required",
+    });
+  }
 });
 
 export const BroadcastQuerySchema = z.object({
