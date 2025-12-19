@@ -4,6 +4,8 @@ import { users, notifications } from '@/db/schema';
 import { eq, and, gte, desc, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
 import { BroadcastCreateSchema, BroadcastQuerySchema, invalidResponse, parseBody, parseQuery } from '@/lib/validation/admin';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
+import { writeAdminAuditLog } from '@/lib/admin-audit';
 
 export async function GET(request: NextRequest) {
   try {
@@ -104,6 +106,8 @@ export async function POST(request: NextRequest) {
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
 
+    await ensureUserExistsInDb(userId!, 'admin');
+
     const parsedBody = await parseBody(BroadcastCreateSchema, request);
     if (!parsedBody.ok) return invalidResponse(parsedBody.error);
     const { message, href, targetRoles, targetUsers } = parsedBody.data;
@@ -149,6 +153,15 @@ export async function POST(request: NextRequest) {
       await db.insert(notifications).values(batch);
       insertedCount += batch.length;
     }
+
+    await writeAdminAuditLog({
+      userId: userId!,
+      action: 'BROADCAST_SEND',
+      resource: 'notification',
+      resourceId: null,
+      details: `Broadcasted to ${insertedCount} user(s). roles=${targetRoles?.length || 0} explicitUsers=${targetUsers?.length || 0}`,
+      request,
+    });
 
     return NextResponse.json({
       success: true,

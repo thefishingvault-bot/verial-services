@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/components/ui/use-toast';
 import { format } from 'date-fns';
-import { Send, MessageSquare, Clock, Users, Search, Mail, Bell } from 'lucide-react';
+import { Send, MessageSquare, Clock, Users, Mail, Bell } from 'lucide-react';
 
 interface Provider {
   id: string;
@@ -338,15 +338,11 @@ const ProviderCommunicationTools: React.FC = () => {
                 {/* Filters */}
                 <div className="flex gap-4">
                   <div className="flex-1">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Search providers..."
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
+                    <Input
+                      placeholder="Search providers..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
                   </div>
                   <Select value={filterRiskLevel} onValueChange={setFilterRiskLevel}>
                     <SelectTrigger className="w-32">

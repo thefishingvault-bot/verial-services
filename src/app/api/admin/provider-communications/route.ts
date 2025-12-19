@@ -6,6 +6,7 @@ import { sendEmail } from '@/lib/email';
 import { createNotification } from '@/lib/notifications';
 import { requireAdmin } from '@/lib/admin-auth';
 import { ensureUserExistsInDb } from '@/lib/user-sync';
+import { writeAdminAuditLog } from '@/lib/admin-audit';
 import { z } from 'zod';
 
 const ProviderIdSchema = z
@@ -146,6 +147,15 @@ export async function POST(request: NextRequest) {
       const successCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'success').length;
       const failureCount = results.filter(r => r.status === 'fulfilled' && r.value.status === 'failed').length;
 
+      await writeAdminAuditLog({
+        userId: userId!,
+        action: 'PROVIDER_COMMUNICATION_SEND',
+        resource: 'provider',
+        resourceId: null,
+        details: `Sent ${type} to ${providersList.length} provider(s): ${successCount} succeeded, ${failureCount} failed.${templateId ? ` templateId=${templateId}` : ''}`,
+        request,
+      });
+
       return NextResponse.json({
         success: true,
         sent: successCount,
@@ -163,6 +173,15 @@ export async function POST(request: NextRequest) {
         scheduledFor: scheduledDate,
         templateId,
         createdBy: userId
+      });
+
+      await writeAdminAuditLog({
+        userId: userId!,
+        action: 'PROVIDER_COMMUNICATION_SCHEDULE',
+        resource: 'provider',
+        resourceId: null,
+        details: `Scheduled ${type} to ${providersList.length} provider(s) for ${scheduledDate.toISOString()}.${templateId ? ` templateId=${templateId}` : ''}`,
+        request,
       });
 
       return NextResponse.json({

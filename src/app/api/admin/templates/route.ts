@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
+import { db } from '@/lib/db';
+import { messageTemplates } from '@/db/schema';
+import { and, desc, eq, ilike, sql } from 'drizzle-orm';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
+import { writeAdminAuditLog } from '@/lib/admin-audit';
 import {
   TemplatesQuerySchema,
   TemplateCreateSchema,
@@ -10,65 +15,9 @@ import {
   parseQuery,
 } from '@/lib/validation/admin';
 
-// In-memory storage for templates (in production, this would be a database table)
-interface MessageTemplate {
-  id: string;
-  name: string;
-  category: string;
-  subject: string;
-  content: string;
-  variables: string[];
-  createdBy: string;
-  createdAt: string;
-  updatedAt: string;
+function makeTemplateId() {
+  return `mtmpl_${Date.now()}_${Math.random().toString(36).slice(2, 11)}`;
 }
-
-const messageTemplates: MessageTemplate[] = [
-  {
-    id: 'welcome_new_user',
-    name: 'Welcome New User',
-    category: 'onboarding',
-    subject: 'Welcome to Verial Services!',
-    content: 'Welcome to Verial Services! We\'re excited to have you join our community of trusted service providers and customers. Get started by exploring available services or registering as a provider.',
-    variables: ['firstName'],
-    createdBy: 'system',
-    createdAt: new Date('2024-01-01').toISOString(),
-    updatedAt: new Date('2024-01-01').toISOString(),
-  },
-  {
-    id: 'booking_confirmed',
-    name: 'Booking Confirmed',
-    category: 'bookings',
-    subject: 'Your booking has been confirmed!',
-    content: 'Great news! Your booking for {serviceName} with {providerName} has been confirmed. The service is scheduled for {scheduledDate}. You can view the details in your dashboard.',
-    variables: ['serviceName', 'providerName', 'scheduledDate'],
-    createdBy: 'system',
-    createdAt: new Date('2024-01-01').toISOString(),
-    updatedAt: new Date('2024-01-01').toISOString(),
-  },
-  {
-    id: 'provider_approved',
-    name: 'Provider Approved',
-    category: 'provider',
-    subject: 'Your provider account has been approved!',
-    content: 'Congratulations! Your provider account has been approved and is now live. You can start creating services and accepting bookings. Check out our provider dashboard to get started.',
-    variables: ['businessName'],
-    createdBy: 'system',
-    createdAt: new Date('2024-01-01').toISOString(),
-    updatedAt: new Date('2024-01-01').toISOString(),
-  },
-  {
-    id: 'payment_reminder',
-    name: 'Payment Reminder',
-    category: 'payments',
-    subject: 'Payment reminder for your upcoming service',
-    content: 'This is a friendly reminder that your service with {providerName} is coming up on {scheduledDate}. Please ensure your payment method is up to date.',
-    variables: ['providerName', 'scheduledDate'],
-    createdBy: 'system',
-    createdAt: new Date('2024-01-01').toISOString(),
-    updatedAt: new Date('2024-01-01').toISOString(),
-  },
-];
 
 export async function GET(request: NextRequest) {
   try {
@@ -79,32 +28,70 @@ export async function GET(request: NextRequest) {
     if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
     const { category, search } = parsedQuery.data;
 
-    let filteredTemplates = messageTemplates;
+    const whereClauses = [] as Array<ReturnType<typeof and>>;
 
     if (category && category !== 'all') {
-      filteredTemplates = filteredTemplates.filter(template => template.category === category);
+      whereClauses.push(and(eq(messageTemplates.category, category)));
     }
 
     if (search) {
-      const searchLower = search.toLowerCase();
-      filteredTemplates = filteredTemplates.filter(template =>
-        template.name.toLowerCase().includes(searchLower) ||
-        template.content.toLowerCase().includes(searchLower) ||
-        template.subject.toLowerCase().includes(searchLower)
+      const like = `%${search}%`;
+      whereClauses.push(
+        and(
+          sql`(
+            ${messageTemplates.name} ILIKE ${like}
+            OR ${messageTemplates.subject} ILIKE ${like}
+            OR ${messageTemplates.body} ILIKE ${like}
+          )`,
+        ),
       );
     }
 
-    // Group templates by category for analytics
-    const categoryStats = messageTemplates.reduce((acc, template) => {
-      acc[template.category] = (acc[template.category] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
+    const where = whereClauses.length
+      ? and(...whereClauses.map((c) => c).filter(Boolean))
+      : undefined;
+
+    const [rows, totalRes, byCategoryRes] = await Promise.all([
+      db
+        .select({
+          id: messageTemplates.id,
+          name: messageTemplates.name,
+          category: messageTemplates.category,
+          subject: messageTemplates.subject,
+          content: messageTemplates.body,
+          variables: messageTemplates.variables,
+          createdBy: messageTemplates.createdBy,
+          createdAt: messageTemplates.createdAt,
+          updatedAt: messageTemplates.updatedAt,
+        })
+        .from(messageTemplates)
+        .where(where)
+        .orderBy(desc(messageTemplates.updatedAt)),
+      db.select({ count: sql<number>`COUNT(*)` }).from(messageTemplates),
+      db
+        .select({ category: messageTemplates.category, count: sql<number>`COUNT(*)` })
+        .from(messageTemplates)
+        .groupBy(messageTemplates.category),
+    ]);
+
+    const byCategory = byCategoryRes.reduce(
+      (acc, row) => {
+        acc[row.category] = Number(row.count ?? 0);
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
 
     return NextResponse.json({
-      templates: filteredTemplates.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
+      templates: rows.map((t) => ({
+        ...t,
+        variables: t.variables ?? [],
+        createdAt: t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt),
+        updatedAt: t.updatedAt instanceof Date ? t.updatedAt.toISOString() : String(t.updatedAt),
+      })),
       stats: {
-        total: messageTemplates.length,
-        byCategory: categoryStats,
+        total: Number(totalRes[0]?.count ?? 0),
+        byCategory,
       },
     });
   } catch (error) {
@@ -122,27 +109,49 @@ export async function POST(request: NextRequest) {
     if (!admin.isAdmin) return admin.response;
     const { userId } = admin;
 
+    await ensureUserExistsInDb(userId!, 'admin');
+
     const parsedBody = await parseBody(TemplateCreateSchema, request);
     if (!parsedBody.ok) return invalidResponse(parsedBody.error);
     const { name, category, subject, content, variables } = parsedBody.data;
 
-    const newTemplate = {
-      id: `template_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    const now = new Date();
+    const id = makeTemplateId();
+
+    await db.insert(messageTemplates).values({
+      id,
       name: name.trim(),
       category: category.trim(),
       subject: subject.trim(),
-      content: content.trim(),
-      variables: variables || [],
-      createdBy: userId,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-    };
+      body: content.trim(),
+      variables: (variables ?? []).length ? variables : null,
+      createdBy: userId!,
+      createdAt: now,
+      updatedAt: now,
+    });
 
-    messageTemplates.push(newTemplate);
+    await writeAdminAuditLog({
+      userId: userId!,
+      action: 'TEMPLATE_CREATE',
+      resource: 'template',
+      resourceId: id,
+      details: `Created template: ${name.trim()}`,
+      request,
+    });
 
     return NextResponse.json({
       success: true,
-      template: newTemplate,
+      template: {
+        id,
+        name: name.trim(),
+        category: category.trim(),
+        subject: subject.trim(),
+        content: content.trim(),
+        variables: variables ?? [],
+        createdBy: userId!,
+        createdAt: now.toISOString(),
+        updatedAt: now.toISOString(),
+      },
     });
   } catch (error) {
     console.error('Error creating message template:', error);
@@ -157,34 +166,73 @@ export async function PUT(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
+
+    await ensureUserExistsInDb(userId!, 'admin');
 
     const parsedBody = await parseBody(TemplateUpdateSchema, request);
     if (!parsedBody.ok) return invalidResponse(parsedBody.error);
     const { id, name, category, subject, content, variables } = parsedBody.data;
 
-    const templateIndex = messageTemplates.findIndex(template => template.id === id);
-    if (templateIndex === -1) {
+    const existing = await db
+      .select({
+        id: messageTemplates.id,
+        name: messageTemplates.name,
+        category: messageTemplates.category,
+        subject: messageTemplates.subject,
+        body: messageTemplates.body,
+        variables: messageTemplates.variables,
+        createdBy: messageTemplates.createdBy,
+        createdAt: messageTemplates.createdAt,
+        updatedAt: messageTemplates.updatedAt,
+      })
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, id))
+      .limit(1);
+
+    if (!existing[0]) {
       return NextResponse.json(
         { error: 'Template not found' },
         { status: 404 }
       );
     }
 
-    const updatedTemplate = {
-      ...messageTemplates[templateIndex],
-      name: name?.trim() || messageTemplates[templateIndex].name,
-      category: category?.trim() || messageTemplates[templateIndex].category,
-      subject: subject?.trim() || messageTemplates[templateIndex].subject,
-      content: content?.trim() || messageTemplates[templateIndex].content,
-      variables: variables || messageTemplates[templateIndex].variables,
-      updatedAt: new Date().toISOString(),
-    };
+    const now = new Date();
 
-    messageTemplates[templateIndex] = updatedTemplate;
+    await db
+      .update(messageTemplates)
+      .set({
+        name: name?.trim() ?? existing[0].name,
+        category: category?.trim() ?? existing[0].category,
+        subject: subject?.trim() ?? existing[0].subject,
+        body: content?.trim() ?? existing[0].body,
+        variables: variables ? (variables.length ? variables : null) : existing[0].variables,
+        updatedAt: now,
+      })
+      .where(eq(messageTemplates.id, id));
+
+    await writeAdminAuditLog({
+      userId: userId!,
+      action: 'TEMPLATE_UPDATE',
+      resource: 'template',
+      resourceId: id,
+      details: `Updated template: ${name?.trim() ?? existing[0].name}`,
+      request,
+    });
 
     return NextResponse.json({
       success: true,
-      template: updatedTemplate,
+      template: {
+        id,
+        name: name?.trim() ?? existing[0].name,
+        category: category?.trim() ?? existing[0].category,
+        subject: subject?.trim() ?? existing[0].subject,
+        content: content?.trim() ?? existing[0].body,
+        variables: variables ?? (existing[0].variables ?? []),
+        createdBy: existing[0].createdBy,
+        createdAt: existing[0].createdAt instanceof Date ? existing[0].createdAt.toISOString() : String(existing[0].createdAt),
+        updatedAt: now.toISOString(),
+      },
     });
   } catch (error) {
     console.error('Error updating message template:', error);
@@ -199,13 +247,21 @@ export async function DELETE(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
+    const { userId } = admin;
+
+    await ensureUserExistsInDb(userId!, 'admin');
 
     const parsedQuery = parseQuery(TemplateDeleteSchema, request);
     if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
     const { id } = parsedQuery.data;
 
-    const templateIndex = messageTemplates.findIndex(template => template.id === id);
-    if (templateIndex === -1) {
+    const existing = await db
+      .select({ id: messageTemplates.id, createdBy: messageTemplates.createdBy, name: messageTemplates.name })
+      .from(messageTemplates)
+      .where(eq(messageTemplates.id, id))
+      .limit(1);
+
+    if (!existing[0]) {
       return NextResponse.json(
         { error: 'Template not found' },
         { status: 404 }
@@ -213,14 +269,23 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Don't allow deletion of system templates
-    if (messageTemplates[templateIndex].createdBy === 'system') {
+    if (existing[0].createdBy === 'system') {
       return NextResponse.json(
         { error: 'Cannot delete system templates' },
         { status: 403 }
       );
     }
 
-    messageTemplates.splice(templateIndex, 1);
+    await db.delete(messageTemplates).where(eq(messageTemplates.id, id));
+
+    await writeAdminAuditLog({
+      userId: userId!,
+      action: 'TEMPLATE_DELETE',
+      resource: 'template',
+      resourceId: id,
+      details: `Deleted template: ${existing[0].name}`,
+      request,
+    });
 
     return NextResponse.json({
       success: true,

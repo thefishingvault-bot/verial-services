@@ -298,6 +298,22 @@ export const financialAuditLogs = pgTable("financial_audit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+/**
+ * Admin Audit Logs
+ * Tracks administrative actions for security/compliance.
+ */
+export const adminAuditLogs = pgTable('admin_audit_logs', {
+  id: varchar('id', { length: 255 }).primaryKey(), // e.g., audit_...
+  userId: varchar('user_id', { length: 255 }).notNull().references(() => users.id, { onDelete: 'cascade' }),
+  action: varchar('action', { length: 100 }).notNull(),
+  resource: varchar('resource', { length: 50 }).notNull(),
+  resourceId: varchar('resource_id', { length: 255 }),
+  details: text('details').notNull(),
+  ipAddress: varchar('ip_address', { length: 100 }).default('unknown').notNull(),
+  userAgent: text('user_agent').default('unknown').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});
+
 
 /**
  * Reviews Table

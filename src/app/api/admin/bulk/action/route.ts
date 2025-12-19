@@ -5,6 +5,7 @@ import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
 import { z } from 'zod';
 import { ensureUserExistsInDb } from '@/lib/user-sync';
+import { writeAdminAuditLog } from '@/lib/admin-audit';
 
 const BulkActionSchema = z
   .object({
@@ -73,6 +74,16 @@ export async function POST(req: Request) {
         });
 
         console.log(`[API_ADMIN_BULK] Suspended ${updated} providers`);
+
+        await writeAdminAuditLog({
+          userId: admin.userId!,
+          action: 'PROVIDER_SUSPEND',
+          resource: 'provider',
+          resourceId: null,
+          details: `Bulk suspended ${updated} provider(s) (requested ${ids.length}).`,
+          request: req,
+        });
+
         return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
 
@@ -121,6 +132,16 @@ export async function POST(req: Request) {
         });
 
         console.log(`[API_ADMIN_BULK] Unsuspended ${updated} providers`);
+
+        await writeAdminAuditLog({
+          userId: admin.userId!,
+          action: 'PROVIDER_UNSUSPEND',
+          resource: 'provider',
+          resourceId: null,
+          details: `Bulk unsuspended ${updated} provider(s) (requested ${ids.length}).`,
+          request: req,
+        });
+
         return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
 
@@ -136,6 +157,16 @@ export async function POST(req: Request) {
           .returning({ id: providers.id });
 
         console.log(`[API_ADMIN_BULK] Rejected ${updated.length} provider applications`);
+
+        await writeAdminAuditLog({
+          userId: admin.userId!,
+          action: 'USER_ROLE_CHANGE',
+          resource: 'provider',
+          resourceId: null,
+          details: `Bulk rejected ${updated.length} provider application(s) (requested ${ids.length}).`,
+          request: req,
+        });
+
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
     } else if (type === 'bookings') {
@@ -157,6 +188,16 @@ export async function POST(req: Request) {
           .returning({ id: bookings.id });
 
         console.log(`[API_ADMIN_BULK] Canceled ${updated.length} bookings`);
+
+        await writeAdminAuditLog({
+          userId: admin.userId!,
+          action: 'BOOKING_CANCEL',
+          resource: 'booking',
+          resourceId: null,
+          details: `Bulk canceled ${updated.length} booking(s) (requested ${ids.length}).`,
+          request: req,
+        });
+
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
 
@@ -172,6 +213,16 @@ export async function POST(req: Request) {
           .returning({ id: bookings.id });
 
         console.log(`[API_ADMIN_BULK] Marked ${updated.length} bookings as completed`);
+
+        await writeAdminAuditLog({
+          userId: admin.userId!,
+          action: 'BOOKING_COMPLETE',
+          resource: 'booking',
+          resourceId: null,
+          details: `Bulk marked ${updated.length} booking(s) as completed (requested ${ids.length}).`,
+          request: req,
+        });
+
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
     }
