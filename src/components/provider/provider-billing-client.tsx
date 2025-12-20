@@ -21,6 +21,13 @@ type SubscriptionStatusResponse = {
   };
 };
 
+function getJsonStringField(json: unknown, key: string): string | null {
+  if (!json || typeof json !== "object") return null;
+  const rec = json as Record<string, unknown>;
+  const value = rec[key];
+  return typeof value === "string" ? value : null;
+}
+
 const PLAN_LABEL: Record<ProviderPlan, string> = {
   starter: "Starter",
   pro: "Pro — Monthly",
@@ -47,8 +54,11 @@ export default function ProviderBillingClient() {
       if (!res.ok) {
         const contentType = res.headers.get("content-type") || "";
         if (contentType.includes("application/json")) {
-          const json = await res.json().catch(() => ({}));
-          const message = (json as any)?.error || (json as any)?.message || "Failed to load billing status";
+          const json: unknown = await res.json().catch(() => null);
+          const message =
+            getJsonStringField(json, "error") ??
+            getJsonStringField(json, "message") ??
+            "Failed to load billing status";
           throw new Error(message);
         }
         throw new Error(await res.text());
@@ -85,12 +95,12 @@ export default function ProviderBillingClient() {
         body: JSON.stringify({ plan }),
       });
 
-      const json = await res.json().catch(() => ({}));
+      const json: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error((json as any)?.error || "Failed to start checkout");
+        throw new Error(getJsonStringField(json, "error") ?? "Failed to start checkout");
       }
 
-      const url = (json as any).url as string | undefined;
+      const url = getJsonStringField(json, "url");
       if (!url) throw new Error("Checkout URL missing");
       window.location.href = url;
     } catch (err) {
@@ -102,11 +112,11 @@ export default function ProviderBillingClient() {
   const openPortal = async () => {
     try {
       const res = await fetch("/api/provider/subscription/portal", { method: "POST" });
-      const json = await res.json().catch(() => ({}));
+      const json: unknown = await res.json().catch(() => null);
       if (!res.ok) {
-        throw new Error((json as any)?.error || "Failed to open billing portal");
+        throw new Error(getJsonStringField(json, "error") ?? "Failed to open billing portal");
       }
-      const url = (json as any).url as string | undefined;
+      const url = getJsonStringField(json, "url");
       if (!url) throw new Error("Portal URL missing");
       window.location.href = url;
     } catch (err) {

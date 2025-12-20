@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { getPlatformFeeBpsForPlan } from "@/lib/provider-subscription";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 // This route is for creating a Payment Intent for a *platform* charge.
 // This will be adapted later for Connect (destination charges).
@@ -33,7 +33,7 @@ export async function POST(req: Request) {
     });
 
     // Platform fee can be reduced/removed for subscribed providers
-    const feeBps = getPlatformFeeBpsForPlan((provider?.plan as any) ?? "starter");
+    const feeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(provider?.plan));
     const applicationFeeAmount = Math.ceil(amount * (feeBps / 10000));
 
     // Create the Payment Intent

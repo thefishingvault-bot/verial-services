@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { disputes, bookings, providers, services } from "@/db/schema";
-import { and, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 
 function escapeCsv(value: unknown) {
@@ -36,6 +36,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    const where = whereConditions.length ? and(...whereConditions) : undefined;
+
     const rows = await db
       .select({
         id: disputes.id,
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
       .innerJoin(bookings, eq(disputes.bookingId, bookings.id))
       .innerJoin(providers, eq(bookings.providerId, providers.id))
       .innerJoin(services, eq(bookings.serviceId, services.id))
-      .where(whereConditions.length ? and(...(whereConditions as any)) : undefined)
+      .where(where)
       .orderBy(desc(disputes.createdAt))
       .limit(5000);
 

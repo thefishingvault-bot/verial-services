@@ -111,7 +111,7 @@ export default function ServicesPageShell({
               </div>
               <div className="px-4 pb-4">
                 <p className="text-2xl font-semibold text-slate-900">
-                  {kpi.satisfactionRate}%
+                  {kpi.satisfactionRate != null ? `${kpi.satisfactionRate}%` : "—"}
                 </p>
               </div>
             </div>

@@ -1,8 +1,0 @@
-// FavoriteProvidersCard was removed to reduce unnecessary
-// favourites API calls from the dashboard. This file is
-// intentionally left as a stub to avoid import errors if
-// any stale references remain.
-
-export function FavoriteProvidersCard() {
-  return null;
-}

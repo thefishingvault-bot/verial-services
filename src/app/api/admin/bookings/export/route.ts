@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bookings, providers, services, users } from "@/db/schema";
-import { and, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 
 function escapeCsv(value: unknown) {
@@ -21,12 +21,10 @@ export async function GET(request: NextRequest) {
 
     const whereConditions: Array<ReturnType<typeof sql>> = [];
 
-    const canceledStatuses = ["canceled_customer", "canceled_provider"] as const;
-
     if (status !== "all") {
       if (status === "canceled") {
         whereConditions.push(sql`${bookings.status} in ('canceled_customer','canceled_provider')`);
-      } else if (canceledStatuses.includes(status as any)) {
+      } else if (status === "canceled_customer" || status === "canceled_provider") {
         whereConditions.push(sql`${bookings.status} = ${status}`);
       } else {
         whereConditions.push(sql`${bookings.status} = ${status === "confirmed" ? "accepted" : status}`);
@@ -38,6 +36,8 @@ export async function GET(request: NextRequest) {
         sql`(${bookings.id} ilike ${`%${search}%`} or ${users.firstName} ilike ${`%${search}%`} or ${users.lastName} ilike ${`%${search}%`} or ${users.email} ilike ${`%${search}%`} or ${providers.businessName} ilike ${`%${search}%`} or ${providers.handle} ilike ${`%${search}%`} or ${services.title} ilike ${`%${search}%`})`,
       );
     }
+
+    const where = whereConditions.length ? and(...whereConditions) : undefined;
 
     const rows = await db
       .select({
@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(users, eq(bookings.userId, users.id))
       .leftJoin(providers, eq(bookings.providerId, providers.id))
       .leftJoin(services, eq(bookings.serviceId, services.id))
-      .where(whereConditions.length ? and(...(whereConditions as any)) : undefined)
+      .where(where)
       .orderBy(desc(bookings.createdAt))
       .limit(5000);
 

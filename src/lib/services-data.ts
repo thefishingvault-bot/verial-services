@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { services, providers, users, reviews, serviceFavorites } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte, avg } from 'drizzle-orm';
+import { eq, and, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
 
@@ -112,7 +112,7 @@ export type ServicesDataResult = {
   hasMore: boolean;
   kpi: {
     activeServices: number;
-    satisfactionRate: number;
+    satisfactionRate: number | null;
     avgResponseMinutes: number | null;
   };
 };
@@ -122,6 +122,19 @@ export async function getServicesDataFromSearchParams(
   userId?: string | null,
 ): Promise<ServicesDataResult> {
   const filters = parseServicesSearchParams(searchParams);
+
+  const avgRatingExpr = sql<number>`COALESCE((
+    SELECT AVG(${reviews.rating})
+    FROM ${reviews}
+    WHERE ${reviews.serviceId} = ${services.id}
+      AND ${reviews.isHidden} = false
+  ), 0)`;
+  const reviewCountExpr = sql<number>`COALESCE((
+    SELECT COUNT(*)
+    FROM ${reviews}
+    WHERE ${reviews.serviceId} = ${services.id}
+      AND ${reviews.isHidden} = false
+  ), 0)`;
 
   const whereConditions = [eq(providers.status, 'approved')];
 
@@ -163,10 +176,14 @@ export async function getServicesDataFromSearchParams(
     whereConditions.push(lte(services.priceInCents, filters.maxPrice * 100));
   }
 
+  if (filters.rating != null) {
+    whereConditions.push(sql`${avgRatingExpr} >= ${filters.rating}`);
+  }
+
   let orderBy = desc(services.createdAt);
   switch (filters.sort) {
     case 'rating_desc':
-      orderBy = desc(sql`COALESCE(avg_rating, 0)`);
+      orderBy = desc(avgRatingExpr);
       break;
     case 'price_asc':
       orderBy = asc(services.priceInCents);
@@ -221,6 +238,8 @@ export async function getServicesDataFromSearchParams(
       favoriteCount: sql<number>`(
         SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
       )`,
+      avgRating: avgRatingExpr,
+      reviewCount: reviewCountExpr,
     })
     .from(services)
     .innerJoin(providers, eq(services.providerId, providers.id))
@@ -242,12 +261,7 @@ export async function getServicesDataFromSearchParams(
     .limit(limit)
     .offset(offset);
 
-  // TODO: wire real providerStats and responseTimes once review/response data is finalised
-  const providerStats: Record<string, { avgRating: number; reviewCount: number }> = {};
-  const responseTimes: Record<string, string> = {};
-
-  let servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
-    const stats = providerStats[service.providerId] || { avgRating: 0, reviewCount: 0 };
+  const servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
     return {
       id: service.id,
       slug: service.slug,
@@ -267,29 +281,44 @@ export async function getServicesDataFromSearchParams(
         trustScore: service.trustScore,
         isVerified: service.isVerified,
         avatarUrl: service.avatarUrl,
-        averageResponseTime: responseTimes[service.providerId] || 'under 2h',
       },
       user: {
         firstName: service.firstName,
         lastName: service.lastName,
       },
-      avgRating: stats.avgRating,
-      reviewCount: stats.reviewCount,
+      avgRating: Number(service.avgRating ?? 0),
+      reviewCount: Number(service.reviewCount ?? 0),
       isFavorite: service.isFavorite ?? false,
     };
   });
 
-  if (filters.rating != null) {
-    servicesWithProviders = servicesWithProviders.filter(
-      (service) => service.avgRating >= filters.rating!,
-    );
-  }
+  const [activeServicesRow] = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(services)
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .where(eq(providers.status, 'approved'));
 
-  // TODO: replace mock KPI values with real aggregates once defined
+  const [satisfactionRow] = await db
+    .select({
+      total: sql<number>`COUNT(*)`,
+      satisfied: sql<number>`COUNT(*) FILTER (WHERE ${reviews.rating} >= 4)`,
+    })
+    .from(reviews)
+    .innerJoin(services, eq(reviews.serviceId, services.id))
+    .innerJoin(providers, eq(services.providerId, providers.id))
+    .where(and(eq(providers.status, 'approved'), eq(reviews.isHidden, false)));
+
+  const totalReviews = Number(satisfactionRow?.total ?? 0);
+  const satisfiedReviews = Number(satisfactionRow?.satisfied ?? 0);
+  const satisfactionRate =
+    totalReviews > 0
+      ? Math.round((satisfiedReviews / totalReviews) * 100)
+      : null;
+
   const kpi = {
-    activeServices: totalCount,
-    satisfactionRate: 95,
-    avgResponseMinutes: 120,
+    activeServices: Number(activeServicesRow?.count ?? 0),
+    satisfactionRate,
+    avgResponseMinutes: null,
   };
 
   return {
@@ -298,31 +327,5 @@ export async function getServicesDataFromSearchParams(
     totalCount,
     hasMore: page * limit < totalCount,
     kpi,
-  };
-}
-
-export async function getServicesStats(): Promise<{
-  totalServices: number;
-  averageRating: number;
-}> {
-  // Get total approved services
-  const totalServicesResult = await db
-    .select({ count: sql<number>`count(*)` })
-    .from(services)
-    .innerJoin(providers, eq(services.providerId, providers.id))
-    .where(eq(providers.status, 'approved'));
-
-  const totalServices = totalServicesResult[0]?.count || 0;
-
-  // Get average rating from reviews table
-  const ratingResult = await db
-    .select({ avgRating: avg(reviews.rating) })
-    .from(reviews);
-
-  const averageRating = ratingResult[0]?.avgRating ? Number(ratingResult[0].avgRating) : 0;
-
-  return {
-    totalServices,
-    averageRating,
   };
 }

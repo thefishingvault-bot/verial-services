@@ -163,7 +163,7 @@ const ProviderCommunicationTools: React.FC = () => {
         setTotals(json.totals);
         setSelectedProviders((prev) => prev.filter((id) => json.providers.some((p) => p.id === id)));
       } catch (e) {
-        if ((e as any)?.name === 'AbortError') return;
+        if (typeof e === "object" && e !== null && "name" in e && (e as { name?: unknown }).name === "AbortError") return;
         console.error(e);
       }
     }

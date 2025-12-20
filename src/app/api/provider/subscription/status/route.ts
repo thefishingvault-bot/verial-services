@@ -59,7 +59,12 @@ export async function GET() {
         subscriptionId: provider.stripeSubscriptionId ?? null,
         status: provider.stripeSubscriptionStatus ?? null,
         priceId: provider.stripeSubscriptionPriceId ?? null,
-        currentPeriodEnd: provider.stripeCurrentPeriodEnd?.toISOString?.() ?? (provider.stripeCurrentPeriodEnd as any) ?? null,
+        currentPeriodEnd:
+          provider.stripeCurrentPeriodEnd instanceof Date
+            ? provider.stripeCurrentPeriodEnd.toISOString()
+            : provider.stripeCurrentPeriodEnd
+              ? String(provider.stripeCurrentPeriodEnd)
+              : null,
         cancelAtPeriodEnd: provider.stripeCancelAtPeriodEnd ?? false,
       },
     });

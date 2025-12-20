@@ -10,7 +10,7 @@ function rowsFromExecuteResult(result: unknown): Array<Record<string, unknown>> 
   if (!result) return [];
   if (Array.isArray(result)) return result as Array<Record<string, unknown>>;
   if (typeof result === "object" && result && "rows" in result) {
-    const rows = (result as any).rows;
+    const rows = (result as { rows?: unknown }).rows;
     if (Array.isArray(rows)) return rows as Array<Record<string, unknown>>;
   }
   return [];
