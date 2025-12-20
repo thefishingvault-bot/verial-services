@@ -13,6 +13,8 @@ const isPublicRoute = createRouteMatcher([
   "/services(.*)",
   "/s/(.*)",
   "/p/(.*)",
+  "/manifest.webmanifest",
+  "/api/pwa(.*)",
   "/api/services/list", // Public service list API
   "/api/services/by-slug(.*)", // Public service detail API
   "/api/webhooks(.*)", // All webhooks are public
