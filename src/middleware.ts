@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
@@ -43,7 +43,7 @@ const isMessagesRoute = createRouteMatcher([
   "/dashboard/messages(.*)",
 ]);
 
-export default clerkMiddleware(async (auth, req) => {
+const clerk = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
 
   if (isPublicRoute(req)) {
@@ -146,6 +146,15 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 });
+
+export default function middleware(req: NextRequest) {
+  const pathname = req.nextUrl.pathname;
+  // PWA install flows fetch these without auth/cookies; Clerk redirects break install icons.
+  if (pathname === "/manifest.webmanifest" || pathname.startsWith("/api/pwa")) {
+    return NextResponse.next();
+  }
+  return clerk(req);
+}
 
 export const config = {
   matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
