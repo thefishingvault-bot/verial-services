@@ -1,6 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings, providerEarnings, providers } from "@/db/schema";
+import { bookings, providerEarnings, providers, refunds } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -68,6 +68,36 @@ export async function POST(req: Request) {
       actionUrl: `/dashboard/bookings/${bookingId}`,
     });
 
+  const syncRefundRecord = async (stripeRefund: Stripe.Refund, bookingIdFallback?: string | null) => {
+    const refundIdMeta = stripeRefund.metadata?.refundId;
+    const bookingIdMeta = stripeRefund.metadata?.bookingId ?? bookingIdFallback ?? null;
+
+    const status = stripeRefund.status;
+    const mappedStatus =
+      status === "succeeded" ? "completed" : status === "failed" || status === "canceled" ? "failed" : "processing";
+
+    const update = {
+      stripeRefundId: stripeRefund.id,
+      status: mappedStatus,
+      processedAt: status === "succeeded" ? new Date() : null,
+      updatedAt: new Date(),
+    } as const;
+
+    if (refundIdMeta) {
+      await db.update(refunds).set(update).where(eq(refunds.id, refundIdMeta));
+      return;
+    }
+
+    // Fallbacks: match by Stripe refund id, or by booking id when available.
+    await db.update(refunds).set(update).where(eq(refunds.stripeRefundId, stripeRefund.id));
+
+    if (bookingIdMeta && mappedStatus === "completed") {
+      await db.update(refunds)
+        .set({ status: "completed", processedAt: new Date(), updatedAt: new Date() })
+        .where(eq(refunds.bookingId, bookingIdMeta));
+    }
+  };
+
   const markRefunded = async (bookingId: string) => {
     const booking = await loadBooking(bookingId);
     if (!booking) return NextResponse.json({ ok: true });
@@ -128,6 +158,8 @@ export async function POST(req: Request) {
         const priceId = subscription.items.data?.[0]?.price?.id ?? null;
         const plan = planFromStripePriceId(priceId) ?? "starter";
 
+        const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+
         await db
           .update(providers)
           .set({
@@ -136,7 +168,7 @@ export async function POST(req: Request) {
             stripeSubscriptionId: subscription.id,
             stripeSubscriptionStatus: subscription.status,
             stripeSubscriptionPriceId: priceId,
-            stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+            stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
             stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
             stripeSubscriptionUpdatedAt: new Date(),
             updatedAt: new Date(),
@@ -159,6 +191,8 @@ export async function POST(req: Request) {
       const inferredPlan = planFromStripePriceId(priceId);
       const plan = event.type === "customer.subscription.deleted" ? "starter" : (inferredPlan ?? "starter");
 
+      const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+
       await db
         .update(providers)
         .set({
@@ -167,7 +201,7 @@ export async function POST(req: Request) {
           stripeSubscriptionId: subscription.id,
           stripeSubscriptionStatus: subscription.status,
           stripeSubscriptionPriceId: priceId,
-          stripeCurrentPeriodEnd: new Date(subscription.current_period_end * 1000),
+          stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
           stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           stripeSubscriptionUpdatedAt: new Date(),
           updatedAt: new Date(),
@@ -394,6 +428,12 @@ export async function POST(req: Request) {
       if (piId) {
         const pi = await stripe.paymentIntents.retrieve(piId);
         const bookingIdMeta = pi.metadata?.bookingId;
+        // A fully refunded charge implies refund completion for this booking.
+        if (bookingIdMeta) {
+          await db.update(refunds)
+            .set({ status: "completed", processedAt: new Date(), updatedAt: new Date() })
+            .where(eq(refunds.bookingId, bookingIdMeta));
+        }
         if (bookingIdMeta) {
           const result = await markRefunded(bookingIdMeta);
           if (result) return result;
@@ -405,13 +445,18 @@ export async function POST(req: Request) {
     case "refund.updated": {
       const refund = event.data.object as Stripe.Refund;
       const piId = refund.payment_intent as string | null;
-      if (piId) {
+      let bookingIdMeta: string | null = refund.metadata?.bookingId ?? null;
+
+      if (!bookingIdMeta && piId) {
         const pi = await stripe.paymentIntents.retrieve(piId);
-        const bookingIdMeta = pi.metadata?.bookingId;
-        if (bookingIdMeta) {
-          const result = await markRefunded(bookingIdMeta);
-          if (result) return result;
-        }
+        bookingIdMeta = pi.metadata?.bookingId ?? null;
+      }
+
+      await syncRefundRecord(refund, bookingIdMeta);
+
+      if (bookingIdMeta && refund.status === "succeeded") {
+        const result = await markRefunded(bookingIdMeta);
+        if (result) return result;
       }
       break;
     }

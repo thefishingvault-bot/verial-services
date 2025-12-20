@@ -1,7 +1,7 @@
 export const runtime = "nodejs";
 
 import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse, type NextRequest } from "next/server";
+import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
@@ -147,13 +147,13 @@ const clerk = clerkMiddleware(async (auth, req) => {
   }
 });
 
-export default function middleware(req: NextRequest) {
+export default function middleware(req: NextRequest, event: NextFetchEvent) {
   const pathname = req.nextUrl.pathname;
   // PWA install flows fetch these without auth/cookies; Clerk redirects break install icons.
   if (pathname === "/manifest.webmanifest" || pathname.startsWith("/api/pwa")) {
     return NextResponse.next();
   }
-  return clerk(req);
+  return clerk(req, event);
 }
 
 export const config = {

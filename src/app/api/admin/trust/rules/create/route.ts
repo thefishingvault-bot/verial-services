@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { riskRules } from "@/db/schema";
 import { nanoid } from "nanoid";
 import { requireAdmin } from "@/lib/admin-auth";
-import { TrustRuleSchema, invalidResponse, parseForm } from "@/lib/validation/admin";
+import { TrustRuleSchema, invalidResponse, parseBody, parseForm } from "@/lib/validation/admin";
 import { ensureUserExistsInDb } from "@/lib/user-sync";
 
 export async function POST(request: NextRequest) {
@@ -14,7 +14,14 @@ export async function POST(request: NextRequest) {
 
     await ensureUserExistsInDb(userId!, "admin");
 
-    const parsed = await parseForm(TrustRuleSchema, request);
+    const contentType = request.headers.get("content-type") ?? "";
+    const isFormPost =
+      contentType.includes("multipart/form-data") ||
+      contentType.includes("application/x-www-form-urlencoded");
+
+    const parsed = isFormPost
+      ? await parseForm(TrustRuleSchema, request)
+      : await parseBody(TrustRuleSchema, request);
     if (!parsed.ok) return invalidResponse(parsed.error);
 
     const { name, incidentType, severity, trustScorePenalty, autoSuspend, suspendDurationDays } = parsed.data;

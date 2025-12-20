@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { disputes, bookings } from "@/db/schema";
+import { disputes, bookings, refunds } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { DisputeIdSchema, DisputeResolveSchema, invalidResponse, parseForm, parseParams } from "@/lib/validation/admin";
+import { createMarketplaceRefund } from "@/lib/stripe-refunds";
+
+export const runtime = "nodejs";
 
 export async function POST(
   request: NextRequest,
@@ -46,6 +49,7 @@ export async function POST(
     const booking = await db
       .select({
         priceAtBooking: bookings.priceAtBooking,
+        paymentIntentId: bookings.paymentIntentId,
       })
       .from(bookings)
       .where(eq(bookings.id, dispute[0].bookingId))
@@ -60,7 +64,66 @@ export async function POST(
       return NextResponse.json({ error: "Refund amount cannot exceed booking total" }, { status: 400 });
     }
 
-    // Resolve the dispute
+    // If a refund is part of the resolution, execute it in Stripe and record it.
+    if (refundCents && refundCents > 0) {
+      const paymentIntentId = booking[0].paymentIntentId;
+      if (!paymentIntentId) {
+        return NextResponse.json({ error: "Booking has no payment to refund" }, { status: 400 });
+      }
+
+      const refundId = `refund_${crypto.randomUUID()}`;
+
+      await db.insert(refunds).values({
+        id: refundId,
+        bookingId: dispute[0].bookingId,
+        amount: refundCents,
+        reason: "dispute_resolution",
+        description: parsedForm.data.adminNotes ?? null,
+        status: "processing",
+        processedBy: userId!,
+      });
+
+      try {
+        const result = await createMarketplaceRefund({
+          paymentIntentId,
+          amount: refundCents,
+          reason: "requested_by_customer",
+          metadata: {
+            bookingId: dispute[0].bookingId,
+            disputeId: parsedParams.data.disputeId,
+            refundId,
+            processedBy: userId!,
+            source: "admin_dispute_resolve",
+          },
+          idempotencyKey: `dispute:${parsedParams.data.disputeId}:refund:${refundCents}`,
+        });
+
+        await db
+          .update(refunds)
+          .set({
+            stripeRefundId: result.refund.id,
+            platformFeeRefunded: result.refundedPlatformFee ?? 0,
+            providerAmountRefunded: result.refundedProviderAmount ?? 0,
+            status: result.refund.status === "succeeded" ? "completed" : "processing",
+            processedAt: result.refund.status === "succeeded" ? new Date() : null,
+            updatedAt: new Date(),
+          })
+          .where(eq(refunds.id, refundId));
+      } catch (stripeError: unknown) {
+        const message = stripeError instanceof Error ? stripeError.message : "Unknown error";
+        console.error("[ADMIN_DISPUTE_REFUND_ERROR]", stripeError);
+        await db
+          .update(refunds)
+          .set({ status: "failed", updatedAt: new Date() })
+          .where(eq(refunds.id, refundId));
+        return NextResponse.json(
+          { error: "Failed to process refund with payment provider", details: message },
+          { status: 502 },
+        );
+      }
+    }
+
+    // Resolve the dispute (do not mark booking refunded here; webhooks handle that after Stripe confirms)
     await db
       .update(disputes)
       .set({
@@ -70,13 +133,9 @@ export async function POST(
         refundAmount: refundCents,
         resolvedBy: userId!,
         resolvedAt: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(disputes.id, parsedParams.data.disputeId));
-
-    // TODO: Here you would integrate with Stripe to process the actual refund
-    // if (refundCents && refundCents > 0) {
-    //   // Update booking status if needed
-    // }
 
     // Redirect back to the disputes page
     return NextResponse.redirect(new URL("/dashboard/admin/disputes", request.url));

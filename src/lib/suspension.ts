@@ -42,5 +42,5 @@ export function providerNotCurrentlySuspendedWhere(now: Date = new Date()): SQL 
       isNotNull(providers.suspensionEndDate),
       lte(providers.suspensionEndDate, now),
     ),
-  );
+  )!;
 }

@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { refunds, bookings, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { stripe } from "@/lib/stripe";
 import { requireAdmin } from "@/lib/admin-auth";
 import { BookingIdSchema, RefundCreateSchema, RefundQuerySchema, invalidResponse, parseBody, parseParams, parseQuery } from "@/lib/validation/admin";
+import { createMarketplaceRefund } from "@/lib/stripe-refunds";
 
 export async function POST(request: NextRequest) {
   try {
@@ -53,16 +53,8 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Calculate fee split (10% platform fee as per create-intent route)
-    const platformFeeBps = process.env.PLATFORM_FEE_BPS ? parseInt(process.env.PLATFORM_FEE_BPS) : 1000;
-
-    // For refunds, we need to calculate how much of each portion to refund
-    // This is a simplified calculation - in reality, you'd need to track what was actually transferred
-    const refundPlatformFee = Math.ceil(refundAmount * (platformFeeBps / 10000));
-    const refundProviderAmount = refundAmount - refundPlatformFee;
-
     // Generate refund ID
-    const refundId = `refund_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const refundId = `refund_${crypto.randomUUID()}`;
 
     try {
       // Create refund record first
@@ -72,32 +64,34 @@ export async function POST(request: NextRequest) {
         amount: refundAmount,
         reason,
         description,
-        platformFeeRefunded: refundPlatformFee,
-        providerAmountRefunded: refundProviderAmount,
         status: "processing",
         processedBy: userId,
       });
 
-      // Process refund via Stripe
-      const stripeRefund = await stripe.refunds.create({
-        payment_intent: bookingData.paymentIntentId,
+      // Process refund via Stripe (Connect-aware semantics)
+      const stripeResult = await createMarketplaceRefund({
+        paymentIntentId: bookingData.paymentIntentId,
         amount: refundAmount,
-        reason: "requested_by_customer", // Stripe refund reason
+        reason: "requested_by_customer",
         metadata: {
           bookingId,
           refundId,
           processedBy: userId,
           reason,
+          source: "admin_booking_refund",
         },
+        idempotencyKey: `admin_refund:${bookingId}:${refundAmount}:${refundId}`,
       });
 
       // Update refund record with Stripe refund ID and mark as completed
       await db
         .update(refunds)
         .set({
-          stripeRefundId: stripeRefund.id,
-          status: "completed",
-          processedAt: new Date(),
+          stripeRefundId: stripeResult.refund.id,
+          platformFeeRefunded: stripeResult.refundedPlatformFee ?? 0,
+          providerAmountRefunded: stripeResult.refundedProviderAmount ?? 0,
+          status: stripeResult.refund.status === "succeeded" ? "completed" : "processing",
+          processedAt: stripeResult.refund.status === "succeeded" ? new Date() : null,
           updatedAt: new Date(),
         })
         .where(eq(refunds.id, refundId));
@@ -106,9 +100,9 @@ export async function POST(request: NextRequest) {
         success: true,
         refund: {
           id: refundId,
-          stripeRefundId: stripeRefund.id,
+          stripeRefundId: stripeResult.refund.id,
           amount: refundAmount,
-          status: "completed",
+          status: stripeResult.refund.status === "succeeded" ? "completed" : "processing",
         },
       });
 

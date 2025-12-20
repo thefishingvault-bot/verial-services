@@ -4,12 +4,12 @@ import { eq } from "drizzle-orm";
 import type Stripe from "stripe";
 
 import { db } from "@/lib/db";
-import { bookings, bookingCancellations } from "@/db/schema";
+import { bookings, bookingCancellations, refunds } from "@/db/schema";
 import { assertTransition } from "@/lib/booking-state";
-import { stripe } from "@/lib/stripe";
 import { createNotificationOnce } from "@/lib/notifications";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { createMarketplaceRefund } from "@/lib/stripe-refunds";
 
 export const runtime = "nodejs";
 
@@ -80,11 +80,61 @@ export async function POST(
       }
 
       let refund: Stripe.Response<Stripe.Refund> | null = null;
-      if (booking.status === "paid" && booking.paymentIntentId) {
+      let refundRecordId: string | null = null;
+      if (booking.status === "paid") {
+        if (!booking.paymentIntentId) {
+          throw new Error("REFUND_FAILED");
+        }
+
+        refundRecordId = `refund_${crypto.randomUUID()}`;
+
+        // Record refund intent first for auditability.
+        await db.insert(refunds).values({
+          id: refundRecordId,
+          bookingId,
+          amount: booking.priceAtBooking,
+          reason: "booking_cancellation",
+          description: actor === "customer" ? "Cancelled by customer" : "Cancelled by provider",
+          status: "processing",
+          processedBy: userId,
+        });
+
         try {
-          refund = await stripe.refunds.create({ payment_intent: booking.paymentIntentId });
+          const result = await createMarketplaceRefund({
+            paymentIntentId: booking.paymentIntentId,
+            amount: booking.priceAtBooking,
+            reason: "requested_by_customer",
+            metadata: {
+              bookingId,
+              refundId: refundRecordId,
+              processedBy: userId,
+              actor,
+              source: "booking_cancel",
+            },
+            idempotencyKey: `${idemKey}:refund`,
+          });
+
+          refund = result.refund;
+
+          await db
+            .update(refunds)
+            .set({
+              stripeRefundId: result.refund.id,
+              platformFeeRefunded: result.refundedPlatformFee ?? 0,
+              providerAmountRefunded: result.refundedProviderAmount ?? 0,
+              status: result.refund.status === "succeeded" ? "completed" : "processing",
+              processedAt: result.refund.status === "succeeded" ? new Date() : null,
+              updatedAt: new Date(),
+            })
+            .where(eq(refunds.id, refundRecordId));
         } catch (error) {
           console.error("[BOOKING_CANCEL_REFUND_ERROR]", error);
+          if (refundRecordId) {
+            await db
+              .update(refunds)
+              .set({ status: "failed", updatedAt: new Date() })
+              .where(eq(refunds.id, refundRecordId));
+          }
           throw new Error("REFUND_FAILED");
         }
       }
@@ -92,20 +142,19 @@ export async function POST(
       const cancellationId = `bc_${crypto.randomUUID()}`;
       const now = new Date();
 
-      await db.transaction(async (tx) => {
-        await tx
-          .update(bookings)
-          .set({ status: nextStatus, updatedAt: now })
-          .where(eq(bookings.id, bookingId));
+      // Neon HTTP driver doesn't support transactions. Do sequential writes.
+      await db
+        .update(bookings)
+        .set({ status: nextStatus, updatedAt: now })
+        .where(eq(bookings.id, bookingId));
 
-        await tx.insert(bookingCancellations).values({
-          id: cancellationId,
-          bookingId,
-          userId,
-          actor,
-          reason,
-          createdAt: now,
-        });
+      await db.insert(bookingCancellations).values({
+        id: cancellationId,
+        bookingId,
+        userId,
+        actor,
+        reason,
+        createdAt: now,
       });
 
       const bookingUrl = `/dashboard/bookings/${bookingId}`;

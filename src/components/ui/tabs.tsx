@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { Slot } from "@radix-ui/react-slot";
 import { cn } from "@/lib/utils";
 
 type TabsContextValue = {
@@ -58,18 +59,24 @@ export function TabsList({ className, ...props }: TabsListProps) {
   );
 }
 
-interface TabsTriggerProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+interface TabsTriggerProps extends React.HTMLAttributes<HTMLElement> {
   value: string;
+  asChild?: boolean;
 }
 
-export function TabsTrigger({ className, value, ...props }: TabsTriggerProps) {
+export function TabsTrigger({ className, value, asChild, onClick, ...props }: TabsTriggerProps) {
   const { value: active, setValue } = useTabsContext();
   const isActive = active === value;
 
+  const Comp = asChild ? Slot : "button";
+
   return (
-    <button
-      type="button"
-      onClick={() => setValue(value)}
+    <Comp
+      {...(!asChild ? { type: "button" as const } : null)}
+      onClick={(e) => {
+        onClick?.(e);
+        setValue(value);
+      }}
       className={cn(
         "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         isActive
