@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/dashboard", label: "Overview", icon: Home },
+  { href: "/services", label: "Services", icon: Briefcase },
   { href: "/dashboard/bookings", label: "My Bookings", icon: Calendar },
   { href: "/dashboard/favorites", label: "Favorites", icon: Heart },
   { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
