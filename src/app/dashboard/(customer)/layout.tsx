@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { BottomNavigation } from "@/components/nav/bottom-navigation";
 import { SiteHeader } from "@/components/nav/site-header";
 import Link from "next/link";
-import { Home, Calendar, Heart, MessageSquare, Bell, User, Settings, Briefcase } from "lucide-react";
+import { Home, Calendar, Heart, MessageSquare, Bell, User, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
@@ -15,7 +15,6 @@ const navLinks = [
   { href: "/dashboard/messages", label: "Messages", icon: MessageSquare },
   { href: "/dashboard/notifications", label: "Notifications", icon: Bell },
   { href: "/dashboard/profile", label: "Profile", icon: User },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 export default function DashboardLayout({

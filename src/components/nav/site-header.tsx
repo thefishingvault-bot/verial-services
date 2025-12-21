@@ -21,12 +21,10 @@ export function SiteHeader() {
   const { signOut } = useClerk(); // Get signOut function
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
-  const dashboardHref =
-    role === 'provider'
-      ? '/dashboard/provider'
-      : role === 'admin'
-      ? '/dashboard/admin'
-      : '/dashboard';
+  // Always send providers to /dashboard from the header.
+  // Middleware will redirect approved providers to /dashboard/provider,
+  // while pending/unapproved providers can still access the customer dashboard.
+  const dashboardHref = role === 'admin' ? '/dashboard/admin' : '/dashboard';
 
   const links = isSignedIn
     ? [
