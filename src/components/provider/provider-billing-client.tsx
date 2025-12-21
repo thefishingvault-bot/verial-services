@@ -36,7 +36,7 @@ const PLAN_LABEL: Record<ProviderPlan, string> = {
 
 const PLAN_PRICE: Record<ProviderPlan, string> = {
   starter: "$0 NZD / month",
-  pro: "$29 NZD / month",
+  pro: "$49 NZD / month",
   elite: "$99 NZD / month",
 };
 
