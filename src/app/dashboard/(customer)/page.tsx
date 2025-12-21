@@ -9,7 +9,6 @@ import {
   FileText,
   Heart,
   Search,
-  Settings,
   ShieldCheck,
   Star,
   User,
@@ -66,17 +65,6 @@ const NavigationCards = () => (
             <CardDescription>List your own services and get paid.</CardDescription>
           </div>
           <Briefcase className="h-8 w-8 text-muted-foreground" />
-        </CardHeader>
-      </Card>
-    </Link>
-    <Link href="/dashboard/settings" className="hidden sm:block">
-      <Card className="hover:shadow-lg transition-shadow">
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div className="space-y-1">
-            <CardTitle>Settings</CardTitle>
-            <CardDescription>Manage your account and preferences.</CardDescription>
-          </div>
-          <Settings className="h-8 w-8 text-muted-foreground" />
         </CardHeader>
       </Card>
     </Link>
@@ -344,9 +332,6 @@ function Recommendations({ items }: { items: CustomerDashboardData["recommendati
 
 export default async function DashboardPage() {
   const { role } = await requireCustomer();
-  if (role === "provider") {
-    redirect("/dashboard/provider");
-  }
   if (role === "admin") {
     redirect("/dashboard/admin");
   }
