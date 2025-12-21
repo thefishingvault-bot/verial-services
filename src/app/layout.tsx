@@ -21,6 +21,9 @@ export const metadata: Metadata = {
     title: "Verial",
     statusBarStyle: "default",
   },
+};
+
+export const viewport = {
   themeColor: "#0b1220",
 };
 
