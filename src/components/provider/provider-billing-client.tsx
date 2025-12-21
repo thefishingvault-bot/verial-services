@@ -167,9 +167,12 @@ export default function ProviderBillingClient() {
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="text-sm text-muted-foreground">
-                  {plan === "starter" && "Basic access. Standard per-booking platform fee applies."}
-                  {plan === "pro" && "No per-booking platform fee. Great for active providers."}
-                  {plan === "elite" && "No per-booking platform fee with priority visibility benefits."}
+                  {plan === "starter" &&
+                    "Best for getting started. Create your provider profile, list services, and start receiving bookings with no monthly cost. A simple pay-as-you-go option while you build momentum on Verial. Includes: Basic provider profile & service listings. Standard search visibility with standard support. 10% platform fee per completed booking."}
+                  {plan === "pro" &&
+                    "Best for growing providers. Reduce your fees and increase visibility as you grow your business. Ideal for active providers who want better margins and more exposure. Includes: Everything in Starter. Improved search ranking. Basic performance analytics. Messaging tools. Reduced 5% platform fee per completed booking."}
+                  {plan === "elite" &&
+                    "Best for top providers. Maximize earnings with zero platform fees and premium visibility. Built for high-performing providers who want priority placement and full access. Includes: Everything in Pro. Priority search placement & featured exposure. Advanced analytics. Priority support. 0% platform fee per completed booking."}
                 </div>
 
                 {plan === "starter" ? (
