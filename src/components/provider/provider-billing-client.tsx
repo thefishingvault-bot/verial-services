@@ -226,7 +226,12 @@ export default function ProviderBillingClient() {
                   </div>
 
                   <div className="pt-1">
-                    <Badge variant="secondary">{copy.feeLine}</Badge>
+                    <Badge
+                      variant="secondary"
+                      className="w-full justify-center whitespace-normal text-center leading-snug break-words"
+                    >
+                      {copy.feeLine}
+                    </Badge>
                   </div>
                 </div>
 
