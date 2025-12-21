@@ -40,6 +40,49 @@ const PLAN_PRICE: Record<ProviderPlan, string> = {
   elite: "$99 NZD / month",
 };
 
+const PLAN_COPY: Record<ProviderPlan, {
+  headline: string;
+  description: string;
+  includes: string[];
+  feeLine: string;
+}> = {
+  starter: {
+    headline: "Best for getting started",
+    description:
+      "Create your provider profile, list services, and start receiving bookings with no monthly cost.",
+    includes: [
+      "Basic provider profile & service listings",
+      "Standard search visibility",
+      "Standard support",
+    ],
+    feeLine: "10% platform fee per completed booking",
+  },
+  pro: {
+    headline: "Best for growing providers",
+    description:
+      "Reduce your fees and increase visibility as you grow your business. Ideal for active providers who want better margins and more exposure.",
+    includes: [
+      "Everything in Starter",
+      "Improved search ranking",
+      "Basic performance analytics",
+      "Messaging tools",
+    ],
+    feeLine: "Reduced 5% platform fee per completed booking",
+  },
+  elite: {
+    headline: "Best for top providers",
+    description:
+      "Maximize earnings with zero platform fees and premium visibility. Built for high-performing providers who want priority placement and full access.",
+    includes: [
+      "Everything in Pro",
+      "Priority search placement & featured exposure",
+      "Advanced analytics",
+      "Priority support",
+    ],
+    feeLine: "0% platform fee per completed booking",
+  },
+};
+
 export default function ProviderBillingClient() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -155,6 +198,7 @@ export default function ProviderBillingClient() {
         {(["starter", "pro", "elite"] as ProviderPlan[]).map((plan) => {
           const isCurrent = plan === currentPlan;
           const canUpgrade = plan !== "starter" && !isCurrent;
+          const copy = PLAN_COPY[plan];
 
           return (
             <Card key={plan} className={isCurrent ? "border-primary/40" : undefined}>
@@ -166,13 +210,24 @@ export default function ProviderBillingClient() {
                 <CardDescription>{PLAN_PRICE[plan]}</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="text-sm text-muted-foreground">
-                  {plan === "starter" &&
-                    "Best for getting started. Create your provider profile, list services, and start receiving bookings with no monthly cost. A simple pay-as-you-go option while you build momentum on Verial. Includes: Basic provider profile & service listings. Standard search visibility with standard support. 10% platform fee per completed booking."}
-                  {plan === "pro" &&
-                    "Best for growing providers. Reduce your fees and increase visibility as you grow your business. Ideal for active providers who want better margins and more exposure. Includes: Everything in Starter. Improved search ranking. Basic performance analytics. Messaging tools. Reduced 5% platform fee per completed booking."}
-                  {plan === "elite" &&
-                    "Best for top providers. Maximize earnings with zero platform fees and premium visibility. Built for high-performing providers who want priority placement and full access. Includes: Everything in Pro. Priority search placement & featured exposure. Advanced analytics. Priority support. 0% platform fee per completed booking."}
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <p className="text-sm font-medium text-foreground">{copy.headline}</p>
+                    <p className="text-sm text-muted-foreground">{copy.description}</p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Includes</p>
+                    <ul className="list-disc pl-5 text-sm text-muted-foreground space-y-1">
+                      {copy.includes.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <div className="pt-1">
+                    <Badge variant="secondary">{copy.feeLine}</Badge>
+                  </div>
                 </div>
 
                 {plan === "starter" ? (
