@@ -3,7 +3,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import { ProviderBookingsClient } from "@/app/dashboard/provider/bookings/bookings-client";
+import { ProviderBookingsClient } from "@/app/dashboard/provider/(app)/bookings/bookings-client";
 
 vi.mock("@/components/ui/use-toast", () => ({
   useToast: () => ({ toast: vi.fn() }),

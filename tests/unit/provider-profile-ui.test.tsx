@@ -3,7 +3,7 @@
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
-import ProviderProfilePage from "@/app/dashboard/provider/profile/page";
+import ProviderProfilePage from "@/app/dashboard/provider/(app)/profile/page";
 
 vi.mock("@/lib/auth-guards", () => ({
   requireProvider: vi.fn().mockResolvedValue(undefined),

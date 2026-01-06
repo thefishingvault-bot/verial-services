@@ -16,13 +16,17 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { businessName, handle, identityDocumentUrl } = await req.json();
+    const { businessName, handle } = (await req.json()) as {
+      businessName?: unknown;
+      handle?: unknown;
+      identityDocumentUrl?: unknown;
+    };
     if (!businessName || !handle) {
       return new NextResponse("Missing businessName or handle", { status: 400 });
     }
 
-    if (!identityDocumentUrl || typeof identityDocumentUrl !== 'string') {
-      return new NextResponse('Missing identityDocumentUrl', { status: 400 });
+    if (typeof businessName !== "string" || typeof handle !== "string") {
+      return new NextResponse("Invalid businessName or handle", { status: 400 });
     }
 
     // Check if user already has a provider application
@@ -87,7 +91,11 @@ export async function POST(req: Request) {
             handle,
             status: 'pending',
             isVerified: false,
-            identityDocumentUrl,
+            // Manual upload is deprecated; providers verify in Sumsub.
+            identityDocumentUrl: null,
+            kycStatus: 'not_started',
+            kycSubmittedAt: null,
+            kycVerifiedAt: null,
             updatedAt: new Date(),
           })
           .where(eq(providers.id, existingProvider.id))
@@ -117,7 +125,6 @@ export async function POST(req: Request) {
       userId: userId,
       businessName: businessName,
       handle: handle,
-      identityDocumentUrl,
       // All other fields (status, trust, etc.) will use their defaults
     }).returning();
 

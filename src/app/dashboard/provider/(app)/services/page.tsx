@@ -5,4 +5,3 @@ export default async function ProviderServicesPage() {
   await requireProvider();
   return <ProviderServicesClient />;
 }
-

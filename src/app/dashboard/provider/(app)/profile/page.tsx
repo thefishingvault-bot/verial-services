@@ -5,4 +5,3 @@ export default async function ProviderProfilePage() {
   await requireProvider();
   return <ProviderProfileForm />;
 }
-

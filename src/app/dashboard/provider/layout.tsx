@@ -1,12 +1,13 @@
-import { requireProvider } from "@/lib/auth-guards";
-import { ProviderShell } from "./provider-shell";
+import { requireCustomer } from "@/lib/auth-guards";
 
 export default async function ProviderDashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  await requireProvider();
+  // Allow signed-in users to access /dashboard/provider/kyc during onboarding.
+  // Provider dashboard pages remain protected via the nested (app) layout.
+  await requireCustomer();
 
-  return <ProviderShell>{children}</ProviderShell>;
+  return <>{children}</>;
 }

@@ -29,21 +29,20 @@ const formSchema = z.object({
     .regex(/^[a-z0-9-]+$/, {
       message: 'Handle must only contain lowercase letters, numbers, and hyphens.',
     }),
-  identityDocumentUrl: z.string().url({ message: 'Please upload a valid ID document.' }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 type ProviderApplicationStatus = 'none' | 'pending' | 'approved' | 'rejected';
+type ProviderKycStatus = 'not_started' | 'in_progress' | 'pending_review' | 'verified' | 'rejected';
 
 export default function RegisterProviderPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderApplicationStatus>('none');
   const [statusLoading, setStatusLoading] = useState(true);
+  const [kycStatus, setKycStatus] = useState<ProviderKycStatus | null>(null);
+  const [kycStatusLoading, setKycStatusLoading] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
-  const [isUploadingId, setIsUploadingId] = useState(false);
-  const [idUploadError, setIdUploadError] = useState<string | null>(null);
-  const [idFileName, setIdFileName] = useState<string | null>(null);
   const router = useRouter();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
 
@@ -52,62 +51,8 @@ export default function RegisterProviderPage() {
     defaultValues: {
       businessName: '',
       handle: '',
-      identityDocumentUrl: '',
     },
   });
-
-  const uploadIdentityDocument = async (file: File) => {
-    setIdUploadError(null);
-
-    const isAllowedImage = file.type.startsWith('image/');
-    const isAllowedPdf = file.type === 'application/pdf';
-    if (!isAllowedImage && !isAllowedPdf) {
-      setIdUploadError('Only images or PDFs are allowed.');
-      return;
-    }
-
-    const maxBytes = 10 * 1024 * 1024;
-    if (file.size > maxBytes) {
-      setIdUploadError('File size exceeds 10MB limit.');
-      return;
-    }
-
-    setIsUploadingId(true);
-    try {
-      const presignRes = await fetch('/api/uploads/presign-identity-document', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fileType: file.type, fileSize: file.size }),
-      });
-
-      if (!presignRes.ok) {
-        const errorText = await presignRes.text();
-        throw new Error(errorText || 'Failed to prepare upload.');
-      }
-
-      const { uploadUrl, publicUrl } = (await presignRes.json()) as { uploadUrl: string; publicUrl: string };
-
-      const putRes = await fetch(uploadUrl, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      });
-
-      if (!putRes.ok) {
-        throw new Error('Upload failed. Please try again.');
-      }
-
-      form.setValue('identityDocumentUrl', publicUrl, { shouldValidate: true, shouldDirty: true });
-      setIdFileName(file.name);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Upload failed. Please try again.';
-      setIdUploadError(message);
-      form.setValue('identityDocumentUrl', '', { shouldValidate: true, shouldDirty: true });
-      setIdFileName(null);
-    } finally {
-      setIsUploadingId(false);
-    }
-  };
 
   useEffect(() => {
     let mounted = true;
@@ -141,6 +86,37 @@ export default function RegisterProviderPage() {
     };
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+    const run = async () => {
+      try {
+        const res = await fetch('/api/provider/kyc/status', { method: 'GET' });
+        if (!mounted) return;
+        if (res.status === 404) {
+          setKycStatus(null);
+          return;
+        }
+        if (!res.ok) {
+          setKycStatus(null);
+          return;
+        }
+        const data = (await res.json()) as { kycStatus?: ProviderKycStatus };
+        if (data?.kycStatus) {
+          setKycStatus(data.kycStatus);
+        } else {
+          setKycStatus(null);
+        }
+      } finally {
+        if (mounted) setKycStatusLoading(false);
+      }
+    };
+
+    run();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
   const isFormDisabled = useMemo(() => {
     return statusLoading || status === 'pending' || status === 'approved';
   }, [status, statusLoading]);
@@ -158,15 +134,22 @@ export default function RegisterProviderPage() {
 
       if (!res.ok) {
         const errorText = await res.text();
+        const alreadySubmitted = res.status === 400 && /already/i.test(errorText);
+        const handleConflict = res.status === 409 || /handle/i.test(errorText);
+        if (alreadySubmitted && !handleConflict) {
+          router.push('/dashboard/provider/kyc');
+          return;
+        }
         throw new Error(errorText || 'Failed to register.');
       }
 
       // Registration successful; application is now awaiting admin approval.
       setStatus('pending');
-      setIsLoading(false);
+      router.push('/dashboard/provider/kyc');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to register.';
       setError(message);
+    } finally {
       setIsLoading(false);
     }
   };
@@ -249,47 +232,39 @@ export default function RegisterProviderPage() {
                 )}
               />
 
-              <FormField
-                control={form.control}
-                name="identityDocumentUrl"
-                render={() => (
-                  <FormItem>
-                    <FormLabel>ID Verification Document</FormLabel>
-                    <FormControl>
-                      <Input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        disabled={isFormDisabled || isUploadingId}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0];
-                          if (!file) return;
-                          void uploadIdentityDocument(file);
-                        }}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      Upload a photo or PDF of an ID document for verification.
-                      {idFileName ? ` Uploaded: ${idFileName}` : ''}
-                    </FormDescription>
-                    {idUploadError && (
-                      <p className="text-sm font-medium text-destructive">{idUploadError}</p>
-                    )}
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+              <div className="rounded-lg border bg-muted/20 p-4">
+                <div className="space-y-1">
+                  <p className="text-sm font-semibold">Identity verification</p>
+                  <p className="text-sm text-muted-foreground">
+                    You’ll complete verification in Sumsub. It usually takes a few minutes.
+                  </p>
+                  {!kycStatusLoading && kycStatus && (
+                    <p className="text-xs text-muted-foreground">
+                      Status: <span className="font-medium text-foreground">{kycStatus.replace(/_/g, ' ')}</span>
+                    </p>
+                  )}
+                </div>
+                <div className="mt-3">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={statusLoading || status === 'none'}
+                    onClick={() => router.push('/dashboard/provider/kyc')}
+                  >
+                    Verify identity with Sumsub
+                  </Button>
+                </div>
+              </div>
 
               {error && (
                 <p className="text-sm font-medium text-destructive">{error}</p>
               )}
 
-              <Button type="submit" disabled={isFormDisabled || isLoading || isUploadingId} className="w-full">
+              <Button type="submit" disabled={isFormDisabled || isLoading} className="w-full">
                 {statusLoading
                   ? 'Checking application...'
                   : status === 'pending'
                     ? 'Awaiting approval'
-                    : isUploadingId
-                      ? 'Uploading ID...'
                     : isLoading
                       ? 'Registering...'
                       : 'Submit application'}

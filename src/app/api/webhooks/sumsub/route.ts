@@ -98,6 +98,9 @@ export async function POST(req: Request) {
     headersList.get("x-hook-signature");
 
   const secretConfigured = !!process.env.SUMSUB_WEBHOOK_SECRET;
+  if (!secretConfigured) {
+    console.warn("[API_SUMSUB_WEBHOOK] Webhook verification disabled: no secret configured");
+  }
   if (secretConfigured && !verifyWebhook(body, signatureHeader)) {
     console.warn("[API_SUMSUB_WEBHOOK] Webhook signature verification failed");
     return new NextResponse("Invalid signature", { status: 400 });

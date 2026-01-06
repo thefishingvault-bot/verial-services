@@ -10,7 +10,6 @@ export default async function ProviderNotificationsPage() {
 
   const { userId } = await auth();
   if (!userId) {
-    // requireProvider should already enforce this, but guard defensively
     throw new Error("User not authenticated");
   }
 
@@ -38,4 +37,3 @@ export default async function ProviderNotificationsPage() {
     </div>
   );
 }
-

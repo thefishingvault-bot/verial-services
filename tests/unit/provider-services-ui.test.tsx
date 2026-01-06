@@ -3,7 +3,7 @@
 import React from "react";
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { ProviderServicesList } from "@/app/dashboard/provider/services/provider-services-client";
+import { ProviderServicesList } from "@/app/dashboard/provider/(app)/services/provider-services-client";
 
 describe("ProviderServicesList", () => {
   it("renders provider services list with heading and service", () => {

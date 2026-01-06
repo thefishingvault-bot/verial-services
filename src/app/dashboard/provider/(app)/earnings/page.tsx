@@ -157,4 +157,3 @@ export default async function ProviderEarningsPage() {
     </div>
   );
 }
-

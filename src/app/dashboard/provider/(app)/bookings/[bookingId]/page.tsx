@@ -246,7 +246,7 @@ export default function ProviderBookingDetailPage() {
               rows={4}
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="Eg. Im unavailable at that time, or this job is outside my usual scope."
+              placeholder="Eg. I’m unavailable at that time, or this job is outside my usual scope."
             />
           </div>
           <DialogFooter className="mt-4 flex justify-end gap-2">
@@ -285,4 +285,3 @@ export default function ProviderBookingDetailPage() {
     </div>
   );
 }
-

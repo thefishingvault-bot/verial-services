@@ -331,9 +331,13 @@ function Recommendations({ items }: { items: CustomerDashboardData["recommendati
 }
 
 export default async function DashboardPage() {
-  const { role } = await requireCustomer();
+  const { userId, role } = await requireCustomer();
   if (role === "admin") {
     redirect("/dashboard/admin");
+  }
+
+  if (role === "provider") {
+    redirect("/dashboard/provider");
   }
 
   const data = await getCustomerDashboardData();

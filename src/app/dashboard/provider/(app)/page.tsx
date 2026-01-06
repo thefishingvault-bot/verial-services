@@ -228,4 +228,3 @@ export default async function ProviderDashboardPage() {
     </div>
   );
 }
-
