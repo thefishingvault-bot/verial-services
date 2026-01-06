@@ -19,7 +19,7 @@ export async function GET() {
     });
 
     if (!provider) {
-      return new NextResponse("Provider not found", { status: 404 });
+      return NextResponse.json({ kycStatus: "not_started" });
     }
 
     return NextResponse.json({ kycStatus: provider.kycStatus });

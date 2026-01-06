@@ -51,25 +51,54 @@ export async function POST(req: Request) {
     // --- 2. Create the User record (if it doesn't exist) ---
     // This ensures the foreign key constraint will pass.
     try {
-      await db.insert(users).values({
-        id: userId,
-        email: userEmail,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        avatarUrl: user.imageUrl,
-        role: "user", // Providers only get access after admin approval
-      }).onConflictDoNothing(); // If user already exists, do nothing
+      const now = new Date();
+      await db
+        .insert(users)
+        .values({
+          id: userId,
+          email: userEmail,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          avatarUrl: user.imageUrl,
+          // Keep role default; approval gating is handled elsewhere.
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: {
+            email: userEmail,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            avatarUrl: user.imageUrl,
+            updatedAt: now,
+          },
+        });
     } catch (dbError) {
+      // If the email is already taken by a different user row, surface a clearer error.
+      if (typeof dbError === "object" && dbError !== null) {
+        const pgError = dbError as { code?: string; constraint?: string; detail?: string };
+        if (pgError.code === "23505" && (pgError.constraint?.includes("email") || pgError.detail?.includes("email"))) {
+          console.error("[API_PROVIDER_REGISTER] User email conflict:", pgError);
+          return new NextResponse("Email already associated with another account", { status: 409 });
+        }
+      }
       console.error("[API_PROVIDER_REGISTER] Error creating user record:", dbError);
       return new NextResponse("Failed to create user record", { status: 500 });
     }
 
-    // Determine whether we should demote role (never demote admins).
-    const dbUser = await db.query.users.findFirst({
+    // Ensure the user row exists before inserting providers (prevents FK violations).
+    const ensuredUser = await db.query.users.findFirst({
       where: eq(users.id, userId),
-      columns: { role: true },
+      columns: { id: true, role: true },
     });
-    const isAdmin = currentClerkRole === "admin" || dbUser?.role === "admin";
+    if (!ensuredUser) {
+      console.error("[API_PROVIDER_REGISTER] User record missing after upsert", { userId });
+      return new NextResponse("Failed to create user record", { status: 500 });
+    }
+
+    // Determine whether we should demote role (never demote admins).
+    const isAdmin = currentClerkRole === "admin" || ensuredUser.role === "admin";
 
     // Ensure Clerk role is not prematurely set (but never downgrade admins).
     if (!isAdmin) {

@@ -25,7 +25,15 @@ export async function GET() {
     });
 
     if (!provider) {
-      return new NextResponse('Provider not found', { status: 404 });
+      return NextResponse.json({
+        providerId: null,
+        status: 'none',
+        isVerified: false,
+        businessName: null,
+        handle: null,
+        createdAt: null,
+        updatedAt: null,
+      });
     }
 
     return NextResponse.json({
