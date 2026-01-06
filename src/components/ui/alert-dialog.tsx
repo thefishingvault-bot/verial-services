@@ -14,9 +14,9 @@ function AlertDialog({
 
 function AlertDialogTrigger({
   ...props
-}: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Trigger> & { children?: React.ReactNode }) {
+}: (React.ComponentPropsWithoutRef<"button"> & { asChild?: boolean; children?: React.ReactNode })) {
   return (
-    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...props} />
+    <AlertDialogPrimitive.Trigger data-slot="alert-dialog-trigger" {...(props as unknown as React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Trigger>)} />
   )
 }
 
@@ -121,11 +121,11 @@ function AlertDialogDescription({
 function AlertDialogAction({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action> & { children?: React.ReactNode }) {
+}: (React.ComponentPropsWithoutRef<"button"> & { asChild?: boolean; children?: React.ReactNode })) {
   return (
     <AlertDialogPrimitive.Action
       className={cn(buttonVariants(), className)}
-      {...props}
+      {...(props as unknown as React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Action>)}
     />
   )
 }
@@ -133,11 +133,11 @@ function AlertDialogAction({
 function AlertDialogCancel({
   className,
   ...props
-}: React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel> & { children?: React.ReactNode }) {
+}: (React.ComponentPropsWithoutRef<"button"> & { asChild?: boolean; children?: React.ReactNode })) {
   return (
     <AlertDialogPrimitive.Cancel
       className={cn(buttonVariants({ variant: "outline" }), className)}
-      {...props}
+      {...(props as unknown as React.ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Cancel>)}
     />
   )
 }
