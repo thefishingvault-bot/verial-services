@@ -4,6 +4,7 @@ import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import crypto from "crypto";
+import { sumsubRequest } from "@/lib/sumsub";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,41 @@ function pickExternalUserId(payload: SumsubWebhookPayload): string | null {
     (payload.applicant as any)?.externalUserId,
     (payload.review as any)?.externalUserId,
     (payload.applicant as any)?.externalUserId,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function pickApplicantId(payload: SumsubWebhookPayload): string | null {
+  const candidates: unknown[] = [
+    (payload as any).applicantId,
+    (payload as any).applicant_id,
+    (payload.applicant as any)?.id,
+    (payload.applicant as any)?.applicantId,
+    (payload.review as any)?.applicantId,
+  ];
+
+  for (const value of candidates) {
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  return null;
+}
+
+function pickInspectionId(payload: SumsubWebhookPayload): string | null {
+  const candidates: unknown[] = [
+    (payload as any).inspectionId,
+    (payload as any).inspection_id,
+    (payload.applicant as any)?.inspectionId,
+    (payload.review as any)?.inspectionId,
   ];
 
   for (const value of candidates) {
@@ -192,10 +228,19 @@ export async function POST(req: Request) {
     return new NextResponse(null, { status: 200 });
   }
 
+  const applicantIdFromWebhook = pickApplicantId(payload);
+  const inspectionIdFromWebhook = pickInspectionId(payload);
+
   try {
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, externalUserId),
-      columns: { id: true, kycSubmittedAt: true, kycVerifiedAt: true },
+      columns: {
+        id: true,
+        kycSubmittedAt: true,
+        kycVerifiedAt: true,
+        sumsubApplicantId: true,
+        sumsubInspectionId: true,
+      },
     });
 
     if (!provider) {
@@ -205,14 +250,58 @@ export async function POST(req: Request) {
 
     const now = new Date();
 
+    let sumsubApplicantId = applicantIdFromWebhook ?? provider.sumsubApplicantId;
+    let sumsubInspectionId = inspectionIdFromWebhook ?? provider.sumsubInspectionId;
+
+    // If webhook didn't carry IDs, try resolving via externalUserId.
+    // This keeps admin document retrieval working even if Sumsub webhook schema changes.
+    if (!sumsubApplicantId || !sumsubInspectionId) {
+      try {
+        const applicant = await sumsubRequest<{ id?: string; inspectionId?: string }>({
+          method: "GET",
+          pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(externalUserId)}/one`,
+        });
+
+        if (!sumsubApplicantId && typeof applicant?.id === "string" && applicant.id.trim()) {
+          sumsubApplicantId = applicant.id;
+        }
+
+        if (!sumsubInspectionId && typeof applicant?.inspectionId === "string" && applicant.inspectionId.trim()) {
+          sumsubInspectionId = applicant.inspectionId;
+        }
+      } catch (error) {
+        console.warn("[API_SUMSUB_WEBHOOK] Failed to resolve applicant IDs via externalUserId", {
+          externalUserId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+
+    const updates: {
+      kycStatus: "not_started" | "in_progress" | "pending_review" | "verified" | "rejected";
+      kycSubmittedAt: Date | null;
+      kycVerifiedAt: Date | null;
+      updatedAt: Date;
+      sumsubApplicantId?: string | null;
+      sumsubInspectionId?: string | null;
+    } = {
+      kycStatus: mapped.kycStatus,
+      kycSubmittedAt: mapped.setSubmittedAt ? provider.kycSubmittedAt ?? now : provider.kycSubmittedAt,
+      kycVerifiedAt: mapped.setVerifiedAt ? provider.kycVerifiedAt ?? now : provider.kycVerifiedAt,
+      updatedAt: now,
+    };
+
+    if (sumsubApplicantId && sumsubApplicantId !== provider.sumsubApplicantId) {
+      updates.sumsubApplicantId = sumsubApplicantId;
+    }
+
+    if (sumsubInspectionId && sumsubInspectionId !== provider.sumsubInspectionId) {
+      updates.sumsubInspectionId = sumsubInspectionId;
+    }
+
     await db
       .update(providers)
-      .set({
-        kycStatus: mapped.kycStatus,
-        kycSubmittedAt: mapped.setSubmittedAt ? provider.kycSubmittedAt ?? now : provider.kycSubmittedAt,
-        kycVerifiedAt: mapped.setVerifiedAt ? provider.kycVerifiedAt ?? now : provider.kycVerifiedAt,
-        updatedAt: now,
-      })
+      .set(updates)
       .where(eq(providers.id, provider.id));
 
     return new NextResponse(null, { status: 200 });

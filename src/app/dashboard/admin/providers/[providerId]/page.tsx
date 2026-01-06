@@ -10,6 +10,7 @@ import { AdminRecomputeTrustButton } from '@/components/admin/admin-recompute-tr
 import { AddProviderNote } from '@/components/admin/add-provider-note';
 import { AdminProviderModerationControls } from '@/components/admin/admin-provider-moderation-controls';
 import { parseParamsOrNotFound, ProviderIdParamSchema } from '@/lib/validation/admin-loader-schemas';
+import { AdminProviderKycDocuments } from '@/components/admin/provider-kyc-documents';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -412,22 +413,26 @@ export default async function AdminProviderDetailPage({
                   <div className="text-xs text-muted-foreground">
                     Submitted: {formatDate(provider.kycSubmittedAt)} · Verified: {formatDate(provider.kycVerifiedAt)}
                   </div>
-                  <div className="text-xs">
-                    {provider.identityDocumentUrl ? (
-                      <a href={provider.identityDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
-                        Identity document
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">Identity document: —</span>
-                    )}
-                    <span className="text-muted-foreground"> · </span>
-                    {provider.businessDocumentUrl ? (
-                      <a href={provider.businessDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
-                        Business document
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground">Business document: —</span>
-                    )}
+                  <div className="text-xs space-y-2">
+                    <div>
+                      {provider.identityDocumentUrl ? (
+                        <a href={provider.identityDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                          Identity document (legacy)
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">Identity document (legacy): —</span>
+                      )}
+                      <span className="text-muted-foreground"> · </span>
+                      {provider.businessDocumentUrl ? (
+                        <a href={provider.businessDocumentUrl} target="_blank" rel="noreferrer" className="hover:underline">
+                          Business document (legacy)
+                        </a>
+                      ) : (
+                        <span className="text-muted-foreground">Business document (legacy): —</span>
+                      )}
+                    </div>
+
+                    <AdminProviderKycDocuments providerId={provider.id} />
                   </div>
                 </div>
               </div>

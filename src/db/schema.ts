@@ -92,6 +92,8 @@ export const providers = pgTable("providers", {
   kycStatus: kycStatusEnum("kyc_status").default("not_started").notNull(),
   identityDocumentUrl: text("identity_document_url"),
   businessDocumentUrl: text("business_document_url"),
+  sumsubApplicantId: varchar("sumsub_applicant_id", { length: 255 }),
+  sumsubInspectionId: varchar("sumsub_inspection_id", { length: 255 }),
   kycSubmittedAt: timestamp("kyc_submitted_at"),
   kycVerifiedAt: timestamp("kyc_verified_at"),
   // Suspension / Limited Mode
