@@ -26,6 +26,7 @@ export async function GET() {
 
     if (!provider) {
       return NextResponse.json({
+        exists: false,
         providerId: null,
         status: 'none',
         isVerified: false,
@@ -37,6 +38,7 @@ export async function GET() {
     }
 
     return NextResponse.json({
+      exists: true,
       providerId: provider.id,
       status: provider.status,
       isVerified: provider.isVerified,

@@ -60,16 +60,12 @@ export default function RegisterProviderPage() {
       try {
         const res = await fetch('/api/provider/application', { method: 'GET' });
         if (!mounted) return;
-        if (res.status === 404) {
-          setStatus('none');
-          return;
-        }
         if (!res.ok) {
           // If status lookup fails, don't block registration; keep form visible.
           setStatus('none');
           return;
         }
-        const data = (await res.json()) as { status?: ProviderApplicationStatus };
+        const data = (await res.json()) as { exists?: boolean; status?: ProviderApplicationStatus };
         if (data?.status === 'pending' || data?.status === 'approved' || data?.status === 'rejected') {
           setStatus(data.status);
         } else {
@@ -92,20 +88,12 @@ export default function RegisterProviderPage() {
       try {
         const res = await fetch('/api/provider/kyc/status', { method: 'GET' });
         if (!mounted) return;
-        if (res.status === 404) {
-          setKycStatus(null);
-          return;
-        }
         if (!res.ok) {
           setKycStatus(null);
           return;
         }
-        const data = (await res.json()) as { kycStatus?: ProviderKycStatus };
-        if (data?.kycStatus) {
-          setKycStatus(data.kycStatus);
-        } else {
-          setKycStatus(null);
-        }
+        const data = (await res.json()) as { exists?: boolean; kycStatus?: ProviderKycStatus | null };
+        setKycStatus(data?.exists ? (data.kycStatus ?? null) : null);
       } finally {
         if (mounted) setKycStatusLoading(false);
       }
@@ -253,6 +241,11 @@ export default function RegisterProviderPage() {
                   >
                     Verify identity with Sumsub
                   </Button>
+                  {!statusLoading && status === 'none' && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Submit your application first to start verification.
+                    </p>
+                  )}
                 </div>
               </div>
 
