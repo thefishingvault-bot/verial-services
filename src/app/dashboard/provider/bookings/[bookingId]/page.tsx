@@ -221,7 +221,7 @@ export default function ProviderBookingDetailPage() {
 
       <Dialog
         open={reasonDialogOpen}
-        onOpenChange={(open) => {
+        onOpenChange={(open: boolean) => {
           if (!open && !actionLoading) {
             setReasonDialogOpen(false);
             setPendingAction(null);

@@ -176,8 +176,8 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
                     <Checkbox
                       id={`category-${category.value}`}
                       checked={selectedCategories.includes(category.value)}
-                      onCheckedChange={(checked) => {
-                        const newCategories = checked
+                      onCheckedChange={(checked: boolean | "indeterminate") => {
+                        const newCategories = checked === true
                           ? [...selectedCategories, category.value]
                           : selectedCategories.filter(c => c !== category.value);
                         setSelectedCategories(newCategories);
@@ -232,8 +232,8 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
                   <Checkbox
                     id={`rating-${rating}`}
                     checked={minRating === rating}
-                    onCheckedChange={(checked) => {
-                      const newRating = checked ? rating : 0;
+                    onCheckedChange={(checked: boolean | "indeterminate") => {
+                      const newRating = checked === true ? rating : 0;
                       setMinRating(newRating);
                       updateFilters({ minRating: newRating });
                     }}
@@ -263,8 +263,8 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
                     <Checkbox
                       id={`trust-${level.value}`}
                       checked={selectedTrustLevels.includes(level.value)}
-                      onCheckedChange={(checked) => {
-                        const newLevels = checked
+                      onCheckedChange={(checked: boolean | "indeterminate") => {
+                        const newLevels = checked === true
                           ? [...selectedTrustLevels, level.value]
                           : selectedTrustLevels.filter(l => l !== level.value);
                         setSelectedTrustLevels(newLevels);
@@ -293,8 +293,8 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
               <Checkbox
                 id="verified-only"
                 checked={verifiedOnly}
-                onCheckedChange={(checked) => {
-                  setVerifiedOnly(checked as boolean);
+                onCheckedChange={(checked: boolean | "indeterminate") => {
+                  setVerifiedOnly(checked === true);
                 }}
               />
               <label
@@ -321,8 +321,8 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
                     <Checkbox
                       id={`availability-${option.value}`}
                       checked={selectedAvailability.includes(option.value)}
-                      onCheckedChange={(checked) => {
-                        const newAvailability = checked
+                      onCheckedChange={(checked: boolean | "indeterminate") => {
+                        const newAvailability = checked === true
                           ? [...selectedAvailability, option.value]
                           : selectedAvailability.filter(a => a !== option.value);
                         setSelectedAvailability(newAvailability);

@@ -394,7 +394,7 @@ const ProviderCommunicationTools: React.FC = () => {
                         <Checkbox
                           id={`provider-${provider.id}`}
                           checked={selectedProviders.includes(provider.id)}
-                          onCheckedChange={(checked) => handleProviderSelect(provider.id, checked as boolean)}
+                          onCheckedChange={(checked: boolean | "indeterminate") => handleProviderSelect(provider.id, checked === true)}
                         />
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
