@@ -71,44 +71,112 @@ function mapKycStatus(payload: SumsubWebhookPayload): {
   return { kycStatus: "in_progress", setSubmittedAt: false, setVerifiedAt: false };
 }
 
-function verifyWebhook(body: string, signatureHeader: string | null): boolean {
+function safeTimingEqualHex(aHex: string, bHex: string): boolean {
+  const a = aHex.trim().toLowerCase();
+  const b = bHex.trim().toLowerCase();
+
+  // timingSafeEqual requires equal-length buffers.
+  if (a.length !== b.length) return false;
+  // Basic hex validation.
+  if (!/^[0-9a-f]+$/.test(a) || !/^[0-9a-f]+$/.test(b) || a.length % 2 !== 0) return false;
+
+  return crypto.timingSafeEqual(Buffer.from(a, "hex"), Buffer.from(b, "hex"));
+}
+
+function verifySumsubWebhook(rawBody: string, payloadDigest: string, payloadDigestAlg: string | null): {
+  ok: boolean;
+  computed: string;
+  algUsed: string;
+  algHeader: string | null;
+} {
   const secret = process.env.SUMSUB_WEBHOOK_SECRET;
   if (!secret) {
-    return true; // verification not configured
+    return { ok: false, computed: "", algUsed: "", algHeader: payloadDigestAlg };
   }
 
-  if (!signatureHeader) {
-    return false;
+  const algHeader = payloadDigestAlg?.trim() || null;
+  // Sumsub uses x-payload-digest-alg like "HMAC_SHA256_HEX".
+  // If it's missing, default to SHA256 but log it.
+  const normalizedAlg = (algHeader ?? "HMAC_SHA256_HEX").toUpperCase();
+  const supportsSha256 = normalizedAlg.includes("SHA256") && normalizedAlg.includes("HMAC");
+  if (!supportsSha256) {
+    return { ok: false, computed: "", algUsed: normalizedAlg, algHeader };
   }
 
-  // Sumsub webhook signature header format varies by configuration.
-  // We support a simple HMAC-SHA256 hex digest of the raw body.
-  const digest = crypto.createHmac("sha256", secret).update(body).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(signatureHeader));
+  const computed = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
+  return {
+    ok: safeTimingEqualHex(computed, payloadDigest),
+    computed,
+    algUsed: "HMAC_SHA256_HEX",
+    algHeader,
+  };
 }
 
 export async function POST(req: Request) {
-  const body = await req.text();
+  // Verify using the RAW body (no JSON re-stringify).
+  const rawBody = await req.text();
   const headersList = await headers();
 
-  const signatureHeader =
-    headersList.get("x-sumsub-signature") ||
-    headersList.get("x-payload-digest") ||
-    headersList.get("x-signature") ||
-    headersList.get("x-hook-signature");
+  const payloadDigest = headersList.get("x-payload-digest");
+  const payloadDigestAlg = headersList.get("x-payload-digest-alg");
+
+  const headerPresence = {
+    hasPayloadDigest: !!payloadDigest,
+    hasPayloadDigestAlg: !!payloadDigestAlg,
+    // Legacy/other signature headers that might be present depending on Sumsub settings.
+    hasXSig: !!headersList.get("x-sumsub-signature"),
+    hasXSignature: !!headersList.get("x-signature"),
+    hasXHookSignature: !!headersList.get("x-hook-signature"),
+  };
 
   const secretConfigured = !!process.env.SUMSUB_WEBHOOK_SECRET;
+  const isProd = process.env.NODE_ENV === "production";
+
   if (!secretConfigured) {
-    console.warn("[API_SUMSUB_WEBHOOK] Webhook verification disabled: no secret configured");
-  }
-  if (secretConfigured && !verifyWebhook(body, signatureHeader)) {
-    console.warn("[API_SUMSUB_WEBHOOK] Webhook signature verification failed");
-    return new NextResponse("Invalid signature", { status: 400 });
+    if (isProd) {
+      console.warn("[API_SUMSUB_WEBHOOK] Missing SUMSUB_WEBHOOK_SECRET in production");
+      return new NextResponse("Webhook not configured", { status: 500 });
+    }
+    console.warn("[API_SUMSUB_WEBHOOK] Dev bypass: no SUMSUB_WEBHOOK_SECRET configured", {
+      ...headerPresence,
+      alg: payloadDigestAlg,
+    });
+  } else {
+    if (!payloadDigest) {
+      if (isProd) {
+        console.warn("[API_SUMSUB_WEBHOOK] Missing x-payload-digest header", {
+          ...headerPresence,
+          alg: payloadDigestAlg,
+        });
+        return new NextResponse("Missing signature", { status: 401 });
+      }
+      console.warn("[API_SUMSUB_WEBHOOK] Dev bypass: missing x-payload-digest", {
+        ...headerPresence,
+        alg: payloadDigestAlg,
+      });
+    } else {
+      const verification = verifySumsubWebhook(rawBody, payloadDigest, payloadDigestAlg);
+
+      if (!verification.ok) {
+        console.warn("[API_SUMSUB_WEBHOOK] Webhook signature verification failed", {
+          ...headerPresence,
+          alg: verification.algHeader,
+          algUsed: verification.algUsed,
+        });
+        return new NextResponse("Invalid signature", { status: 401 });
+      }
+
+      console.info("[API_SUMSUB_WEBHOOK] Webhook signature verified", {
+        ...headerPresence,
+        alg: verification.algHeader,
+        algUsed: verification.algUsed,
+      });
+    }
   }
 
   let payload: SumsubWebhookPayload;
   try {
-    payload = body ? (JSON.parse(body) as SumsubWebhookPayload) : {};
+    payload = rawBody ? (JSON.parse(rawBody) as SumsubWebhookPayload) : {};
   } catch {
     return new NextResponse("Invalid JSON", { status: 400 });
   }
