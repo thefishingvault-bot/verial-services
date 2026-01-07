@@ -34,8 +34,8 @@ export async function POST(req: Request) {
       return new NextResponse("Not a provider. Register as a provider first.", { status: 403 });
     }
 
-    if (provider.status !== 'approved') {
-      return new NextResponse('You must be an approved provider to list services.', { status: 403 });
+    if (provider.status === 'rejected') {
+      return new NextResponse('Your provider application was rejected. You cannot create services.', { status: 403 });
     }
 
     const { title, description, priceInCents, category, region, suburb } = await req.json();
@@ -68,6 +68,7 @@ export async function POST(req: Request) {
       chargesGst: provider.chargesGst,
       region,
       suburb,
+      isPublished: false,
     }).returning();
 
     console.log(`[API_SERVICE_CREATE] Provider ${provider.id} created Service ${newService.id}`);

@@ -76,6 +76,13 @@ export async function PATCH(
       return new NextResponse("Provider not found", { status: 404 });
     }
 
+    if (isPublished === true && provider.status !== 'approved') {
+      return new NextResponse(
+        'Awaiting approval: you can create and edit draft services, but you can’t publish until your provider application is approved.',
+        { status: 403 },
+      );
+    }
+
     let categoryValue: (typeof serviceCategoryEnum.enumValues)[number] | undefined;
     if (category !== undefined) {
       if (!serviceCategoryEnum.enumValues.includes(category as (typeof serviceCategoryEnum.enumValues)[number])) {

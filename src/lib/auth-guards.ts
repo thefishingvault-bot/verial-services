@@ -32,7 +32,11 @@ export const requireCustomer = async () => {
   return { userId, role: role ?? "user" };
 };
 
-export const requireProvider = async () => {
+export const requireProvider = async (
+  options?: {
+    allowUnapproved?: boolean;
+  },
+) => {
   const { userId } = await auth();
   if (!userId) {
     redirect("/sign-in");
@@ -49,7 +53,11 @@ export const requireProvider = async () => {
       where: eq(providers.userId, userId),
       columns: { status: true },
     });
-    if (provider?.status !== "approved") {
+    if (!provider) {
+      redirect("/dashboard/register-provider");
+    }
+
+    if (!options?.allowUnapproved && provider.status !== "approved") {
       redirect("/dashboard/register-provider");
     }
   }

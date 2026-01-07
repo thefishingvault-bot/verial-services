@@ -39,6 +39,10 @@ const isProviderKycRoute = createRouteMatcher([
   "/dashboard/provider/kyc(.*)",
 ]);
 
+const isProviderServicesRoute = createRouteMatcher([
+  "/dashboard/provider/services(.*)",
+]);
+
 const isCustomerDashboardRoute = createRouteMatcher([
   "/dashboard(.*)",
 ]);
@@ -112,28 +116,23 @@ const clerk = clerkMiddleware(async (auth, req) => {
 
   // Provider dashboard guard
   if (isProviderDashboardRoute(req)) {
-    // Allow access to the provider KYC route during onboarding (pending/unapproved).
-    if (isProviderKycRoute(req)) {
-      const provider = await db.query.providers.findFirst({
-        where: (p, { eq }) => eq(p.userId, userId),
-        columns: { id: true },
-      });
-
-      if (!provider) {
-        return NextResponse.redirect(new URL("/dashboard/register-provider", req.url));
-      }
-
-      return NextResponse.next();
-    }
-
     if (role !== "provider" && role !== "admin") {
       return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
     // Providers only get dashboard access after approval.
     if (role === "provider") {
-      const status = await getProviderStatus();
-      if (status !== "approved") {
+      const provider = await db.query.providers.findFirst({
+        where: (p, { eq }) => eq(p.userId, userId),
+        columns: { status: true },
+      });
+
+      if (!provider) {
+        return NextResponse.redirect(new URL("/dashboard/register-provider", req.url));
+      }
+
+      const allowDuringOnboarding = isProviderKycRoute(req) || isProviderServicesRoute(req);
+      if (provider.status !== "approved" && !allowDuringOnboarding) {
         return NextResponse.redirect(new URL("/dashboard/register-provider", req.url));
       }
     }

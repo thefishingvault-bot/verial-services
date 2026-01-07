@@ -43,7 +43,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-3xl font-bold">My Services</h1>
         <Button asChild className="w-full sm:w-auto">
-          <Link href="/dashboard/services/new">
+          <Link href="/dashboard/provider/services/new">
             <Plus className="mr-2 h-4 w-4" /> Create New
           </Link>
         </Button>
@@ -55,7 +55,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
           <h3 className="text-lg font-semibold">No services yet</h3>
           <p className="text-muted-foreground mb-4">Start earning by listing your first service.</p>
           <Button asChild variant="outline">
-            <Link href="/dashboard/services/new">Create Service</Link>
+            <Link href="/dashboard/provider/services/new">Create Service</Link>
           </Button>
         </div>
       ) : (
@@ -97,7 +97,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                 </Button>
                 <div className="flex gap-2">
                   <Button variant="outline" size="sm" asChild>
-                    <Link href={`/dashboard/services/${service.id}/edit`}>
+                    <Link href={`/dashboard/provider/services/${service.id}/edit`}>
                       <Edit className="h-4 w-4 mr-2" /> Edit
                     </Link>
                   </Button>
