@@ -24,39 +24,45 @@ export async function POST(req: Request) {
       return new NextResponse('Not a provider', { status: 403 });
     }
 
-    if (provider.status !== 'approved') {
-      return new NextResponse('Provider must be approved to upload images.', { status: 403 });
+    if (provider.status === 'rejected') {
+      return new NextResponse('Provider application rejected.', { status: 403 });
     }
 
-    const { serviceId, fileType, fileSize } = await req.json();
-    if (!serviceId || !fileType || !fileSize) {
-      return new NextResponse('Missing serviceId, fileType, or fileSize', { status: 400 });
+    const { serviceId, fileType, fileSize } = (await req.json()) as {
+      serviceId?: string;
+      fileType?: string;
+      fileSize?: number;
+    };
+    if (!fileType || !fileSize) {
+      return new NextResponse('Missing fileType or fileSize', { status: 400 });
     }
 
     // 2. Validate file type and size
-    if (!fileType.startsWith('image/')) {
-      return new NextResponse('Invalid file type. Only images are allowed.', { status: 400 });
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(fileType)) {
+      return new NextResponse('Invalid file type. Only JPG, PNG, and WEBP images are allowed.', { status: 400 });
     }
     // 5MB limit
     if (fileSize > 5 * 1024 * 1024) {
       return new NextResponse('File size exceeds 5MB limit.', { status: 400 });
     }
 
-    // 3. Verify service ownership
-    const service = await db.query.services.findFirst({
-      where: and(
-        eq(services.id, serviceId),
-        eq(services.providerId, provider.id)
-      ),
-    });
+    // 3. If serviceId provided, verify service ownership
+    if (serviceId) {
+      const service = await db.query.services.findFirst({
+        where: and(eq(services.id, serviceId), eq(services.providerId, provider.id)),
+      });
 
-    if (!service) {
-      return new NextResponse('Service not found or you do not own it.', { status: 404 });
+      if (!service) {
+        return new NextResponse('Service not found or you do not own it.', { status: 404 });
+      }
     }
 
     // 4. Generate a unique key for the file
-    const fileExtension = fileType.split('/')[1];
-    const key = `services/${serviceId}/cover-${Date.now()}.${fileExtension}`;
+    const fileExtension = fileType === 'image/jpeg' ? 'jpg' : fileType.split('/')[1];
+    const key = serviceId
+      ? `services/${serviceId}/cover-${Date.now()}.${fileExtension}`
+      : `services/tmp/${provider.id}/cover-${Date.now()}.${fileExtension}`;
 
     // 5. Get R2 bucket name
     const R2_BUCKET = process.env.R2_BUCKET;

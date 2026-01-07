@@ -14,6 +14,7 @@ describe("ProviderServicesList", () => {
             id: "svc_1",
             title: "Test Service",
             slug: "test-service",
+            pricingType: "fixed",
             priceInCents: 15000,
             category: "cleaning",
             chargesGst: true,

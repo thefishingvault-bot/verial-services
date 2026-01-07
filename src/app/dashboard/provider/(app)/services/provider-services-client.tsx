@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Loader2, Plus, Trash2, Edit, Package, ExternalLink } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { formatServicePriceLabel } from '@/lib/pricing';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,9 +25,12 @@ interface Service {
   id: string;
   title: string;
   slug: string;
-  priceInCents: number;
+  pricingType: 'fixed' | 'from' | 'quote';
+  priceInCents: number | null;
+  priceNote?: string | null;
   category: string;
   chargesGst: boolean;
+  coverImageUrl?: string | null;
   isPublished?: boolean;
   region?: string | null;
   suburb?: string | null;
@@ -62,6 +67,15 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((service) => (
             <Card key={service.id}>
+              <div className="relative aspect-video w-full overflow-hidden rounded-t-lg bg-muted">
+                {service.coverImageUrl ? (
+                  <Image src={service.coverImageUrl} alt={service.title} fill className="object-cover" />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <span className="text-xs text-muted-foreground">No image</span>
+                  </div>
+                )}
+              </div>
               <CardHeader>
                 <CardTitle className="truncate" title={service.title}>
                   {service.title}
@@ -77,10 +91,10 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
               </CardHeader>
               <CardContent>
                 <p className="font-bold">
-                  ${(service.priceInCents / 100).toFixed(2)}
-                  <span className="text-xs font-normal text-muted-foreground ml-1">
-                    {service.chargesGst ? 'inc. GST' : 'exc. GST'}
-                  </span>
+                  {formatServicePriceLabel({
+                    pricingType: service.pricingType,
+                    priceInCents: service.priceInCents,
+                  })}
                 </p>
                 {(service.suburb || service.region) && (
                   <p className="mt-2 text-sm text-muted-foreground truncate">

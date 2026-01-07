@@ -65,9 +65,8 @@ export async function PATCH(
       priceNote?: string | null;
       category?: string;
       chargesGst?: boolean;
-      region?: string;
-      suburb?: string;
       isPublished?: boolean;
+      coverImageUrl?: string | null;
     };
     const {
       title,
@@ -77,9 +76,8 @@ export async function PATCH(
       priceNote,
       category,
       chargesGst,
-      region,
-      suburb,
       isPublished,
+      coverImageUrl,
     } = body;
 
     const provider = await db.query.providers.findFirst({
@@ -104,27 +102,24 @@ export async function PATCH(
       categoryValue = category as (typeof serviceCategoryEnum.enumValues)[number];
     }
 
-    if (region !== undefined) {
-      if (!Object.keys(NZ_REGIONS).includes(region)) {
-        return new NextResponse("Invalid region", { status: 400 });
-      }
-      if (suburb === undefined) {
-        return new NextResponse("Suburb required when updating region", { status: 400 });
-      }
-      if (!NZ_REGIONS[region].includes(suburb)) {
-        return new NextResponse("Invalid suburb for region", { status: 400 });
-      }
+    // Inherit service area from provider profile.
+    const providerRegion = provider.baseRegion;
+    const providerSuburb = provider.baseSuburb;
+
+    if (!providerRegion || !providerSuburb) {
+      return new NextResponse(
+        'Please set your service area (base region/suburb) in /dashboard/provider/profile before saving services.',
+        { status: 400 },
+      );
     }
 
-    if (suburb !== undefined && region === undefined) {
-      const existing = await db.query.services.findFirst({
-        where: and(eq(services.id, serviceId), eq(services.providerId, provider.id)),
-        columns: { region: true },
-      });
-      const effectiveRegion = region ?? existing?.region;
-      if (!effectiveRegion || !NZ_REGIONS[effectiveRegion] || !NZ_REGIONS[effectiveRegion].includes(suburb)) {
-        return new NextResponse("Invalid suburb", { status: 400 });
-      }
+    const validRegion = Object.keys(NZ_REGIONS).includes(providerRegion);
+    const validSuburb = validRegion ? NZ_REGIONS[providerRegion].includes(providerSuburb) : false;
+    if (!validRegion || !validSuburb) {
+      return new NextResponse(
+        'Your service area (base region/suburb) is invalid. Please update it in /dashboard/provider/profile.',
+        { status: 400 },
+      );
     }
 
     const normalizedPricingType = pricingType === undefined
@@ -139,6 +134,12 @@ export async function PATCH(
       ? undefined
       : (typeof priceNote === 'string' && priceNote.trim().length
         ? priceNote.trim().slice(0, 500)
+        : null);
+
+    const normalizedCoverImageUrl = coverImageUrl === undefined
+      ? undefined
+      : (typeof coverImageUrl === 'string' && coverImageUrl.trim().length
+        ? coverImageUrl.trim().slice(0, 2048)
         : null);
 
     // Validate pricingType/priceInCents combo.
@@ -178,9 +179,11 @@ export async function PATCH(
         ...(needsPricingValidation && { priceInCents: effectivePriceInCents }),
         ...(categoryValue !== undefined && { category: categoryValue }),
         ...(chargesGst !== undefined && { chargesGst }),
-        ...(region !== undefined && { region }),
-        ...(suburb !== undefined && { suburb }),
+        // Always keep service area in sync with provider profile
+        region: providerRegion,
+        suburb: providerSuburb,
         ...(isPublished !== undefined && { isPublished }),
+        ...(normalizedCoverImageUrl !== undefined && { coverImageUrl: normalizedCoverImageUrl }),
         updatedAt: new Date(),
       })
       .where(

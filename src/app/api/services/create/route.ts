@@ -45,8 +45,9 @@ export async function POST(req: Request) {
       priceInCents?: number | null;
       priceNote?: string | null;
       category?: string;
+      coverImageUrl?: string | null;
     };
-    const { title, description, pricingType, priceInCents, priceNote, category } = body;
+    const { title, description, pricingType, priceInCents, priceNote, category, coverImageUrl } = body;
 
     if (!title || !category || !pricingType) {
       return new NextResponse(
@@ -62,6 +63,12 @@ export async function POST(req: Request) {
     const normalizedPriceNote = typeof priceNote === 'string' && priceNote.trim().length
       ? priceNote.trim().slice(0, 500)
       : null;
+
+    const normalizedCoverImageUrl = coverImageUrl === undefined
+      ? undefined
+      : (typeof coverImageUrl === 'string' && coverImageUrl.trim().length
+        ? coverImageUrl.trim().slice(0, 2048)
+        : null);
 
     const effectivePriceInCents = pricingType === 'quote'
       ? null
@@ -112,6 +119,7 @@ export async function POST(req: Request) {
       category: categoryValue,
       slug: `${slug}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure uniqueness for MVP
       chargesGst: provider.chargesGst,
+      ...(normalizedCoverImageUrl !== undefined && { coverImageUrl: normalizedCoverImageUrl }),
       region: providerRegion,
       suburb: providerSuburb,
       isPublished: false,
