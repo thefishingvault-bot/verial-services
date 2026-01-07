@@ -18,3 +18,29 @@ export const stripe = new Stripe(stripeSecretKey, {
   typescript: true,
 });
 
+export type StripeMode = "test" | "live";
+
+export function detectStripeMode(secretKey: string | undefined = process.env.STRIPE_SECRET_KEY): StripeMode {
+  if (!secretKey) return "test";
+  if (secretKey.startsWith("sk_live")) return "live";
+  return "test";
+}
+
+export async function resolveActivePriceIdByLookupKey(lookupKey: string): Promise<string | null> {
+  const res = await stripe.prices.list({
+    lookup_keys: [lookupKey],
+    active: true,
+    limit: 1,
+    expand: ["data.product"],
+  });
+  return res.data[0]?.id ?? null;
+}
+
+export async function retrieveStripePriceSafe(priceId: string): Promise<Stripe.Price | null> {
+  try {
+    return await stripe.prices.retrieve(priceId);
+  } catch {
+    return null;
+  }
+}
+

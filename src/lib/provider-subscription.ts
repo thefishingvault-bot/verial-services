@@ -20,6 +20,12 @@ export function getStripePriceIdForPlan(plan: ProviderPlan): string | null {
   return null;
 }
 
+export function getStripeLookupKeyForPlan(plan: ProviderPlan): string | null {
+  if (plan === "pro") return process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
+  if (plan === "elite") return process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+  return null;
+}
+
 export function planFromStripePriceId(priceId: string | null | undefined): ProviderPlan | null {
   if (!priceId) return null;
   if (process.env.STRIPE_PRICE_PRO_MONTHLY && priceId === process.env.STRIPE_PRICE_PRO_MONTHLY) return "pro";

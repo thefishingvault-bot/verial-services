@@ -6,8 +6,14 @@ import { z } from "zod";
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
-import { getStripePriceIdForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { getStripeLookupKeyForPlan, getStripePriceIdForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 import { checkProvidersColumnsExist } from "@/lib/provider-subscription-schema";
+import {
+  detectStripeMode,
+  resolveActivePriceIdByLookupKey,
+  retrieveStripePriceSafe,
+  type StripeMode,
+} from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
@@ -45,11 +51,66 @@ export async function POST(req: Request) {
     }
 
     const plan = normalizeProviderPlan(parsed.data.plan);
-    const priceId = getStripePriceIdForPlan(plan);
+    const mode: StripeMode = detectStripeMode();
+
+    // Prefer lookup_key resolution so we can rotate prices without code changes.
+    const lookupKey = getStripeLookupKeyForPlan(plan);
+    let priceId: string | null = null;
+    let priceSource: "lookup_key" | "env" | "none" = "none";
+
+    if (lookupKey) {
+      priceId = await resolveActivePriceIdByLookupKey(lookupKey);
+      if (priceId) priceSource = "lookup_key";
+    }
+
+    if (!priceId) {
+      priceId = getStripePriceIdForPlan(plan);
+      if (priceId) priceSource = "env";
+    }
+
     if (!priceId) {
       return NextResponse.json(
-        { error: `Missing Stripe price id for plan ${plan}. Set STRIPE_PRICE_PRO_MONTHLY / STRIPE_PRICE_ELITE_MONTHLY.` },
-        { status: 500 },
+        {
+          error: "Stripe price not configured",
+          plan,
+          mode,
+          lookupKey,
+          hint: "Set STRIPE_LOOKUP_KEY_PRO_MONTHLY/ELITE_MONTHLY (recommended) or STRIPE_PRICE_PRO_MONTHLY/ELITE_MONTHLY",
+        },
+        { status: 503 },
+      );
+    }
+
+    const price = await retrieveStripePriceSafe(priceId);
+    console.log("[API_PROVIDER_SUBSCRIPTION_CHECKOUT]", {
+      plan,
+      mode,
+      lookupKey,
+      resolvedPriceId: priceId,
+      priceSource,
+      active: price?.active ?? null,
+      livemode: price?.livemode ?? null,
+    });
+
+    if (!price) {
+      return NextResponse.json(
+        { error: "Stripe price not found", plan, priceId, mode },
+        { status: 409 },
+      );
+    }
+
+    if (price.active !== true) {
+      return NextResponse.json(
+        { error: "Stripe price inactive", plan, priceId, mode },
+        { status: 409 },
+      );
+    }
+
+    const expectedLive = mode === "live";
+    if (price.livemode !== expectedLive) {
+      return NextResponse.json(
+        { error: "Stripe price mode mismatch", plan, priceId, mode },
+        { status: 409 },
       );
     }
 
