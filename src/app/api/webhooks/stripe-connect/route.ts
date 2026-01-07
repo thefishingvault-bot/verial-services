@@ -27,10 +27,9 @@ async function updateProviderFromAccount(params: {
   const stripeConnectId = account.id;
   const metadataProviderId = providerIdFromAccountMetadata(account);
 
-  const provider = await db.query.providers.findFirst({
-    where: metadataProviderId
-      ? eq(providers.id, metadataProviderId)
-      : eq(providers.stripeConnectId, stripeConnectId),
+  // Prefer matching by connect account id (strongest link), fall back to metadata.
+  const byConnectId = await db.query.providers.findFirst({
+    where: eq(providers.stripeConnectId, stripeConnectId),
     columns: {
       id: true,
       userId: true,
@@ -40,10 +39,21 @@ async function updateProviderFromAccount(params: {
     },
   });
 
-  if (!provider) {
-    // Fallback: if metadata matched lookup didn't find it, try connect id.
-    const fallback = await db.query.providers.findFirst({
-      where: eq(providers.stripeConnectId, stripeConnectId),
+  let provider:
+    | ({
+        id: string;
+        userId: string;
+        stripeConnectId: string | null;
+        chargesEnabled: boolean;
+        payoutsEnabled: boolean;
+      } & { matchedBy: "stripe_connect_id" | "metadata.providerId" })
+    | null = null;
+
+  if (byConnectId) {
+    provider = { ...byConnectId, matchedBy: "stripe_connect_id" };
+  } else if (metadataProviderId) {
+    const byProviderId = await db.query.providers.findFirst({
+      where: eq(providers.id, metadataProviderId),
       columns: {
         id: true,
         userId: true,
@@ -53,36 +63,13 @@ async function updateProviderFromAccount(params: {
       },
     });
 
-    if (!fallback) {
-      return { ok: false, reason: "provider_not_found", stripeConnectId };
+    if (byProviderId) {
+      provider = { ...byProviderId, matchedBy: "metadata.providerId" };
     }
+  }
 
-    // Proceed with fallback record.
-    await db
-      .update(providers)
-      .set({
-        chargesEnabled: account.charges_enabled,
-        payoutsEnabled: account.payouts_enabled,
-        updatedAt: new Date(),
-      })
-      .where(eq(providers.id, fallback.id));
-
-    console.info("[API_STRIPE_CONNECT_WEBHOOK] Provider updated", {
-      providerId: fallback.id,
-      accountId: stripeConnectId,
-      chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled,
-      eventId,
-    });
-
-    return {
-      ok: true,
-      providerId: fallback.id,
-      stripeConnectId,
-      chargesEnabled: account.charges_enabled,
-      payoutsEnabled: account.payouts_enabled,
-      userId: fallback.userId ?? null,
-    };
+  if (!provider) {
+    return { ok: false, reason: "provider_not_found", stripeConnectId };
   }
 
   const prevChargesEnabled = provider.chargesEnabled;
@@ -104,6 +91,7 @@ async function updateProviderFromAccount(params: {
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
     eventId,
+    matchedBy: (provider as any).matchedBy ?? null,
   });
 
   // Best-effort notifications (do not block webhook response)

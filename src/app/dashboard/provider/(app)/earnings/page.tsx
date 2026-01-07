@@ -3,7 +3,7 @@ import { requireProvider } from "@/lib/auth-guards";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/card";
 import { EarningsSummaryCards } from "@/components/provider/earnings-summary-cards";
 import { EarningsBookingsTable } from "@/components/provider/earnings-bookings-table";
-import { StripeWarning } from "@/components/provider/stripe-warning";
+import { StripeConnectStatusBanner } from "@/components/provider/stripe-connect-status-banner";
 import { formatPrice } from "@/lib/utils";
 import { cookies, headers } from "next/headers";
 
@@ -99,16 +99,9 @@ export default async function ProviderEarningsPage() {
 
   const upcoming = earnings?.upcomingPayout ?? null;
 
-  const stripeConfigured = !!earnings?.connect?.stripeConnectId && !!earnings?.connect?.payoutsEnabled;
-
   return (
     <div className="space-y-6">
-      {!stripeConfigured && (
-        <StripeWarning
-          stripeConnectId={earnings?.connect?.stripeConnectId ?? null}
-          payoutsEnabled={earnings?.connect?.payoutsEnabled ?? false}
-        />
-      )}
+      <StripeConnectStatusBanner />
 
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Earnings</h1>
