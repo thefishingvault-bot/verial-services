@@ -33,6 +33,10 @@ export async function POST() {
       const account = await stripe.accounts.create({
         type: "express",
         email: user.emailAddresses[0].emailAddress,
+        metadata: {
+          providerId: provider.id,
+          userId,
+        },
       });
 
       // Save the new Connect ID to our database
@@ -44,11 +48,23 @@ export async function POST() {
       provider = updatedProvider;
     }
 
+    // Best-effort: ensure metadata exists so webhooks can always map.
+    try {
+      await stripe.accounts.update(provider.stripeConnectId!, {
+        metadata: {
+          providerId: provider.id,
+          userId,
+        },
+      });
+    } catch {
+      // ignore
+    }
+
     // --- 2. Create the Account Link ---
     const accountLink = await stripe.accountLinks.create({
       account: provider.stripeConnectId!,
-      refresh_url: `${siteUrl}/dashboard/payouts`,
-      return_url: `${siteUrl}/dashboard/payouts`,
+      refresh_url: `${siteUrl}/dashboard/provider/earnings`,
+      return_url: `${siteUrl}/dashboard/provider/earnings`,
       type: "account_onboarding",
     });
 

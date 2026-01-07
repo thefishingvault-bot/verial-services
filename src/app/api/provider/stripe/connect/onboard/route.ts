@@ -49,6 +49,10 @@ export async function POST() {
       const account = await stripe.accounts.create({
         type: "express",
         ...(email ? { email } : {}),
+        metadata: {
+          providerId: provider.id,
+          userId,
+        },
       });
 
       stripeConnectId = account.id;
@@ -57,6 +61,18 @@ export async function POST() {
         .update(providers)
         .set({ stripeConnectId })
         .where(eq(providers.id, provider.id));
+    }
+
+    // Best-effort: ensure metadata exists so webhooks can map.
+    try {
+      await stripe.accounts.update(stripeConnectId, {
+        metadata: {
+          providerId: provider.id,
+          userId,
+        },
+      });
+    } catch {
+      // ignore
     }
 
     // Decide whether we should send the user through onboarding again or an update flow.

@@ -4,6 +4,7 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
 import { subDays } from "date-fns";
+import { stripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
@@ -20,6 +21,46 @@ export async function GET() {
 
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    let chargesEnabled = provider.chargesEnabled ?? false;
+    let payoutsEnabled = provider.payoutsEnabled ?? false;
+
+    // Fallback sync: if we have a Connect account, refresh status from Stripe so the UI
+    // doesn't depend entirely on webhooks.
+    if (provider.stripeConnectId) {
+      try {
+        const account = await stripe.accounts.retrieve(provider.stripeConnectId);
+        const latestChargesEnabled = !!account.charges_enabled;
+        const latestPayoutsEnabled = !!account.payouts_enabled;
+
+        if (latestChargesEnabled !== chargesEnabled || latestPayoutsEnabled !== payoutsEnabled) {
+          await db
+            .update(providers)
+            .set({
+              chargesEnabled: latestChargesEnabled,
+              payoutsEnabled: latestPayoutsEnabled,
+              updatedAt: new Date(),
+            })
+            .where(eq(providers.id, provider.id));
+
+          console.info("[API_PROVIDER_EARNINGS_SUMMARY] Stripe Connect status refreshed", {
+            providerId: provider.id,
+            accountId: provider.stripeConnectId,
+            chargesEnabled: latestChargesEnabled,
+            payoutsEnabled: latestPayoutsEnabled,
+          });
+
+          chargesEnabled = latestChargesEnabled;
+          payoutsEnabled = latestPayoutsEnabled;
+        }
+      } catch (error) {
+        console.warn("[API_PROVIDER_EARNINGS_SUMMARY] Failed to refresh Stripe Connect status", {
+          providerId: provider.id,
+          accountId: provider.stripeConnectId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
 
     const thirtyDaysAgo = subDays(new Date(), 30);
@@ -109,8 +150,8 @@ export async function GET() {
       currency: "NZD",
       connect: {
         stripeConnectId: provider.stripeConnectId ?? null,
-        chargesEnabled: provider.chargesEnabled ?? false,
-        payoutsEnabled: provider.payoutsEnabled ?? false,
+        chargesEnabled,
+        payoutsEnabled,
       },
       lifetime: totals,
       last30,

@@ -103,7 +103,12 @@ export default async function ProviderEarningsPage() {
 
   return (
     <div className="space-y-6">
-      {!stripeConfigured && <StripeWarning />}
+      {!stripeConfigured && (
+        <StripeWarning
+          stripeConnectId={earnings?.connect?.stripeConnectId ?? null}
+          payoutsEnabled={earnings?.connect?.payoutsEnabled ?? false}
+        />
+      )}
 
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Earnings</h1>

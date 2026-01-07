@@ -1,14 +1,46 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
 
-export function StripeWarning() {
+export function StripeWarning(props?: {
+  stripeConnectId?: string | null;
+  payoutsEnabled?: boolean;
+}) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const hasConnectId = !!props?.stripeConnectId;
+  const payoutsEnabled = !!props?.payoutsEnabled;
+
+  const copy = useMemo(() => {
+    if (!hasConnectId) {
+      return {
+        title: "Stripe Connect not set up",
+        description:
+          "Your Stripe Connect payout account is not set up. You cannot receive payouts until verification is complete.",
+        cta: "Complete Stripe setup",
+      };
+    }
+
+    if (!payoutsEnabled) {
+      return {
+        title: "Stripe verification incomplete",
+        description:
+          "Your Stripe Connect account exists, but payouts aren’t enabled yet. Continue Stripe setup to finish verification.",
+        cta: "Continue Stripe setup",
+      };
+    }
+
+    return {
+      title: "Stripe Connect ready",
+      description: "Stripe payouts are enabled.",
+      cta: "Open Stripe",
+    };
+  }, [hasConnectId, payoutsEnabled]);
 
   const handleStartOnboarding = async () => {
     setLoading(true);
@@ -43,10 +75,9 @@ export function StripeWarning() {
   return (
     <Alert variant="destructive" className="flex flex-col gap-3 sm:flex-row sm:items-center">
       <div className="flex-1 space-y-1">
-        <AlertTitle>Stripe Connect not set up</AlertTitle>
+        <AlertTitle>{copy.title}</AlertTitle>
         <AlertDescription>
-          Your Stripe Connect payout account is not set up. You cannot receive payouts until
-          verification is complete.
+          {copy.description}
         </AlertDescription>
         {error ? <div className="text-sm text-destructive">{error}</div> : null}
       </div>
@@ -57,7 +88,7 @@ export function StripeWarning() {
         onClick={handleStartOnboarding}
         disabled={loading}
       >
-        {loading ? "Starting…" : "Complete Stripe setup"}
+        {loading ? "Starting…" : copy.cta}
       </Button>
     </Alert>
   );
