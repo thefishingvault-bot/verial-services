@@ -8,6 +8,11 @@ import { stripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
 
+function isAccountUpdateNotAllowed(error: unknown): boolean {
+  const msg = error instanceof Error ? error.message : String(error);
+  return msg.includes("account_update") && msg.includes("Valid types") && msg.includes("account_onboarding");
+}
+
 function getSiteUrl(): string {
   const explicit = process.env.NEXT_PUBLIC_SITE_URL ?? process.env.NEXT_PUBLIC_APP_URL;
   if (explicit && explicit.trim()) return explicit.trim().replace(/\/$/, "");
@@ -75,28 +80,47 @@ export async function POST() {
       // ignore
     }
 
-    // Decide whether we should send the user through onboarding again or an update flow.
-    // `account_onboarding` works for both new and existing accounts, but `account_update`
-    // can be a better UX once details have been submitted.
-    let linkType: "account_onboarding" | "account_update" = "account_onboarding";
-    try {
-      const account = await stripe.accounts.retrieve(stripeConnectId);
-      if (account.details_submitted) {
-        linkType = "account_update";
-      }
-    } catch {
-      // Best-effort: default to onboarding.
-    }
+    const account = await stripe.accounts.retrieve(stripeConnectId);
+
+    console.info("[STRIPE_CONNECT_ONBOARD_STATUS]", {
+      providerId: provider.id,
+      stripeConnectId,
+      accountType: account.type,
+      chargesEnabled: account.charges_enabled,
+      payoutsEnabled: account.payouts_enabled,
+      detailsSubmitted: account.details_submitted,
+    });
+
+    // Until payouts are enabled, always send through onboarding.
+    // Only attempt account_update once payouts are enabled AND Stripe supports it.
+    const preferOnboarding = !account.payouts_enabled;
+    const desiredLinkType: "account_onboarding" | "account_update" =
+      preferOnboarding ? "account_onboarding" : account.details_submitted ? "account_update" : "account_onboarding";
 
     const siteUrl = getSiteUrl();
     const returnPath = "/dashboard/provider/earnings";
 
-    const accountLink = await stripe.accountLinks.create({
-      account: stripeConnectId,
-      refresh_url: `${siteUrl}${returnPath}`,
-      return_url: `${siteUrl}${returnPath}`,
-      type: linkType,
-    });
+    let accountLink: { url: string };
+    try {
+      accountLink = await stripe.accountLinks.create({
+        account: stripeConnectId,
+        refresh_url: `${siteUrl}${returnPath}`,
+        return_url: `${siteUrl}${returnPath}`,
+        type: desiredLinkType,
+      });
+    } catch (error) {
+      if (desiredLinkType === "account_update" && isAccountUpdateNotAllowed(error)) {
+        // Retry immediately with onboarding so the UX never dead-ends.
+        accountLink = await stripe.accountLinks.create({
+          account: stripeConnectId,
+          refresh_url: `${siteUrl}${returnPath}`,
+          return_url: `${siteUrl}${returnPath}`,
+          type: "account_onboarding",
+        });
+      } else {
+        throw error;
+      }
+    }
 
     return NextResponse.json({ url: accountLink.url });
   } catch (error) {

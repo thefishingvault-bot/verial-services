@@ -33,29 +33,33 @@ export async function GET() {
         const account = await stripe.accounts.retrieve(provider.stripeConnectId);
         const latestChargesEnabled = !!account.charges_enabled;
         const latestPayoutsEnabled = !!account.payouts_enabled;
+        const currentlyDueCount = Array.isArray(account.requirements?.currently_due)
+          ? account.requirements.currently_due.length
+          : null;
 
-        if (latestChargesEnabled !== chargesEnabled || latestPayoutsEnabled !== payoutsEnabled) {
-          await db
-            .update(providers)
-            .set({
-              chargesEnabled: latestChargesEnabled,
-              payoutsEnabled: latestPayoutsEnabled,
-              updatedAt: new Date(),
-            })
-            .where(eq(providers.id, provider.id));
-
-          console.info("[API_PROVIDER_EARNINGS_SUMMARY] Stripe Connect status refreshed", {
-            providerId: provider.id,
-            accountId: provider.stripeConnectId,
+        // Persist every time (best-effort) so DB is always consistent.
+        await db
+          .update(providers)
+          .set({
             chargesEnabled: latestChargesEnabled,
             payoutsEnabled: latestPayoutsEnabled,
-          });
+            updatedAt: new Date(),
+          })
+          .where(eq(providers.id, provider.id));
 
-          chargesEnabled = latestChargesEnabled;
-          payoutsEnabled = latestPayoutsEnabled;
-        }
+        console.info("[API_PROVIDER_EARNINGS_SUMMARY] Stripe Connect status synced", {
+          providerId: provider.id,
+          accountId: provider.stripeConnectId,
+          chargesEnabled: latestChargesEnabled,
+          payoutsEnabled: latestPayoutsEnabled,
+          detailsSubmitted: account.details_submitted,
+          currentlyDueCount,
+        });
+
+        chargesEnabled = latestChargesEnabled;
+        payoutsEnabled = latestPayoutsEnabled;
       } catch (error) {
-        console.warn("[API_PROVIDER_EARNINGS_SUMMARY] Failed to refresh Stripe Connect status", {
+        console.warn("[API_PROVIDER_EARNINGS_SUMMARY] Failed to sync Stripe Connect status", {
           providerId: provider.id,
           accountId: provider.stripeConnectId,
           error: error instanceof Error ? error.message : String(error),
