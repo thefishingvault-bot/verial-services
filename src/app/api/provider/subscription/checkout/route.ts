@@ -6,12 +6,19 @@ import { z } from "zod";
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
-import { getStripeLookupKeyForPlan, getStripePriceIdForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import {
+  getStripeLookupKeyForPlan,
+  getStripePriceIdForPlan,
+  getStripeProductIdForPlan,
+  normalizeProviderPlan,
+} from "@/lib/provider-subscription";
 import { checkProvidersColumnsExist } from "@/lib/provider-subscription-schema";
 import {
   detectStripeMode,
-  resolveActivePriceIdByLookupKey,
+  resolveActiveMonthlyPriceIdByLookupKey,
+  resolveActiveMonthlyPriceIdByProduct,
   retrieveStripePriceSafe,
+  validateSubscriptionMonthlyPrice,
   type StripeMode,
 } from "@/lib/stripe";
 
@@ -53,77 +60,140 @@ export async function POST(req: Request) {
     const plan = normalizeProviderPlan(parsed.data.plan);
     const mode: StripeMode = detectStripeMode();
 
-    // Prefer lookup_key resolution so we can rotate prices without code changes.
     const lookupKey = getStripeLookupKeyForPlan(plan);
+    const productId = getStripeProductIdForPlan(plan);
+
+    const envPriceId = getStripePriceIdForPlan(plan);
+    // IMPORTANT: envPriceId may come from multiple env vars (MONTHLY + legacy). We'll validate any candidates.
+    const envCandidatesRaw = [
+      process.env.STRIPE_PRICE_PRO_MONTHLY,
+      process.env.STRIPE_PRICE_PRO,
+      process.env.STRIPE_PRICE_ELITE_MONTHLY,
+      process.env.STRIPE_PRICE_ELITE,
+    ];
+
+    const envCandidates = Array.from(
+      new Set(
+        envCandidatesRaw
+          .filter((v): v is string => typeof v === "string" && v.trim().length > 0)
+          .map((v) => v.trim()),
+      ),
+    );
+
+    type Attempt = {
+      source: "env" | "lookup_key" | "product";
+      input: string | null;
+      resolvedPriceId: string | null;
+      ok: boolean;
+      reason?: string;
+      active?: boolean | null;
+      livemode?: boolean | null;
+      type?: string | null;
+      recurringInterval?: string | null;
+    };
+
+    const attempts: Attempt[] = [];
     let priceId: string | null = null;
-    let priceSource: "lookup_key" | "env" | "none" = "none";
+    let priceSource: "env" | "lookup_key" | "product" | "none" = "none";
 
-    if (lookupKey) {
-      priceId = await resolveActivePriceIdByLookupKey(lookupKey);
-      if (priceId) priceSource = "lookup_key";
+    // 1) Try env price IDs (validate each; skip inactive/wrong type/mode).
+    // Note: we still compute envPriceId via helper for backward compat, but we also iterate candidates to avoid a single bad value taking precedence.
+    const envToTry = Array.from(new Set([...(envPriceId ? [envPriceId] : []), ...envCandidates]));
+    for (const candidate of envToTry) {
+      if (!candidate.startsWith("price_")) {
+        attempts.push({ source: "env", input: candidate, resolvedPriceId: null, ok: false, reason: "not_price_id" });
+        continue;
+      }
+
+      const retrieved = await retrieveStripePriceSafe(candidate);
+      if (!retrieved) {
+        attempts.push({ source: "env", input: candidate, resolvedPriceId: candidate, ok: false, reason: "not_found" });
+        continue;
+      }
+
+      const validation = validateSubscriptionMonthlyPrice({ price: retrieved, mode });
+      if (!validation.ok) {
+        attempts.push({
+          source: "env",
+          input: candidate,
+          resolvedPriceId: candidate,
+          ok: false,
+          reason: validation.reason,
+          active: retrieved.active ?? null,
+          livemode: retrieved.livemode ?? null,
+          type: retrieved.type ?? null,
+          recurringInterval: retrieved.recurring?.interval ?? null,
+        });
+        continue;
+      }
+
+      priceId = candidate;
+      priceSource = "env";
+      attempts.push({
+        source: "env",
+        input: candidate,
+        resolvedPriceId: candidate,
+        ok: true,
+        active: retrieved.active ?? null,
+        livemode: retrieved.livemode ?? null,
+        type: retrieved.type ?? null,
+        recurringInterval: retrieved.recurring?.interval ?? null,
+      });
+      break;
     }
 
-    if (!priceId) {
-      priceId = getStripePriceIdForPlan(plan);
-      if (priceId) priceSource = "env";
+    // 2) Fallback: lookup_key (active only, monthly recurring only).
+    if (!priceId && lookupKey) {
+      const resolved = await resolveActiveMonthlyPriceIdByLookupKey(lookupKey, mode);
+      if (resolved) {
+        priceId = resolved;
+        priceSource = "lookup_key";
+        attempts.push({ source: "lookup_key", input: lookupKey, resolvedPriceId: resolved, ok: true });
+      } else {
+        attempts.push({ source: "lookup_key", input: lookupKey, resolvedPriceId: null, ok: false, reason: "no_active_monthly_price" });
+      }
     }
 
-    if (!priceId) {
-      return NextResponse.json(
-        {
-          error: "Stripe price not configured",
-          plan,
-          mode,
-          lookupKey,
-          hint: "Set STRIPE_LOOKUP_KEY_PRO_MONTHLY/ELITE_MONTHLY (recommended) or STRIPE_PRICE_PRO_MONTHLY/ELITE_MONTHLY",
-        },
-        { status: 503 },
-      );
+    // 3) Fallback: product id (active monthly recurring price under that product).
+    if (!priceId && productId) {
+      if (!productId.startsWith("prod_")) {
+        attempts.push({ source: "product", input: productId, resolvedPriceId: null, ok: false, reason: "not_product_id" });
+      } else {
+        const resolved = await resolveActiveMonthlyPriceIdByProduct(productId, mode);
+        if (resolved) {
+          priceId = resolved;
+          priceSource = "product";
+          attempts.push({ source: "product", input: productId, resolvedPriceId: resolved, ok: true });
+        } else {
+          attempts.push({ source: "product", input: productId, resolvedPriceId: null, ok: false, reason: "no_active_monthly_price" });
+        }
+      }
     }
 
-    // If env vars are misconfigured with Product IDs (prod_...), fail fast with a clean message.
-    if (!priceId.startsWith("price_")) {
-      return NextResponse.json(
-        {
-          error: "Invalid Stripe price id",
-          plan,
-          mode,
-          priceId,
-          expectedPrefix: "price_",
-        },
-        { status: 409 },
-      );
-    }
-
-    const price = await retrieveStripePriceSafe(priceId);
     console.log("[API_PROVIDER_SUBSCRIPTION_CHECKOUT]", {
       plan,
       mode,
       lookupKey,
+      productId,
+      envPriceId,
+      envPriceStartsWith: envPriceId ? envPriceId.slice(0, 5) : null,
       resolvedPriceId: priceId,
       priceSource,
-      active: price?.active ?? null,
-      livemode: price?.livemode ?? null,
+      attempts,
+      adminHint:
+        "If billing fails: env price may be archived/inactive, not a price_ id, wrong Stripe mode/account, or not a monthly recurring price.",
     });
 
-    if (!price) {
+    if (!priceId) {
       return NextResponse.json(
-        { error: "Stripe price not found", plan, priceId, mode },
-        { status: 409 },
-      );
-    }
-
-    if (price.active !== true) {
-      return NextResponse.json(
-        { error: "Stripe price inactive", plan, priceId, mode },
-        { status: 409 },
-      );
-    }
-
-    const expectedLive = mode === "live";
-    if (price.livemode !== expectedLive) {
-      return NextResponse.json(
-        { error: "Stripe price mode mismatch", plan, priceId, mode },
+        {
+          error: "Billing unavailable: no active monthly price found",
+          plan,
+          mode,
+          lookupKey,
+          productId,
+          attempts,
+        },
         { status: 409 },
       );
     }

@@ -26,6 +26,13 @@ export function getStripeLookupKeyForPlan(plan: ProviderPlan): string | null {
   return null;
 }
 
+export function getStripeProductIdForPlan(plan: ProviderPlan): string | null {
+  if (plan === "pro") return process.env.STRIPE_PRODUCT_PRO ?? null;
+  if (plan === "elite") return process.env.STRIPE_PRODUCT_ELITE ?? null;
+  if (plan === "starter") return process.env.STRIPE_PRODUCT_STARTER ?? null;
+  return null;
+}
+
 export function planFromStripePriceId(priceId: string | null | undefined): ProviderPlan | null {
   if (!priceId) return null;
   const pro = process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO;

@@ -36,6 +36,48 @@ export async function resolveActivePriceIdByLookupKey(lookupKey: string): Promis
   return res.data[0]?.id ?? null;
 }
 
+export function validateSubscriptionMonthlyPrice(params: {
+  price: Stripe.Price;
+  mode: StripeMode;
+}): { ok: true } | { ok: false; reason: string } {
+  const { price, mode } = params;
+
+  if (price.active !== true) return { ok: false, reason: "inactive" };
+  if (price.livemode !== (mode === "live")) return { ok: false, reason: "mode_mismatch" };
+  if (price.type !== "recurring") return { ok: false, reason: "not_recurring" };
+  if (!price.recurring || price.recurring.interval !== "month") return { ok: false, reason: "not_monthly" };
+
+  return { ok: true };
+}
+
+export async function resolveActiveMonthlyPriceIdByLookupKey(lookupKey: string, mode: StripeMode): Promise<string | null> {
+  const res = await stripe.prices.list({
+    lookup_keys: [lookupKey],
+    active: true,
+    limit: 10,
+  });
+
+  const candidates = res.data
+    .filter((p) => validateSubscriptionMonthlyPrice({ price: p, mode }).ok)
+    .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+
+  return candidates[0]?.id ?? null;
+}
+
+export async function resolveActiveMonthlyPriceIdByProduct(productId: string, mode: StripeMode): Promise<string | null> {
+  const res = await stripe.prices.list({
+    product: productId,
+    active: true,
+    limit: 100,
+  });
+
+  const candidates = res.data
+    .filter((p) => validateSubscriptionMonthlyPrice({ price: p, mode }).ok)
+    .sort((a, b) => (b.created ?? 0) - (a.created ?? 0));
+
+  return candidates[0]?.id ?? null;
+}
+
 export async function retrieveStripePriceSafe(priceId: string): Promise<Stripe.Price | null> {
   try {
     return await stripe.prices.retrieve(priceId);

@@ -146,7 +146,13 @@ export default function ProviderBillingClient() {
       const json: unknown = await res.json().catch(() => null);
       if (!res.ok) {
         const err = getJsonStringField(json, "error") ?? "Failed to start checkout";
-        if (res.status === 409 && (err === "Stripe price inactive" || err === "Stripe price mode mismatch")) {
+        if (
+          res.status === 409 &&
+          (err === "Stripe price inactive" ||
+            err === "Stripe price mode mismatch" ||
+            err === "Invalid Stripe price id" ||
+            err.startsWith("Billing unavailable"))
+        ) {
           setBillingUnavailable(
             "Billing is temporarily unavailable (plan price inactive). Please contact support/admin.",
           );
