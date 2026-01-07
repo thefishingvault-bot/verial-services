@@ -38,21 +38,34 @@ export async function POST(req: Request) {
       return new NextResponse('Your provider application was rejected. You cannot create services.', { status: 403 });
     }
 
-    const { title, description, priceInCents, category, region, suburb } = await req.json();
+    const { title, description, priceInCents, category } = await req.json();
 
-    if (!title || !priceInCents || !category || !region || !suburb) {
-      return new NextResponse("Missing required fields: title, priceInCents, category, region, suburb", { status: 400 });
+    if (!title || !priceInCents || !category) {
+      return new NextResponse("Missing required fields: title, priceInCents, category", { status: 400 });
     }
 
-    const validRegion = Object.keys(NZ_REGIONS).includes(region);
-    const validSuburb = validRegion ? NZ_REGIONS[region].includes(suburb) : false;
+    const providerRegion = provider.baseRegion;
+    const providerSuburb = provider.baseSuburb;
+
+    if (!providerRegion || !providerSuburb) {
+      return new NextResponse(
+        'Please set your service area (base region/suburb) in /dashboard/provider/profile before creating services.',
+        { status: 400 },
+      );
+    }
+
+    const validRegion = Object.keys(NZ_REGIONS).includes(providerRegion);
+    const validSuburb = validRegion ? NZ_REGIONS[providerRegion].includes(providerSuburb) : false;
 
     if (!serviceCategoryEnum.enumValues.includes(category)) {
       return new NextResponse(`Invalid category: ${category}`, { status: 400 });
     }
 
     if (!validRegion || !validSuburb) {
-      return new NextResponse("Invalid region/suburb selection", { status: 400 });
+      return new NextResponse(
+        'Your service area (base region/suburb) is invalid. Please update it in /dashboard/provider/profile.',
+        { status: 400 },
+      );
     }
 
     const slug = createSlug(title);
@@ -66,8 +79,8 @@ export async function POST(req: Request) {
       category: category,
       slug: `${slug}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure uniqueness for MVP
       chargesGst: provider.chargesGst,
-      region,
-      suburb,
+      region: providerRegion,
+      suburb: providerSuburb,
       isPublished: false,
     }).returning();
 

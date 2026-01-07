@@ -49,7 +49,6 @@ const formSchema = z.object({
   category: z.enum(categories),
   price: z.number().positive('Price must be a positive number.'),
   description: z.string().optional(),
-  chargesGst: z.boolean(),
   region: z.string().min(1, 'Region is required'),
   suburb: z.string().min(1, 'Suburb is required'),
   isPublished: z.boolean(),
@@ -79,7 +78,6 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
       category: 'cleaning',
       price: 0,
       description: '',
-      chargesGst: true,
       region: '',
       suburb: '',
       isPublished: false,
@@ -102,7 +100,6 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
           category: data.category,
           price: data.priceInCents / 100,
           description: data.description || '',
-          chargesGst: data.chargesGst,
           region: data.region || '',
           suburb: data.suburb || '',
           isPublished: canPublish ? (data.isPublished ?? false) : false,
@@ -128,7 +125,6 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
           description: values.description,
           priceInCents,
           category: values.category,
-          chargesGst: values.chargesGst,
           region: values.region,
           suburb: values.suburb,
           isPublished: canPublish ? values.isPublished : false,
@@ -255,22 +251,6 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
                   )}
                 />
               </div>
-
-              <FormField
-                control={form.control}
-                name="chargesGst"
-                render={({ field }) => (
-                  <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                    <div className="space-y-0.5">
-                      <FormLabel className="text-base">Includes GST</FormLabel>
-                      <FormDescription>Does this price include 15% GST?</FormDescription>
-                    </div>
-                    <FormControl>
-                      <Switch checked={field.value} onCheckedChange={field.onChange} />
-                    </FormControl>
-                  </FormItem>
-                )}
-              />
 
               <FormField
                 control={form.control}

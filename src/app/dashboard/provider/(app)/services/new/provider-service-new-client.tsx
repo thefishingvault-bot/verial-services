@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+import Link from 'next/link';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -28,7 +29,6 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/components/ui/use-toast';
-import { NZ_REGIONS } from '@/lib/data/nz-locations';
 
 const categories = [
   'cleaning',
@@ -49,25 +49,35 @@ const formSchema = z.object({
     message: 'Price must be a positive number.',
   }),
   description: z.string().optional(),
-  region: z.string().min(1, { message: 'Region is required' }),
-  suburb: z.string().min(1, { message: 'Suburb is required' }),
 });
 
 type FormValues = z.infer<typeof formSchema>;
 
 type ProviderServiceNewClientProps = {
   providerStatus: 'pending' | 'approved' | 'rejected';
+  providerBaseRegion: string | null;
+  providerBaseSuburb: string | null;
+  providerServiceRadiusKm: number;
+  providerChargesGst: boolean;
   blockedReason?: string;
 };
 
-export function ProviderServiceNewClient({ providerStatus, blockedReason }: ProviderServiceNewClientProps) {
+export function ProviderServiceNewClient({
+  providerStatus,
+  providerBaseRegion,
+  providerBaseSuburb,
+  providerServiceRadiusKm,
+  providerChargesGst,
+  blockedReason,
+}: ProviderServiceNewClientProps) {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const router = useRouter();
   const { toast } = useToast();
 
-  const isCreationBlocked = providerStatus === 'rejected' || !!blockedReason;
+  const missingServiceArea = !providerBaseRegion || !providerBaseSuburb;
+  const isCreationBlocked = providerStatus === 'rejected' || !!blockedReason || missingServiceArea;
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
@@ -76,13 +86,8 @@ export function ProviderServiceNewClient({ providerStatus, blockedReason }: Prov
       category: 'cleaning',
       price: 0,
       description: '',
-      region: '',
-      suburb: '',
     },
   });
-
-  const region = form.watch('region');
-  const suburbs = region ? NZ_REGIONS[region] ?? [] : [];
 
   const onSubmit = async (values: FormValues) => {
     if (isCreationBlocked) return;
@@ -101,8 +106,6 @@ export function ProviderServiceNewClient({ providerStatus, blockedReason }: Prov
           description: values.description,
           priceInCents,
           category: values.category,
-          region: values.region,
-          suburb: values.suburb,
         }),
       });
 
@@ -147,12 +150,35 @@ export function ProviderServiceNewClient({ providerStatus, blockedReason }: Prov
         </div>
       )}
 
+      {missingServiceArea && !blockedReason && providerStatus !== 'rejected' && (
+        <div className="mb-6">
+          <Alert variant="destructive">
+            <AlertTitle>Set your service area first</AlertTitle>
+            <AlertDescription>
+              Add your base region/suburb in{' '}
+              <Link href="/dashboard/provider/profile" className="underline">
+                Provider Profile
+              </Link>{' '}
+              to create services.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
       <Card>
         <CardHeader>
           <CardTitle>Create a New Service</CardTitle>
           <CardDescription>Enter the details for your service. It will start as a draft.</CardDescription>
         </CardHeader>
         <CardContent>
+          {!missingServiceArea && (
+            <div className="mb-6">
+              <p className="text-sm text-muted-foreground">
+                Service area: <span className="font-medium text-foreground">{providerBaseSuburb}, {providerBaseRegion}</span> (within {providerServiceRadiusKm} km)
+              </p>
+            </div>
+          )}
+
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               <FormField
@@ -211,7 +237,9 @@ export function ProviderServiceNewClient({ providerStatus, blockedReason }: Prov
                           onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
                         />
                       </FormControl>
-                      <FormDescription>Prices include GST (15%).</FormDescription>
+                      <FormDescription>
+                        {providerChargesGst ? 'Prices include GST (15%).' : 'Prices exclude GST (15%).'}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -237,69 +265,6 @@ export function ProviderServiceNewClient({ providerStatus, blockedReason }: Prov
                   </FormItem>
                 )}
               />
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <FormField
-                  control={form.control}
-                  name="region"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Region</FormLabel>
-                      <Select
-                        onValueChange={(val) => {
-                          field.onChange(val);
-                          form.setValue('suburb', '');
-                        }}
-                        value={field.value}
-                        disabled={isCreationBlocked}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a region" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {Object.keys(NZ_REGIONS).map((regionName) => (
-                            <SelectItem key={regionName} value={regionName}>
-                              {regionName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-
-                <FormField
-                  control={form.control}
-                  name="suburb"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Suburb</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        value={field.value}
-                        disabled={isCreationBlocked || !region}
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder={region ? 'Select a suburb' : 'Select a region first'} />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {suburbs.map((suburbName) => (
-                            <SelectItem key={suburbName} value={suburbName}>
-                              {suburbName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
 
               {apiError && <p className="text-sm text-destructive">{apiError}</p>}
 

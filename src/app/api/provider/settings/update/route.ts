@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { providers, providerSuburbs } from '@/db/schema';
+import { providers, providerSuburbs, services } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
@@ -130,6 +130,17 @@ export async function PATCH(req: Request) {
         );
       }
     }
+
+    // Keep service listings in sync with provider-level settings.
+    await db
+      .update(services)
+      .set({
+        chargesGst: updatedProvider.chargesGst,
+        region: updatedProvider.baseRegion,
+        suburb: updatedProvider.baseSuburb,
+        updatedAt: new Date(),
+      })
+      .where(eq(services.providerId, provider.id));
 
     console.log(`[API_PROVIDER_SETTINGS] Provider ${updatedProvider.id} updated coverage`);
     return NextResponse.json(updatedProvider);
