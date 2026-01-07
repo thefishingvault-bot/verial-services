@@ -4,6 +4,7 @@ import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import ProviderEarningsPage from "@/app/dashboard/provider/(app)/earnings/page";
+import { ToastProvider } from "@/components/ui/use-toast";
 
 vi.mock("@/lib/auth-guards", () => ({
   requireProvider: vi.fn().mockResolvedValue(undefined),
@@ -54,7 +55,7 @@ describe("ProviderEarningsPage", () => {
   });
 
   it("renders summary cards and recent earnings table", async () => {
-    render(await ProviderEarningsPage());
+    render(<ToastProvider>{await ProviderEarningsPage()}</ToastProvider>);
 
     await waitFor(() => {
       expect(screen.getByText(/Lifetime earnings/i)).toBeInTheDocument();
@@ -83,7 +84,7 @@ describe("ProviderEarningsPage", () => {
       }),
     });
 
-    render(await ProviderEarningsPage());
+    render(<ToastProvider>{await ProviderEarningsPage()}</ToastProvider>);
 
     await waitFor(() => {
       expect(

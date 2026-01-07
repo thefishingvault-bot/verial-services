@@ -16,6 +16,7 @@ import {
 import { LoadMoreButton } from './load-more-button';
 import type { ServicesFilters, ServiceWithProviderAndFavorite } from '@/lib/services-data';
 import { FavoriteToggle } from '@/components/services/favorite-toggle';
+import { formatServicePriceLabel } from '@/lib/pricing';
 
 const categoryMap: Record<string, string> = {
   cleaning: 'Cleaning',
@@ -29,13 +30,6 @@ const categoryMap: Record<string, string> = {
   landscaping: 'Landscaping',
   handyman: 'Handyman',
 };
-
-function formatPrice(price: number) {
-  return new Intl.NumberFormat('en-NZ', {
-    style: 'currency',
-    currency: 'NZD',
-  }).format(price);
-}
 
 function getCategoryDisplayName(category: string) {
   return categoryMap[category] || category;
@@ -135,9 +129,14 @@ export default function ServicesGrid({
                 </h3>
                 <div className="text-right ml-2">
                   <div className="text-lg font-bold text-gray-900">
-                    {formatPrice(service.priceInCents / 100)}
+                    {formatServicePriceLabel({
+                      pricingType: service.pricingType,
+                      priceInCents: service.priceInCents,
+                    })}
                   </div>
-                  <div className="text-xs text-gray-500">per hour</div>
+                  {service.pricingType !== 'quote' && (
+                    <div className="text-xs text-gray-500">per hour</div>
+                  )}
                 </div>
               </div>
 

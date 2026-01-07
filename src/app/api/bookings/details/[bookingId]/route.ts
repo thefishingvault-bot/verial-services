@@ -45,6 +45,10 @@ export async function GET(
       return new NextResponse(`Cannot pay for booking with status: ${booking.status}`, { status: 400 });
     }
 
+    if (!booking.priceAtBooking || booking.priceAtBooking < 100) {
+      return new NextResponse('This booking needs a final price from the provider before payment.', { status: 400 });
+    }
+
     return NextResponse.json({
       bookingId: booking.id,
       amount: booking.priceAtBooking,

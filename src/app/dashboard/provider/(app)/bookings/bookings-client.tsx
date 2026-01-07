@@ -25,7 +25,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
-import { formatPrice } from "@/lib/utils";
+import { formatBookingPriceLabel } from "@/lib/pricing";
 
 type ProviderBookingStatus =
   | "pending"
@@ -384,7 +384,7 @@ function BookingRow(props: {
                 )}
             </div>
             <div className="text-sm font-semibold text-foreground md:text-right">
-              {formatPrice(booking.priceAtBooking)}
+              {formatBookingPriceLabel(booking.priceAtBooking)}
             </div>
           </div>
         </CardContent>
@@ -404,16 +404,24 @@ function BookingRow(props: {
                   ) : null}
                   Reject
                 </Button>
-                <Button
-                  size="sm"
-                  onClick={() => onUpdateStatus(booking.id, "accept")}
-                  disabled={isProcessing("accept")}
-                >
-                  {isProcessing("accept") ? (
-                    <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                  ) : null}
-                  Accept request
-                </Button>
+                {booking.priceAtBooking === 0 ? (
+                  <Button asChild size="sm">
+                    <Link href={`/dashboard/provider/bookings/${booking.id}`}>
+                      Set price & accept
+                    </Link>
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    onClick={() => onUpdateStatus(booking.id, "accept")}
+                    disabled={isProcessing("accept")}
+                  >
+                    {isProcessing("accept") ? (
+                      <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                    ) : null}
+                    Accept request
+                  </Button>
+                )}
               </>
             )}
 

@@ -9,7 +9,9 @@ export type SimilarService = {
   title: string;
   slug: string;
   description: string | null;
-  priceInCents: number;
+  pricingType: (typeof services.pricingType.enumValues)[number];
+  priceInCents: number | null;
+  priceNote: string | null;
   category: (typeof services.category.enumValues)[number];
   coverImageUrl: string | null;
   createdAt: Date;
@@ -60,7 +62,9 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
       title: services.title,
       slug: services.slug,
       description: services.description,
+      pricingType: services.pricingType,
       priceInCents: services.priceInCents,
+      priceNote: services.priceNote,
       category: services.category,
       coverImageUrl: services.coverImageUrl,
       createdAt: services.createdAt,
@@ -82,15 +86,26 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
     .groupBy(services.id, providers.id)
     .limit(12);
 
-  const ranked = sortServicesByScore(
-    rows.map((item) => ({
+  const normalizedRows: SimilarService[] = rows.map((item) => ({
+    ...item,
+    avgRating: Number(item.avgRating ?? 0),
+    reviewCount: Number(item.reviewCount ?? 0),
+    favoriteCount: Number(item.favoriteCount ?? 0),
+    providerTrustScore: item.providerTrustScore ?? 0,
+    providerVerified: item.providerVerified ?? false,
+  }));
+
+  // Rank using a numeric price fallback, but return original (nullable) prices.
+  const rankedIds = sortServicesByScore(
+    normalizedRows.map((item) => ({
       ...item,
-      avgRating: Number(item.avgRating ?? 0),
-      reviewCount: Number(item.reviewCount ?? 0),
-      favoriteCount: Number(item.favoriteCount ?? 0),
+      priceInCents: item.priceInCents ?? 0,
       trustScore: item.providerTrustScore ?? 0,
     })),
-  ).slice(0, 6);
+  )
+    .slice(0, 6)
+    .map((r) => r.id);
 
-  return ranked;
+  const byId = new Map(normalizedRows.map((r) => [r.id, r] as const));
+  return rankedIds.map((id) => byId.get(id)).filter(Boolean) as SimilarService[];
 }

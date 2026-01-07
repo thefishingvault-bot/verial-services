@@ -1,14 +1,16 @@
+
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useForm, type Resolver } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useForm, type Resolver } from 'react-hook-form';
+import * as z from 'zod';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Form,
   FormControl,
@@ -19,7 +21,6 @@ import {
   FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import {
   Select,
   SelectContent,
@@ -27,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
 
 const categories = [
@@ -40,16 +41,28 @@ const categories = [
   'other',
 ] as const;
 
-const formSchema = z.object({
-  title: z.string().min(5, {
-    message: 'Title must be at least 5 characters long.',
-  }),
-  category: z.enum(categories),
-  price: z.number().positive({
-    message: 'Price must be a positive number.',
-  }),
-  description: z.string().optional(),
-});
+const pricingTypes = ['fixed', 'from', 'quote'] as const;
+
+const formSchema = z
+  .object({
+    title: z.string().min(5, {
+      message: 'Title must be at least 5 characters long.',
+    }),
+    category: z.enum(categories),
+    pricingType: z.enum(pricingTypes),
+    price: z.number().nonnegative(),
+    priceNote: z.string().max(500).optional(),
+    description: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.pricingType !== 'quote' && (!value.price || value.price <= 0)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['price'],
+        message: 'Price must be a positive number.',
+      });
+    }
+  });
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -84,7 +97,9 @@ export function ProviderServiceNewClient({
     defaultValues: {
       title: '',
       category: 'cleaning',
+      pricingType: 'fixed',
       price: 0,
+      priceNote: '',
       description: '',
     },
   });
@@ -96,7 +111,7 @@ export function ProviderServiceNewClient({
     setApiError(null);
 
     try {
-      const priceInCents = Math.round(values.price * 100);
+      const priceInCents = values.pricingType === 'quote' ? null : Math.round(values.price * 100);
 
       const res = await fetch('/api/services/create', {
         method: 'POST',
@@ -104,7 +119,9 @@ export function ProviderServiceNewClient({
         body: JSON.stringify({
           title: values.title,
           description: values.description,
+          pricingType: values.pricingType,
           priceInCents,
+          priceNote: values.priceNote,
           category: values.category,
         }),
       });
@@ -144,7 +161,8 @@ export function ProviderServiceNewClient({
           <Alert variant="destructive">
             <AlertTitle>Service creation unavailable</AlertTitle>
             <AlertDescription>
-              {blockedReason ?? 'Your provider application is not eligible to publish services right now. Please contact support or an admin.'}
+              {blockedReason ??
+                'Your provider application is not eligible to publish services right now. Please contact support or an admin.'}
             </AlertDescription>
           </Alert>
         </div>
@@ -174,7 +192,11 @@ export function ProviderServiceNewClient({
           {!missingServiceArea && (
             <div className="mb-6">
               <p className="text-sm text-muted-foreground">
-                Service area: <span className="font-medium text-foreground">{providerBaseSuburb}, {providerBaseRegion}</span> (within {providerServiceRadiusKm} km)
+                Service area:{' '}
+                <span className="font-medium text-foreground">
+                  {providerBaseSuburb}, {providerBaseRegion}
+                </span>{' '}
+                (within {providerServiceRadiusKm} km)
               </p>
             </div>
           )}
@@ -188,7 +210,11 @@ export function ProviderServiceNewClient({
                   <FormItem>
                     <FormLabel>Service Title</FormLabel>
                     <FormControl>
-                      <Input placeholder="e.g., Professional House Cleaning" {...field} disabled={isCreationBlocked} />
+                      <Input
+                        placeholder="e.g., Professional House Cleaning"
+                        {...field}
+                        disabled={isCreationBlocked}
+                      />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -223,22 +249,27 @@ export function ProviderServiceNewClient({
 
                 <FormField
                   control={form.control}
-                  name="price"
+                  name="pricingType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Price (in NZD)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          placeholder="e.g., 150.00"
-                          {...field}
-                          disabled={isCreationBlocked}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        />
-                      </FormControl>
+                      <FormLabel>Pricing</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isCreationBlocked}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select pricing type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="fixed">Fixed price</SelectItem>
+                          <SelectItem value="from">From (starting at)</SelectItem>
+                          <SelectItem value="quote">Quote required</SelectItem>
+                        </SelectContent>
+                      </Select>
                       <FormDescription>
-                        {providerChargesGst ? 'Prices include GST (15%).' : 'Prices exclude GST (15%).'}
+                        {form.watch('pricingType') === 'fixed' && 'Customers see an exact price.'}
+                        {form.watch('pricingType') === 'from' && 'Customers see “From $X”.'}
+                        {form.watch('pricingType') === 'quote' &&
+                          'Customers request a quote; you set the final price on accept.'}
                       </FormDescription>
                       <FormMessage />
                     </FormItem>
@@ -248,15 +279,61 @@ export function ProviderServiceNewClient({
 
               <FormField
                 control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {form.watch('pricingType') === 'from' ? 'Starting price (in NZD)' : 'Price (in NZD)'}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder={form.watch('pricingType') === 'quote' ? 'Quote required' : 'e.g., 150.00'}
+                        {...field}
+                        disabled={isCreationBlocked || form.watch('pricingType') === 'quote'}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      {form.watch('pricingType') === 'quote'
+                        ? 'No upfront price required.'
+                        : (providerChargesGst ? 'Prices include GST (15%).' : 'Prices exclude GST (15%).')}
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="priceNote"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pricing note (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Depends on scope, materials, travel"
+                        {...field}
+                        disabled={isCreationBlocked}
+                      />
+                    </FormControl>
+                    <FormDescription>Short note shown to customers alongside the price.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
                 name="description"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Description</FormLabel>
                     <FormControl>
                       <Textarea
-                        placeholder="Tell customers about your service..."
-                        className="resize-none"
                         rows={5}
+                        placeholder="Describe what's included, exclusions, and any requirements."
                         {...field}
                         disabled={isCreationBlocked}
                       />

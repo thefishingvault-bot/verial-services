@@ -21,7 +21,9 @@ export interface ServiceWithProvider {
   slug: string;
   title: string;
   description: string | null;
-  priceInCents: number;
+  pricingType: 'fixed' | 'from' | 'quote';
+  priceInCents: number | null;
+  priceNote: string | null;
   category: string;
   coverImageUrl: string | null;
   createdAt: Date;
@@ -180,23 +182,25 @@ export async function getServicesDataFromSearchParams(
     whereConditions.push(sql`${avgRatingExpr} >= ${filters.rating}`);
   }
 
-  let orderBy = desc(services.createdAt);
+  const priceNullsLastExpr = sql<number>`CASE WHEN ${services.priceInCents} IS NULL THEN 1 ELSE 0 END`;
+
+  let orderBy: any[] = [desc(services.createdAt)];
   switch (filters.sort) {
     case 'rating_desc':
-      orderBy = desc(avgRatingExpr);
+      orderBy = [desc(avgRatingExpr)];
       break;
     case 'price_asc':
-      orderBy = asc(services.priceInCents);
+      orderBy = [asc(priceNullsLastExpr), asc(services.priceInCents)];
       break;
     case 'price_desc':
-      orderBy = desc(services.priceInCents);
+      orderBy = [asc(priceNullsLastExpr), desc(services.priceInCents)];
       break;
     case 'newest':
-      orderBy = desc(services.createdAt);
+      orderBy = [desc(services.createdAt)];
       break;
     case 'relevance':
     default:
-      orderBy = desc(services.createdAt);
+      orderBy = [desc(services.createdAt)];
       break;
   }
 
@@ -219,7 +223,9 @@ export async function getServicesDataFromSearchParams(
       slug: services.slug,
       title: services.title,
       description: services.description,
+      pricingType: services.pricingType,
       priceInCents: services.priceInCents,
+      priceNote: services.priceNote,
       category: services.category,
       coverImageUrl: services.coverImageUrl,
       createdAt: services.createdAt,
@@ -256,7 +262,7 @@ export async function getServicesDataFromSearchParams(
     .where(and(...whereConditions))
     .orderBy(
       desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`),
-      orderBy,
+      ...orderBy,
     )
     .limit(limit)
     .offset(offset);
@@ -267,7 +273,9 @@ export async function getServicesDataFromSearchParams(
       slug: service.slug,
       title: service.title,
       description: service.description,
+      pricingType: service.pricingType,
       priceInCents: service.priceInCents,
+      priceNote: service.priceNote,
       category: service.category,
       coverImageUrl: service.coverImageUrl,
       createdAt: service.createdAt,

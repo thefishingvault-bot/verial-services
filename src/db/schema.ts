@@ -151,6 +151,12 @@ export const serviceCategoryEnum = pgEnum("service_category", [
   "other"
 ]);
 
+export const servicePricingTypeEnum = pgEnum("service_pricing_type", [
+  "fixed",
+  "from",
+  "quote",
+]);
+
 export const bookingStatusEnum = pgEnum("booking_status", [
   "pending",             // Customer has requested
   "accepted",            // Provider has accepted
@@ -191,7 +197,9 @@ export const services = pgTable("services", {
   title: varchar("title", { length: 255 }).notNull(),
   slug: varchar("slug", { length: 255 }).notNull().unique(), // e.g., awesome-plumbing-service
   description: text("description"),
-  priceInCents: integer("price_in_cents").notNull(), // Store all currency as integers
+  pricingType: servicePricingTypeEnum("pricing_type").default("fixed").notNull(),
+  priceInCents: integer("price_in_cents"), // Store all currency as integers (nullable for quote)
+  priceNote: text("price_note"),
   category: serviceCategoryEnum("category").default("other").notNull(),
   coverImageUrl: text("cover_image_url"),
   chargesGst: boolean("charges_gst").default(true).notNull(),

@@ -9,16 +9,19 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Label } from '@/components/ui/label';
 import { Calendar } from '@/components/ui/calendar';
 import { Loader2, Sparkles } from 'lucide-react';
+import { formatServicePriceLabel, type ServicePricingType } from '@/lib/pricing';
 
 interface ServiceBookingPanelProps {
   serviceId: string;
   providerId: string;
-  priceInCents: number;
+  pricingType: ServicePricingType;
+  priceInCents: number | null;
+  priceNote?: string | null;
   chargesGst: boolean;
   blockedDays: { from: Date; to: Date }[];
 }
 
-export function ServiceBookingPanel({ serviceId, providerId, priceInCents, chargesGst, blockedDays }: ServiceBookingPanelProps) {
+export function ServiceBookingPanel({ serviceId, providerId, pricingType, priceInCents, priceNote, chargesGst, blockedDays }: ServiceBookingPanelProps) {
   const router = useRouter();
   const { isSignedIn } = useUser();
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
@@ -30,7 +33,10 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
   const [error, setError] = useState<string | null>(null);
   const [isBooking, setIsBooking] = useState(false);
 
-  const formattedPrice = useMemo(() => new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(priceInCents / 100), [priceInCents]);
+  const formattedPrice = useMemo(
+    () => formatServicePriceLabel({ pricingType, priceInCents }),
+    [pricingType, priceInCents],
+  );
 
   const fetchSlots = async (date: Date | undefined) => {
     if (!date) return;
@@ -110,7 +116,9 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
       }
 
       const newBooking = await res.json();
-      alert(`Booking request sent! Your booking ID is ${newBooking.id}.`);
+      alert(pricingType === 'quote'
+        ? `Quote request sent! Your request ID is ${newBooking.id}.`
+        : `Booking request sent! Your booking ID is ${newBooking.id}.`);
       router.push('/dashboard/bookings');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong while creating your booking.';
@@ -124,6 +132,9 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
       <CardHeader>
         <CardTitle className="text-2xl">{formattedPrice}</CardTitle>
         <p className="text-sm text-slate-600">{chargesGst ? 'Price includes GST (15%)' : 'Price excludes GST'}</p>
+        {priceNote ? (
+          <p className="text-xs text-slate-600">{priceNote}</p>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4">
         <div>
@@ -202,7 +213,7 @@ export function ServiceBookingPanel({ serviceId, providerId, priceInCents, charg
       </CardContent>
       <CardFooter>
         <Button type="button" onClick={handleBookNow} disabled={isBooking || !selectedSlot} className="w-full">
-          {isBooking ? 'Booking...' : 'Book Now'}
+          {isBooking ? (pricingType === 'quote' ? 'Requesting quote...' : 'Booking...') : (pricingType === 'quote' ? 'Request a Quote' : 'Book Now')}
         </Button>
       </CardFooter>
     </Card>

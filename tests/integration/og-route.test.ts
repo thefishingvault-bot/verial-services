@@ -59,7 +59,8 @@ describe("/api/og/service/[slug]", () => {
   test("handles missing optional fields", async () => {
     const service = createServiceFixture({
       title: "No Biz",
-      priceInCents: 0,
+      pricingType: "quote",
+      priceInCents: null,
       provider: createProviderFixture({ businessName: null, isVerified: false }),
     });
     dbState.client = createOgRouteClient({ service, rating: 0, reviewCount: 0 });
@@ -67,6 +68,6 @@ describe("/api/og/service/[slug]", () => {
     const res: any = await GET(new NextRequest("http://localhost/api/og/service/no-biz"), { params: Promise.resolve({ slug: "no-biz" }) });
     expect(res.status).toBe(200);
     expect(res.body).toContain("No Biz");
-    expect(res.body).toContain("NZ$ 0.00");
+    expect(res.body).toContain("Quote required");
   });
 });

@@ -8,7 +8,8 @@ import type { Metadata } from "next";
 import { Card, CardContent, CardFooter, CardHeader, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle, Star, Briefcase } from "lucide-react";
-import { formatPrice, getTrustBadge } from "@/lib/utils";
+import { getTrustBadge } from "@/lib/utils";
+import { formatServicePriceLabel } from "@/lib/pricing";
 import { ContactButton } from "@/components/common/contact-button";
 import { auth } from "@clerk/nextjs/server";
 
@@ -186,7 +187,12 @@ function ServiceCard({ service }: { service: ProviderService }) {
           <h3 className="text-lg font-semibold">{service.title}</h3>
         </CardContent>
         <CardFooter className="p-4 pt-0">
-          <p className="text-xl font-bold">{formatPrice(service.priceInCents)}</p>
+          <p className="text-xl font-bold">
+            {formatServicePriceLabel({
+              pricingType: service.pricingType,
+              priceInCents: service.priceInCents,
+            })}
+          </p>
         </CardFooter>
       </Card>
     </Link>

@@ -28,7 +28,7 @@ export async function PATCH(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { bookingId, action, reason } = await req.json();
+    const { bookingId, action, reason, finalPriceInCents } = await req.json();
     if (!bookingId || !action) {
       return new NextResponse("Missing bookingId or action", { status: 400 });
     }
@@ -86,6 +86,21 @@ export async function PATCH(req: Request) {
     let clientSecret: string | undefined;
 
     if (action === "accept") {
+      let amountInCents = booking.priceAtBooking;
+
+      // Quote flow: customer requested without a price. Provider must set final price on accept.
+      if (!amountInCents) {
+        const n = typeof finalPriceInCents === 'number' ? Math.round(finalPriceInCents) : NaN;
+        if (!Number.isFinite(n) || n < 100) {
+          return new NextResponse('Final price (in cents) is required to accept quote requests (min $1.00).', { status: 400 });
+        }
+        amountInCents = n;
+      }
+
+      if (!Number.isFinite(amountInCents) || amountInCents < 100) {
+        return new NextResponse('Booking amount is invalid (min $1.00).', { status: 400 });
+      }
+
       // Availability + time off validation (defensive re-check)
       if (booking.scheduledDate) {
         const requestedTime = new Date(booking.scheduledDate);
@@ -139,7 +154,7 @@ export async function PATCH(req: Request) {
 
       const platformFeeBps = parseInt(process.env.PLATFORM_FEE_BPS || "1000", 10);
       const applicationFeeAmount = Math.ceil(
-        booking.priceAtBooking * (platformFeeBps / 10000),
+        amountInCents * (platformFeeBps / 10000),
       );
 
       const existingPiId = booking.paymentIntentId;
@@ -154,7 +169,10 @@ export async function PATCH(req: Request) {
 
       if (existingPiId) {
         const pi = await stripe.paymentIntents.retrieve(existingPiId);
-        if (pi.status === "requires_payment_method" || pi.status === "requires_confirmation" || pi.status === "requires_action") {
+        if (pi.amount !== amountInCents && pi.status !== 'succeeded') {
+          // Amount changed; create a new PI.
+          paymentIntentId = null;
+        } else if (pi.status === "requires_payment_method" || pi.status === "requires_confirmation" || pi.status === "requires_action") {
           clientSecret = pi.client_secret || undefined;
         } else if (pi.status === "succeeded") {
           // Already paid, allow transition to paid via webhook
@@ -168,7 +186,7 @@ export async function PATCH(req: Request) {
       if (!paymentIntentId) {
         const pi = await stripe.paymentIntents.create(
           {
-            amount: booking.priceAtBooking,
+            amount: amountInCents,
             currency: "nzd",
             automatic_payment_methods: { enabled: true },
             application_fee_amount: applicationFeeAmount,
@@ -191,6 +209,7 @@ export async function PATCH(req: Request) {
         .update(bookings)
         .set({
           status: targetStatus,
+          priceAtBooking: amountInCents,
           paymentIntentId,
           providerDeclineReason: null,
           providerCancelReason: null,

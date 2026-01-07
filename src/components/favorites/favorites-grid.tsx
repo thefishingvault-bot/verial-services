@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FavoriteToggle } from "@/components/services/favorite-toggle";
-import { cn, formatPrice, getTrustBadge } from "@/lib/utils";
+import { cn, getTrustBadge } from "@/lib/utils";
+import { formatServicePriceLabel } from "@/lib/pricing";
 import type { FavoriteService, FavoriteSort } from "@/lib/favorites";
 
 interface FavoritesGridProps {
@@ -105,7 +106,9 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-lg font-bold text-slate-900">{formatPrice(fav.priceInCents)}</div>
+                  <div className="text-lg font-bold text-slate-900">
+                    {formatServicePriceLabel({ pricingType: fav.pricingType, priceInCents: fav.priceInCents })}
+                  </div>
                   <div className="text-xs text-slate-500">{fav.chargesGst ? "Price includes GST" : "Price excludes GST"}</div>
                 </div>
               </div>

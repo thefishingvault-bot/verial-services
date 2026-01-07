@@ -8,7 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { FavoritesGrid } from "@/components/favorites/favorites-grid";
-import { cn, formatPrice, getTrustBadge } from "@/lib/utils";
+import { cn, getTrustBadge } from "@/lib/utils";
+import { formatBookingPriceLabel, formatServicePriceLabel } from "@/lib/pricing";
 import type { BookingCardData, CustomerDashboardData, ReviewPrompt } from "@/lib/dashboard/customer-dashboard";
 import type { RecommendationCardData } from "@/lib/recommendations";
 
@@ -106,7 +107,7 @@ function UpcomingBookings({ items }: { items: BookingCardData[] }) {
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3 text-sm text-muted-foreground">
               <StatusBadge status={booking.status} />
-              <span>{formatPrice(booking.priceInCents)}</span>
+              <span>{formatBookingPriceLabel(booking.priceInCents)}</span>
             </div>
             <div className="flex flex-wrap gap-2">
               <Link href={`/dashboard/bookings/${booking.id}`}>
@@ -161,7 +162,7 @@ function PastBookings({ items }: { items: BookingCardData[] }) {
           <CardContent className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <StatusBadge status={booking.status} />
-              <span>{formatPrice(booking.priceInCents)}</span>
+              <span>{formatBookingPriceLabel(booking.priceInCents)}</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {!booking.hasReview ? (
@@ -284,7 +285,7 @@ function Recommendations({ items }: { items: RecommendationCardData[] }) {
               <CardContent className="space-y-2 text-sm text-muted-foreground">
                 <p className="line-clamp-2">{rec.description || "Trusted local service."}</p>
                 <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                  <span>{formatPrice(rec.priceInCents)}</span>
+                  <span>{formatServicePriceLabel({ pricingType: rec.pricingType, priceInCents: rec.priceInCents })}</span>
                   {rec.reason && <span className="text-xs text-muted-foreground">{rec.reason}</span>}
                 </div>
               </CardContent>

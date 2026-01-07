@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { SimilarService } from "@/lib/similar-services";
-import { formatPrice } from "@/lib/utils";
+import { formatServicePriceLabel } from "@/lib/pricing";
 
 interface SimilarServicesGridProps {
   services: SimilarService[];
@@ -48,7 +48,9 @@ export function SimilarServicesGrid({ services }: SimilarServicesGridProps) {
               </Link>
               <div className="text-sm text-slate-600 line-clamp-2">{svc.description || 'No description'}</div>
               <div className="flex items-center justify-between text-sm text-slate-700">
-                <span className="font-semibold">{formatPrice(svc.priceInCents)}</span>
+                <span className="font-semibold">
+                  {formatServicePriceLabel({ pricingType: svc.pricingType, priceInCents: svc.priceInCents })}
+                </span>
                 <span className="flex items-center gap-1 text-amber-600 font-medium">
                   {svc.avgRating.toFixed(1)}★ ({svc.reviewCount})
                 </span>

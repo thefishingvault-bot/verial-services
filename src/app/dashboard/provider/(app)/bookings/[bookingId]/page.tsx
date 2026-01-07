@@ -23,9 +23,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 
 import { useToast } from "@/components/ui/use-toast";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
+import { formatBookingPriceLabel } from "@/lib/pricing";
 
 const ACTIONS = {
   accept: "Accept",
@@ -68,6 +70,7 @@ export default function ProviderBookingDetailPage() {
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"decline" | "cancel" | null>(null);
   const [reason, setReason] = useState("");
+  const [finalPriceNzd, setFinalPriceNzd] = useState("");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -94,10 +97,15 @@ export default function ProviderBookingDetailPage() {
   const handleAction = async (action: keyof typeof ACTIONS, actionReason?: string) => {
     setActionLoading(action);
     try {
+      const finalPriceInCents =
+        action === 'accept' && data?.booking.priceAtBooking === 0
+          ? Math.round((parseFloat(finalPriceNzd) || 0) * 100)
+          : undefined;
+
       const res = await fetch("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, action, reason: actionReason }),
+        body: JSON.stringify({ bookingId, action, reason: actionReason, finalPriceInCents }),
       });
 
       if (!res.ok) {
@@ -164,7 +172,25 @@ export default function ProviderBookingDetailPage() {
           </div>
           <div>
             <span className="text-muted-foreground">Price</span>
-            <div className="font-semibold">${(booking.priceAtBooking / 100).toFixed(2)}</div>
+            <div className="font-semibold">{formatBookingPriceLabel(booking.priceAtBooking)}</div>
+            {booking.status === 'pending' && booking.priceAtBooking === 0 && (
+              <div className="mt-2">
+                <label className="text-xs font-medium text-muted-foreground" htmlFor="final-price">
+                  Final price (NZD)
+                </label>
+                <Input
+                  id="final-price"
+                  type="number"
+                  step="0.01"
+                  placeholder="e.g., 150.00"
+                  value={finalPriceNzd}
+                  onChange={(e) => setFinalPriceNzd(e.target.value)}
+                />
+                <div className="text-xs text-muted-foreground mt-1">
+                  Required to accept quote requests.
+                </div>
+              </div>
+            )}
           </div>
           <div className="text-muted-foreground text-xs">
             Payment Intent: {booking.paymentIntentId || "not created"}
@@ -182,7 +208,10 @@ export default function ProviderBookingDetailPage() {
               </Button>
               <Button
                 onClick={() => handleAction("accept")}
-                disabled={actionLoading === "accept"}
+                disabled={
+                  actionLoading === "accept" ||
+                  (booking.priceAtBooking === 0 && (!(parseFloat(finalPriceNzd) > 0)))
+                }
               >
                 Accept
               </Button>

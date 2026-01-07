@@ -18,7 +18,9 @@ type ServiceSummary = {
   title: string;
   slug: string;
   description: string | null;
-  priceInCents: number;
+  pricingType: (typeof services.pricingType.enumValues)[number];
+  priceInCents: number | null;
+  priceNote: string | null;
   category: (typeof serviceCategoryEnum.enumValues)[number];
   coverImageUrl: string | null;
   createdAt: Date;
@@ -144,7 +146,9 @@ export async function GET(req: NextRequest) {
         title: services.title,
         slug: services.slug,
         description: services.description,
+        pricingType: services.pricingType,
         priceInCents: services.priceInCents,
+        priceNote: services.priceNote,
         category: services.category,
         coverImageUrl: services.coverImageUrl,
         createdAt: services.createdAt,
@@ -182,7 +186,9 @@ export async function GET(req: NextRequest) {
         title: s.title,
         slug: s.slug,
         description: s.description,
+        pricingType: s.pricingType,
         priceInCents: s.priceInCents,
+        priceNote: s.priceNote,
         category: s.category as ServiceSummary["category"],
         coverImageUrl: s.coverImageUrl,
         createdAt: s.createdAt,

@@ -12,7 +12,9 @@ export type FavoriteService = {
   title: string;
   description: string | null;
   category: string;
-  priceInCents: number;
+  pricingType: (typeof services.pricingType.enumValues)[number];
+  priceInCents: number | null;
+  priceNote: string | null;
   chargesGst: boolean;
   coverImageUrl: string | null;
   createdAt: Date;
@@ -43,7 +45,9 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       title: services.title,
       description: services.description,
       category: services.category,
+      pricingType: services.pricingType,
       priceInCents: services.priceInCents,
+      priceNote: services.priceNote,
       chargesGst: services.chargesGst,
       coverImageUrl: services.coverImageUrl,
       createdAt: services.createdAt,
@@ -86,7 +90,7 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
 
     const rankable: RankableService = {
       id: row.id,
-      priceInCents: row.priceInCents,
+      priceInCents: row.priceInCents ?? 0,
       avgRating,
       reviewCount,
       trustScore: row.providerTrustScore ?? 0,
@@ -102,7 +106,9 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       title: row.title,
       description: row.description,
       category: row.category,
+      pricingType: row.pricingType,
       priceInCents: row.priceInCents,
+      priceNote: row.priceNote,
       chargesGst: row.chargesGst,
       coverImageUrl: row.coverImageUrl,
       createdAt: row.createdAt,

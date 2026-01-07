@@ -44,14 +44,26 @@ const categories = [
   'other',
 ] as const;
 
+const pricingTypes = ['fixed', 'from', 'quote'] as const;
+
 const formSchema = z.object({
   title: z.string().min(5, 'Title must be at least 5 characters long.'),
   category: z.enum(categories),
-  price: z.number().positive('Price must be a positive number.'),
+  pricingType: z.enum(pricingTypes),
+  price: z.number().nonnegative(),
+  priceNote: z.string().max(500).optional(),
   description: z.string().optional(),
   region: z.string().min(1, 'Region is required'),
   suburb: z.string().min(1, 'Suburb is required'),
   isPublished: z.boolean(),
+}).superRefine((value, ctx) => {
+  if (value.pricingType !== 'quote' && (!value.price || value.price <= 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ['price'],
+      message: 'Price must be a positive number.',
+    });
+  }
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -76,7 +88,9 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
     defaultValues: {
       title: '',
       category: 'cleaning',
+      pricingType: 'fixed',
       price: 0,
+      priceNote: '',
       description: '',
       region: '',
       suburb: '',
@@ -98,7 +112,9 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
         form.reset({
           title: data.title,
           category: data.category,
-          price: data.priceInCents / 100,
+          pricingType: data.pricingType ?? 'fixed',
+          price: data.priceInCents ? data.priceInCents / 100 : 0,
+          priceNote: data.priceNote ?? '',
           description: data.description || '',
           region: data.region || '',
           suburb: data.suburb || '',
@@ -116,14 +132,16 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
   const onSubmit: SubmitHandler<FormValues> = async (values) => {
     setIsSaving(true);
     try {
-      const priceInCents = Math.round(values.price * 100);
+      const priceInCents = values.pricingType === 'quote' ? null : Math.round(values.price * 100);
       const res = await fetch(`/api/services/${serviceId}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: values.title,
           description: values.description,
+          pricingType: values.pricingType,
           priceInCents,
+          priceNote: values.priceNote,
           category: values.category,
           region: values.region,
           suburb: values.suburb,
@@ -234,23 +252,75 @@ export function ProviderEditServiceClient({ providerStatus }: ProviderEditServic
 
                 <FormField
                   control={form.control}
-                  name="price"
+                  name="pricingType"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Price (in NZD)</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          step="0.01"
-                          {...field}
-                          onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
-                        />
-                      </FormControl>
+                      <FormLabel>Pricing</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="fixed">Fixed price</SelectItem>
+                          <SelectItem value="from">From (starting at)</SelectItem>
+                          <SelectItem value="quote">Quote required</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormDescription>
+                        {form.watch('pricingType') === 'fixed' && 'Customers see an exact price.'}
+                        {form.watch('pricingType') === 'from' && 'Customers see “From $X”.'}
+                        {form.watch('pricingType') === 'quote' && 'Customers request a quote; you set the final price on accept.'}
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
               </div>
+
+              <FormField
+                control={form.control}
+                name="price"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>
+                      {form.watch('pricingType') === 'from' ? 'Starting price (in NZD)' : 'Price (in NZD)'}
+                    </FormLabel>
+                    <FormControl>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        placeholder={form.watch('pricingType') === 'quote' ? 'Quote required' : undefined}
+                        {...field}
+                        disabled={form.watch('pricingType') === 'quote'}
+                        onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)}
+                      />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="priceNote"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Pricing note (optional)</FormLabel>
+                    <FormControl>
+                      <Input
+                        placeholder="e.g., Depends on scope, materials, travel"
+                        {...field}
+                      />
+                    </FormControl>
+                    <FormDescription>
+                      Short note shown to customers alongside the price.
+                    </FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={form.control}

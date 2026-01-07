@@ -36,7 +36,9 @@ type ServiceDetail = {
   slug: string;
   title: string;
   description: string | null;
-  priceInCents: number;
+  pricingType: (typeof services.pricingType.enumValues)[number];
+  priceInCents: number | null;
+  priceNote: string | null;
   category: (typeof services.category.enumValues)[number];
   coverImageUrl: string | null;
   chargesGst: boolean;
@@ -156,7 +158,9 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       slug: services.slug,
       title: services.title,
       description: services.description,
+      pricingType: services.pricingType,
       priceInCents: services.priceInCents,
+      priceNote: services.priceNote,
       category: services.category,
       coverImageUrl: services.coverImageUrl,
       chargesGst: services.chargesGst,
@@ -194,7 +198,9 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
     slug: serviceRow.slug,
     title: serviceRow.title,
     description: serviceRow.description,
+    pricingType: serviceRow.pricingType,
     priceInCents: serviceRow.priceInCents,
+    priceNote: serviceRow.priceNote,
     category: serviceRow.category,
     coverImageUrl: serviceRow.coverImageUrl,
     chargesGst: serviceRow.chargesGst,
@@ -416,7 +422,9 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
           <ServiceBookingPanel
             serviceId={service.id}
             providerId={service.provider.id}
+            pricingType={service.pricingType}
             priceInCents={service.priceInCents}
+            priceNote={service.priceNote}
             chargesGst={service.chargesGst}
             blockedDays={blockedDays}
           />

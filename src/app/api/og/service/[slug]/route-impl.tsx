@@ -53,7 +53,11 @@ const handler = async (req: NextRequest, context: RouteContext): Promise<Respons
 
   const title = sanitize(service.title, 90);
   const providerName = sanitize(service.provider?.businessName ?? 'Provider', 50);
-  const price = `NZ$ ${(service.priceInCents / 100).toFixed(2)}`;
+  const price = service.pricingType === 'quote'
+    ? 'Quote required'
+    : (service.priceInCents
+      ? `${service.pricingType === 'from' ? 'From ' : ''}NZ$ ${(service.priceInCents / 100).toFixed(2)}`
+      : '—');
   const ratingText = `${avgRating?.toFixed(1) ?? 'N/A'} ★ (${totalReviews ?? 0})`;
   const verified = service.provider?.isVerified;
 

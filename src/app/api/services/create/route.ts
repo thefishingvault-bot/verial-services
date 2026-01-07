@@ -38,10 +38,39 @@ export async function POST(req: Request) {
       return new NextResponse('Your provider application was rejected. You cannot create services.', { status: 403 });
     }
 
-    const { title, description, priceInCents, category } = await req.json();
+    const body = (await req.json()) as {
+      title?: string;
+      description?: string | null;
+      pricingType?: string;
+      priceInCents?: number | null;
+      priceNote?: string | null;
+      category?: string;
+    };
+    const { title, description, pricingType, priceInCents, priceNote, category } = body;
 
-    if (!title || !priceInCents || !category) {
-      return new NextResponse("Missing required fields: title, priceInCents, category", { status: 400 });
+    if (!title || !category || !pricingType) {
+      return new NextResponse(
+        "Missing required fields: title, category, pricingType",
+        { status: 400 },
+      );
+    }
+
+    if (!['fixed', 'from', 'quote'].includes(pricingType)) {
+      return new NextResponse(`Invalid pricingType: ${pricingType}`, { status: 400 });
+    }
+
+    const normalizedPriceNote = typeof priceNote === 'string' && priceNote.trim().length
+      ? priceNote.trim().slice(0, 500)
+      : null;
+
+    const effectivePriceInCents = pricingType === 'quote'
+      ? null
+      : (typeof priceInCents === 'number' ? priceInCents : null);
+
+    if (pricingType !== 'quote') {
+      if (effectivePriceInCents == null || !Number.isFinite(effectivePriceInCents) || effectivePriceInCents <= 0) {
+        return new NextResponse("priceInCents must be a positive number for fixed/from pricing", { status: 400 });
+      }
     }
 
     const providerRegion = provider.baseRegion;
@@ -57,9 +86,11 @@ export async function POST(req: Request) {
     const validRegion = Object.keys(NZ_REGIONS).includes(providerRegion);
     const validSuburb = validRegion ? NZ_REGIONS[providerRegion].includes(providerSuburb) : false;
 
-    if (!serviceCategoryEnum.enumValues.includes(category)) {
+    if (!(serviceCategoryEnum.enumValues as readonly string[]).includes(category)) {
       return new NextResponse(`Invalid category: ${category}`, { status: 400 });
     }
+
+    const categoryValue = category as (typeof serviceCategoryEnum.enumValues)[number];
 
     if (!validRegion || !validSuburb) {
       return new NextResponse(
@@ -75,8 +106,10 @@ export async function POST(req: Request) {
       providerId: provider.id,
       title: title,
       description: description,
-      priceInCents: priceInCents,
-      category: category,
+      pricingType: pricingType as 'fixed' | 'from' | 'quote',
+      priceInCents: effectivePriceInCents,
+      priceNote: normalizedPriceNote,
+      category: categoryValue,
       slug: `${slug}-${Math.random().toString(36).substring(2, 8)}`, // Add random suffix to ensure uniqueness for MVP
       chargesGst: provider.chargesGst,
       region: providerRegion,

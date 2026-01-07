@@ -11,7 +11,9 @@ export type RecommendationCardData = {
   slug: string;
   title: string;
   description: string | null;
-  priceInCents: number;
+  pricingType: (typeof services.pricingType.enumValues)[number];
+  priceInCents: number | null;
+  priceNote: string | null;
   category: ServiceCategory;
   coverImageUrl: string | null;
   provider: {
@@ -90,7 +92,9 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
       slug: services.slug,
       title: services.title,
       description: services.description,
+      pricingType: services.pricingType,
       priceInCents: services.priceInCents,
+      priceNote: services.priceNote,
       category: services.category,
       coverImageUrl: services.coverImageUrl,
       createdAt: services.createdAt,
@@ -132,7 +136,7 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
 
       const rankable: RankableService = {
         id: row.id,
-        priceInCents: row.priceInCents,
+        priceInCents: row.priceInCents ?? 0,
         avgRating,
         reviewCount,
         trustScore: row.providerTrustScore ?? 0,
@@ -158,7 +162,9 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
         slug: row.slug,
         title: row.title,
         description: row.description,
+        pricingType: row.pricingType,
         priceInCents: row.priceInCents,
+        priceNote: row.priceNote,
         category: row.category,
         coverImageUrl: row.coverImageUrl,
         provider: {

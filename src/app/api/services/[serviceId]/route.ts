@@ -60,14 +60,27 @@ export async function PATCH(
     const body = (await req.json()) as {
       title?: string;
       description?: string | null;
+      pricingType?: 'fixed' | 'from' | 'quote' | string;
       priceInCents?: number;
+      priceNote?: string | null;
       category?: string;
       chargesGst?: boolean;
       region?: string;
       suburb?: string;
       isPublished?: boolean;
     };
-    const { title, description, priceInCents, category, chargesGst, region, suburb, isPublished } = body;
+    const {
+      title,
+      description,
+      pricingType,
+      priceInCents,
+      priceNote,
+      category,
+      chargesGst,
+      region,
+      suburb,
+      isPublished,
+    } = body;
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
@@ -114,12 +127,55 @@ export async function PATCH(
       }
     }
 
+    const normalizedPricingType = pricingType === undefined
+      ? undefined
+      : (pricingType as string);
+
+    if (normalizedPricingType !== undefined && !['fixed', 'from', 'quote'].includes(normalizedPricingType)) {
+      return new NextResponse('Invalid pricingType', { status: 400 });
+    }
+
+    const normalizedPriceNote = priceNote === undefined
+      ? undefined
+      : (typeof priceNote === 'string' && priceNote.trim().length
+        ? priceNote.trim().slice(0, 500)
+        : null);
+
+    // Validate pricingType/priceInCents combo.
+    // If changing either, we may need the existing values.
+    const needsPricingValidation = normalizedPricingType !== undefined || priceInCents !== undefined;
+    let effectivePricingType = normalizedPricingType as ('fixed' | 'from' | 'quote') | undefined;
+    let effectivePriceInCents = priceInCents as number | null | undefined;
+
+    if (needsPricingValidation) {
+      const existing = await db.query.services.findFirst({
+        where: and(eq(services.id, serviceId), eq(services.providerId, provider.id)),
+        columns: { pricingType: true, priceInCents: true },
+      });
+      if (!existing) {
+        return new NextResponse('Service not found or access denied', { status: 404 });
+      }
+
+      effectivePricingType = (effectivePricingType ?? existing.pricingType) as 'fixed' | 'from' | 'quote';
+      effectivePriceInCents = effectivePriceInCents ?? existing.priceInCents;
+
+      if (effectivePricingType === 'quote') {
+        effectivePriceInCents = null;
+      } else {
+        if (effectivePriceInCents == null || !Number.isFinite(effectivePriceInCents) || effectivePriceInCents <= 0) {
+          return new NextResponse('priceInCents must be a positive number for fixed/from pricing', { status: 400 });
+        }
+      }
+    }
+
     const [updatedService] = await db
       .update(services)
       .set({
         ...(title !== undefined && { title }),
         ...(description !== undefined && { description }),
-        ...(priceInCents !== undefined && { priceInCents }),
+        ...(normalizedPricingType !== undefined && { pricingType: normalizedPricingType as 'fixed' | 'from' | 'quote' }),
+        ...(normalizedPriceNote !== undefined && { priceNote: normalizedPriceNote }),
+        ...(needsPricingValidation && { priceInCents: effectivePriceInCents }),
         ...(categoryValue !== undefined && { category: categoryValue }),
         ...(chargesGst !== undefined && { chargesGst }),
         ...(region !== undefined && { region }),

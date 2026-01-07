@@ -171,13 +171,21 @@ export async function POST(req: Request) {
       // --- End Availability Check ---
 
       // 5. Create the booking
+      const priceAtBooking = service.pricingType === 'quote'
+        ? 0
+        : (service.priceInCents ?? 0);
+
+      if (service.pricingType !== 'quote' && (!priceAtBooking || priceAtBooking <= 0)) {
+        throw new Error('INVALID_SERVICE_PRICE');
+      }
+
       const [created] = await db.insert(bookings).values({
         id: generateBookingId(),
         userId: userId,
         serviceId: service.id,
         providerId: service.providerId, // Denormalized for easy queries
         status: "pending",
-        priceAtBooking: service.priceInCents, // Snapshot the price
+        priceAtBooking, // Snapshot price; 0 means quote required (price TBD)
         scheduledDate: scheduledDate ? new Date(scheduledDate) : null,
         region: service.region ?? null,
         suburb: service.suburb ?? null,
@@ -254,6 +262,10 @@ export async function POST(req: Request) {
 
     if (message === "PROVIDER_SUSPENDED") {
       return new NextResponse("Provider is currently suspended", { status: 403 });
+    }
+
+    if (message === 'INVALID_SERVICE_PRICE') {
+      return new NextResponse('Service pricing is invalid. Please contact support.', { status: 400 });
     }
 
     return new NextResponse("Internal Server Error", { status: 500 });
