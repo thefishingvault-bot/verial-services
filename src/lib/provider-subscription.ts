@@ -15,8 +15,8 @@ export function getPlatformFeeBpsForPlan(plan: ProviderPlan): number {
 }
 
 export function getStripePriceIdForPlan(plan: ProviderPlan): string | null {
-  if (plan === "pro") return process.env.STRIPE_PRICE_PRO_MONTHLY ?? null;
-  if (plan === "elite") return process.env.STRIPE_PRICE_ELITE_MONTHLY ?? null;
+  if (plan === "pro") return process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO ?? null;
+  if (plan === "elite") return process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE ?? null;
   return null;
 }
 
@@ -28,7 +28,9 @@ export function getStripeLookupKeyForPlan(plan: ProviderPlan): string | null {
 
 export function planFromStripePriceId(priceId: string | null | undefined): ProviderPlan | null {
   if (!priceId) return null;
-  if (process.env.STRIPE_PRICE_PRO_MONTHLY && priceId === process.env.STRIPE_PRICE_PRO_MONTHLY) return "pro";
-  if (process.env.STRIPE_PRICE_ELITE_MONTHLY && priceId === process.env.STRIPE_PRICE_ELITE_MONTHLY) return "elite";
+  const pro = process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO;
+  const elite = process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE;
+  if (pro && priceId === pro) return "pro";
+  if (elite && priceId === elite) return "elite";
   return null;
 }

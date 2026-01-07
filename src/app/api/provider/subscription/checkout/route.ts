@@ -81,6 +81,20 @@ export async function POST(req: Request) {
       );
     }
 
+    // If env vars are misconfigured with Product IDs (prod_...), fail fast with a clean message.
+    if (!priceId.startsWith("price_")) {
+      return NextResponse.json(
+        {
+          error: "Invalid Stripe price id",
+          plan,
+          mode,
+          priceId,
+          expectedPrefix: "price_",
+        },
+        { status: 409 },
+      );
+    }
+
     const price = await retrieveStripePriceSafe(priceId);
     console.log("[API_PROVIDER_SUBSCRIPTION_CHECKOUT]", {
       plan,
