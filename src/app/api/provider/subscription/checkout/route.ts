@@ -227,6 +227,19 @@ export async function POST(req: Request) {
           updatedAt: new Date(),
         })
         .where(eq(providers.id, provider.id));
+    } else {
+      // Keep Stripe Customer metadata in sync so subscription events can map back to a provider.
+      try {
+        await stripe.customers.update(customerId, {
+          metadata: { userId, providerId: provider.id },
+        });
+      } catch (err) {
+        console.warn("[API_PROVIDER_SUBSCRIPTION_CHECKOUT] Failed to update customer metadata", {
+          providerId: provider.id,
+          customerId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
 
     const origin = req.headers.get("origin") || process.env.NEXT_PUBLIC_APP_URL || "";
@@ -240,7 +253,11 @@ export async function POST(req: Request) {
       allow_promotion_codes: true,
       success_url: successUrl,
       cancel_url: cancelUrl,
-      metadata: { userId, providerId: provider.id, plan },
+      metadata: { userId, providerId: provider.id, plan, env: mode },
+      // Ensure the created Subscription also carries provider metadata for subscription.* webhooks.
+      subscription_data: {
+        metadata: { userId, providerId: provider.id, plan, env: mode },
+      },
     });
 
     return NextResponse.json({ url: session.url });

@@ -8,6 +8,7 @@ import { stripe, detectStripeMode } from "@/lib/stripe";
 import { providers, users } from "@/db/schema";
 import {
   normalizeProviderPlan,
+  resolvePlanFromStripeDetails,
   getExpectedStripePriceIds,
   type ProviderPlan,
 } from "@/lib/provider-subscription";
@@ -46,7 +47,8 @@ async function resolvePlanFromSubscription(sub: Stripe.Subscription): Promise<{
   matchedProductName: string | null;
   itemPriceIds: string[];
   itemLookupKeys: Array<string | null>;
-  resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none";
+  resolutionSource: "lookup_key" | "env_price_id" | "env_product_id" | "product_name" | "none";
+  matched: boolean;
   expected: ReturnType<typeof getExpectedStripePriceIds>;
 }> {
   const items = sub.items?.data ?? [];
@@ -82,37 +84,24 @@ async function resolvePlanFromSubscription(sub: Stripe.Subscription): Promise<{
     }
   }
 
-  // Mapping priority (do NOT default to starter when active/trialing):
-  // lookup_key → env price id → (handled by caller: unknown if active/trialing, starter otherwise)
-  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
-
-  let plan: ProviderPlan = "unknown";
-  let resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none" = "none";
-
-  if (lookupKey && lookupKey === proKey) {
-    plan = "pro";
-    resolutionSource = "lookup_key";
-  } else if (lookupKey && lookupKey === eliteKey) {
-    plan = "elite";
-    resolutionSource = "lookup_key";
-  } else if (priceId && expected.pro && priceId === expected.pro) {
-    plan = "pro";
-    resolutionSource = "env_price_id";
-  } else if (priceId && expected.elite && priceId === expected.elite) {
-    plan = "elite";
-    resolutionSource = "env_price_id";
-  }
+  const resolution = resolvePlanFromStripeDetails({
+    mode,
+    priceId,
+    lookupKey,
+    productId,
+    productName,
+  });
 
   return {
-    plan,
+    plan: resolution.plan,
     matchedPriceId: priceId,
     matchedLookupKey: lookupKey,
     matchedProductId: productId,
     matchedProductName: productName,
     itemPriceIds,
     itemLookupKeys,
-    resolutionSource,
+    resolutionSource: resolution.source,
+    matched: resolution.matched,
     expected,
   };
 }
@@ -248,9 +237,8 @@ export async function POST() {
 
     const resolved = best ? await resolvePlanFromSubscription(best) : null;
 
-    const finalPlan: ProviderPlan = subscribed
-      ? (resolved?.plan === "pro" || resolved?.plan === "elite" ? resolved.plan : "unknown")
-      : "starter";
+    // Never silently store starter when subscribed unless it truly maps to starter (via env product id).
+    const finalPlan: ProviderPlan = subscribed ? (resolved?.plan ?? "unknown") : "starter";
     const priceId = resolved?.matchedPriceId ?? best?.items?.data?.[0]?.price?.id ?? null;
     const lookupKey = resolved?.matchedLookupKey ?? null;
     const productId = resolved?.matchedProductId ?? null;
@@ -295,6 +283,7 @@ export async function POST() {
       providerId: provider.id,
       plan: normalizeProviderPlan(finalPlan),
       stripe: {
+        mode: detectStripeMode(),
         customerId,
         subscriptionId: best?.id ?? null,
         status: bestStatus,
@@ -307,6 +296,7 @@ export async function POST() {
         subscription_item_lookup_keys: resolved?.itemLookupKeys ?? [],
         priceResolutionSource: resolved?.resolutionSource ?? null,
         mapping_source: resolved?.resolutionSource ?? null,
+        matched: resolved?.matched ?? false,
         expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
         expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
         expectedEnvSource: resolved?.expected.source ?? null,

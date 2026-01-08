@@ -13,6 +13,7 @@ type SubscriptionStatusResponse = {
   providerId: string;
   plan: ProviderPlan;
   stripe: {
+    mode?: string | null;
     customerId: string | null;
     subscriptionId: string | null;
     status: string | null;
@@ -24,6 +25,7 @@ type SubscriptionStatusResponse = {
     subscription_item_price_ids?: string[];
     subscription_item_lookup_keys?: Array<string | null>;
     priceResolutionSource?: string | null;
+    matched?: boolean;
     expectedProPriceIdMasked?: string | null;
     expectedElitePriceIdMasked?: string | null;
     expectedEnvSource?: string | null;
@@ -329,6 +331,7 @@ export default function ProviderBillingClient() {
               <div>stripe_customer_id: {data?.stripe.customerId ?? "—"}</div>
               <div>stripe_subscription_id: {data?.stripe.subscriptionId ?? "—"}</div>
               <div>subscription_status: {data?.stripe.status ?? "—"}</div>
+              <div>mode: {data?.stripe.mode ?? "—"}</div>
               <div>subscription_plan: {currentPlan}</div>
               <div>last_sync_at: {data?.stripe.lastSyncAt ?? "—"}</div>
               <div>subscription_price_id: {data?.stripe.subscription_price_id ?? data?.stripe.priceId ?? "—"}</div>
@@ -338,6 +341,7 @@ export default function ProviderBillingClient() {
               <div>subscription_item_price_ids: {(data?.stripe.subscription_item_price_ids ?? []).join(", ") || "—"}</div>
               <div>subscription_item_lookup_keys: {(data?.stripe.subscription_item_lookup_keys ?? []).join(", ") || "—"}</div>
               <div>priceResolutionSource: {data?.stripe.priceResolutionSource ?? "—"}</div>
+              <div>matched: {typeof data?.stripe.matched === "boolean" ? String(data.stripe.matched) : "—"}</div>
               <div>expectedEnvSource: {data?.stripe.expectedEnvSource ?? "—"}</div>
               <div>expectedProPriceId: {data?.stripe.expectedProPriceIdMasked ?? "—"}</div>
               <div>expectedElitePriceId: {data?.stripe.expectedElitePriceIdMasked ?? "—"}</div>

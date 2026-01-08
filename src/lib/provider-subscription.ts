@@ -2,6 +2,12 @@ export type ProviderPlan = "starter" | "pro" | "elite" | "unknown";
 
 export type StripeMode = "test" | "live";
 
+const trim = (v: unknown): string | null => {
+  if (typeof v !== "string") return null;
+  const t = v.trim();
+  return t.length ? t : null;
+};
+
 export function isStripeSubscribedStatus(status: string | null | undefined): boolean {
   return status === "active" || status === "trialing";
 }
@@ -33,14 +39,14 @@ export function getPlatformFeeBpsForPlan(plan: ProviderPlan): number {
 }
 
 export function getStripePriceIdForPlan(plan: ProviderPlan): string | null {
-  if (plan === "pro") return process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO ?? null;
-  if (plan === "elite") return process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE ?? null;
+  if (plan === "pro") return trim(process.env.STRIPE_PRICE_PRO_MONTHLY) ?? trim(process.env.STRIPE_PRICE_PRO) ?? null;
+  if (plan === "elite") return trim(process.env.STRIPE_PRICE_ELITE_MONTHLY) ?? trim(process.env.STRIPE_PRICE_ELITE) ?? null;
   return null;
 }
 
 export function getStripeLookupKeyForPlan(plan: ProviderPlan): string | null {
-  if (plan === "pro") return process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-  if (plan === "elite") return process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+  if (plan === "pro") return trim(process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY) ?? "verial_pro_monthly";
+  if (plan === "elite") return trim(process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY) ?? "verial_elite_monthly";
   return null;
 }
 
@@ -52,42 +58,33 @@ export function getExpectedStripePriceIds(params: { mode: StripeMode }): {
   const { mode } = params;
 
   // New, explicit mode-aware env vars (requested).
-  const proMode =
-    mode === "test"
-      ? process.env.STRIPE_PRO_PRICE_ID_TEST
-      : process.env.STRIPE_PRO_PRICE_ID_LIVE;
-  const eliteMode =
-    mode === "test"
-      ? process.env.STRIPE_ELITE_PRICE_ID_TEST
-      : process.env.STRIPE_ELITE_PRICE_ID_LIVE;
+  const proMode = trim(mode === "test" ? process.env.STRIPE_PRO_PRICE_ID_TEST : process.env.STRIPE_PRO_PRICE_ID_LIVE);
+  const eliteMode = trim(mode === "test" ? process.env.STRIPE_ELITE_PRICE_ID_TEST : process.env.STRIPE_ELITE_PRICE_ID_LIVE);
 
-  if (proMode || eliteMode) {
-    return { pro: proMode ?? null, elite: eliteMode ?? null, source: "mode_env" };
-  }
+  if (proMode || eliteMode) return { pro: proMode, elite: eliteMode, source: "mode_env" };
 
   // Back-compat: existing env vars used across environments.
-  const proLegacy = process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO ?? null;
-  const eliteLegacy = process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE ?? null;
-  if (proLegacy || eliteLegacy) {
-    return { pro: proLegacy, elite: eliteLegacy, source: "legacy_env" };
-  }
+  const proLegacy = trim(process.env.STRIPE_PRICE_PRO_MONTHLY) ?? trim(process.env.STRIPE_PRICE_PRO);
+  const eliteLegacy = trim(process.env.STRIPE_PRICE_ELITE_MONTHLY) ?? trim(process.env.STRIPE_PRICE_ELITE);
+  if (proLegacy || eliteLegacy) return { pro: proLegacy, elite: eliteLegacy, source: "legacy_env" };
 
   return { pro: null, elite: null, source: "none" };
 }
 
 export function getStripeProductIdForPlan(plan: ProviderPlan): string | null {
-  if (plan === "pro") return process.env.STRIPE_PRODUCT_PRO ?? null;
-  if (plan === "elite") return process.env.STRIPE_PRODUCT_ELITE ?? null;
-  if (plan === "starter") return process.env.STRIPE_PRODUCT_STARTER ?? null;
+  if (plan === "pro") return trim(process.env.STRIPE_PRODUCT_PRO);
+  if (plan === "elite") return trim(process.env.STRIPE_PRODUCT_ELITE);
+  if (plan === "starter") return trim(process.env.STRIPE_PRODUCT_STARTER);
   return null;
 }
 
 export function planFromStripePriceId(priceId: string | null | undefined): ProviderPlan | null {
-  if (!priceId) return null;
-  const pro = process.env.STRIPE_PRICE_PRO_MONTHLY ?? process.env.STRIPE_PRICE_PRO;
-  const elite = process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE;
-  if (pro && priceId === pro) return "pro";
-  if (elite && priceId === elite) return "elite";
+  const trimmed = trim(priceId);
+  if (!trimmed) return null;
+  const pro = trim(process.env.STRIPE_PRICE_PRO_MONTHLY) ?? trim(process.env.STRIPE_PRICE_PRO);
+  const elite = trim(process.env.STRIPE_PRICE_ELITE_MONTHLY) ?? trim(process.env.STRIPE_PRICE_ELITE);
+  if (pro && trimmed === pro) return "pro";
+  if (elite && trimmed === elite) return "elite";
   return null;
 }
 
@@ -95,11 +92,11 @@ export function resolvePlanFromStripePrice(params: {
   priceId: string | null | undefined;
   priceLookupKey?: string | null | undefined;
 }): ProviderPlan | null {
-  const lookupKey = params.priceLookupKey ?? null;
+  const lookupKey = trim(params.priceLookupKey);
   // A) lookup_key first (requested)
   if (lookupKey) {
-    const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-    const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+    const proKey = getStripeLookupKeyForPlan("pro") ?? "verial_pro_monthly";
+    const eliteKey = getStripeLookupKeyForPlan("elite") ?? "verial_elite_monthly";
     if (lookupKey === eliteKey) return "elite";
     if (lookupKey === proKey) return "pro";
   }
@@ -113,7 +110,7 @@ export function resolvePlanFromStripePrice(params: {
 
 export type PricePlanResolution = {
   plan: ProviderPlan;
-  source: "lookup_key" | "env_price_id" | "product_name" | "none";
+  source: "lookup_key" | "env_price_id" | "env_product_id" | "product_name" | "none";
   matched: boolean;
 };
 
@@ -121,13 +118,18 @@ export function resolvePlanFromStripeDetails(params: {
   mode: StripeMode;
   priceId: string | null;
   lookupKey: string | null;
+  productId: string | null;
   productName: string | null;
 }): PricePlanResolution {
-  const { mode, priceId, lookupKey, productName } = params;
+  const mode = params.mode;
+  const priceId = trim(params.priceId);
+  const lookupKey = trim(params.lookupKey);
+  const productId = trim(params.productId);
+  const productName = params.productName ?? null;
 
   // A) lookup_key first
-  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+  const proKey = getStripeLookupKeyForPlan("pro") ?? "verial_pro_monthly";
+  const eliteKey = getStripeLookupKeyForPlan("elite") ?? "verial_elite_monthly";
   if (lookupKey && lookupKey === eliteKey) return { plan: "elite", source: "lookup_key", matched: true };
   if (lookupKey && lookupKey === proKey) return { plan: "pro", source: "lookup_key", matched: true };
 
@@ -135,6 +137,14 @@ export function resolvePlanFromStripeDetails(params: {
   const expected = getExpectedStripePriceIds({ mode });
   if (priceId && expected.pro && priceId === expected.pro) return { plan: "pro", source: "env_price_id", matched: true };
   if (priceId && expected.elite && priceId === expected.elite) return { plan: "elite", source: "env_price_id", matched: true };
+
+  // C) productId via env product ids (very reliable)
+  const proProd = getStripeProductIdForPlan("pro");
+  const eliteProd = getStripeProductIdForPlan("elite");
+  const starterProd = getStripeProductIdForPlan("starter");
+  if (productId && eliteProd && productId === eliteProd) return { plan: "elite", source: "env_product_id", matched: true };
+  if (productId && proProd && productId === proProd) return { plan: "pro", source: "env_product_id", matched: true };
+  if (productId && starterProd && productId === starterProd) return { plan: "starter", source: "env_product_id", matched: true };
 
   // C) product name fallback (last resort)
   const normalizedName = (productName ?? "").toLowerCase();
