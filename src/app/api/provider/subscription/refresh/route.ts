@@ -8,14 +8,20 @@ import { stripe, detectStripeMode } from "@/lib/stripe";
 import { providers, users } from "@/db/schema";
 import {
   normalizeProviderPlan,
-  resolvePlanFromStripePrice,
+  resolvePlanFromStripeDetails,
   isStripeSubscribedStatus,
+  getExpectedStripePriceIds,
+  type ProviderPlan,
 } from "@/lib/provider-subscription";
 import { checkProvidersColumnsExist } from "@/lib/provider-subscription-schema";
 
 export const runtime = "nodejs";
 
-type ProviderPlan = "starter" | "pro" | "elite";
+function maskStripeId(value: string | null): string | null {
+  if (!value) return null;
+  if (value.length <= 12) return `${value.slice(0, 6)}…`;
+  return `${value.slice(0, 8)}…${value.slice(-4)}`;
+}
 
 function getSubPeriodEndUnix(sub: Stripe.Subscription): number {
   // Stripe uses seconds since epoch.
@@ -33,36 +39,75 @@ function pickBestSubscription(subs: Stripe.Subscription[]): Stripe.Subscription 
   );
 }
 
-function resolvePlanFromSubscription(sub: Stripe.Subscription): {
-  plan: ProviderPlan | null;
+async function resolvePlanFromSubscription(sub: Stripe.Subscription): Promise<{
+  plan: ProviderPlan;
   matchedPriceId: string | null;
-} {
+  matchedLookupKey: string | null;
+  matchedProductId: string | null;
+  matchedProductName: string | null;
+  itemPriceIds: string[];
+  itemLookupKeys: Array<string | null>;
+  resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none";
+  expected: ReturnType<typeof getExpectedStripePriceIds>;
+}> {
   // Prefer the highest plan across items.
   // Note: items may be expanded as Stripe.Price objects.
   const items = sub.items?.data ?? [];
 
-  let bestPlan: ProviderPlan | null = null;
-  let bestPriceId: string | null = null;
+  const mode = detectStripeMode();
+  const expected = getExpectedStripePriceIds({ mode });
 
-  for (const item of items) {
-    const price = item.price;
-    const priceId = price?.id ?? null;
-    const lookupKey = (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null;
+  const itemPriceIds = items.map((it) => it.price?.id).filter((v): v is string => typeof v === "string");
+  const itemLookupKeys = items.map(
+    (it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) as string | null,
+  );
 
-    const plan = resolvePlanFromStripePrice({ priceId, priceLookupKey: lookupKey });
-    if (!plan) continue;
+  // Prefer an item that matches known lookup_keys (fast path).
+  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
+  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+  const preferredItem =
+    items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === eliteKey) ??
+    items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === proKey) ??
+    items[0] ??
+    null;
 
-    if (plan === "elite") {
-      return { plan: "elite", matchedPriceId: priceId };
-    }
+  const price = preferredItem?.price ?? null;
+  const priceId = price?.id ?? null;
+  const lookupKey = (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null;
 
-    if (plan === "pro" && bestPlan !== "elite") {
-      bestPlan = "pro";
-      bestPriceId = priceId;
+  const rawProduct = (price as unknown as { product?: string | Stripe.Product | null })?.product ?? null;
+  const productId = typeof rawProduct === "string" ? rawProduct : rawProduct?.id ?? null;
+  let productName = typeof rawProduct === "string" ? null : rawProduct?.name ?? null;
+
+  // Last-resort mapping uses product name, so fetch it only if needed.
+  // Note: resolvePlanFromStripeDetails will only use productName if lookup_key and env matching fail.
+  if (!productName && productId) {
+    try {
+      const prod = await stripe.products.retrieve(productId);
+      productName = prod?.name ?? null;
+    } catch {
+      productName = null;
     }
   }
 
-  return { plan: bestPlan, matchedPriceId: bestPriceId };
+  const resolution = resolvePlanFromStripeDetails({
+    mode,
+    priceId,
+    lookupKey,
+    productName,
+  });
+
+  return {
+    plan: resolution.plan,
+    matchedPriceId: priceId,
+    matchedLookupKey: lookupKey,
+    matchedProductId: productId,
+    matchedProductName: productName,
+    itemPriceIds,
+    itemLookupKeys,
+    resolutionSource: resolution.source,
+    expected,
+  };
 }
 
 async function findStripeCustomerId(params: {
@@ -183,7 +228,7 @@ export async function POST() {
       customer: customerId,
       status: "all",
       limit: 100,
-      expand: ["data.items.data.price"],
+      expand: ["data.items.data.price", "data.items.data.price.product"],
     });
 
     const subs = subsRes.data ?? [];
@@ -192,10 +237,13 @@ export async function POST() {
     const bestStatus = best?.status ?? null;
     const subscribed = isStripeSubscribedStatus(bestStatus);
 
-    const resolved = best ? resolvePlanFromSubscription(best) : { plan: null, matchedPriceId: null };
+    const resolved = best ? await resolvePlanFromSubscription(best) : null;
 
-    const finalPlan: ProviderPlan = subscribed ? (resolved.plan ?? "starter") : "starter";
-    const priceId = resolved.matchedPriceId ?? best?.items?.data?.[0]?.price?.id ?? null;
+    const finalPlan: ProviderPlan = subscribed ? (resolved?.plan ?? "unknown") : "starter";
+    const priceId = resolved?.matchedPriceId ?? best?.items?.data?.[0]?.price?.id ?? null;
+    const lookupKey = resolved?.matchedLookupKey ?? null;
+    const productId = resolved?.matchedProductId ?? null;
+    const productName = resolved?.matchedProductName ?? null;
     const currentPeriodEnd = best ? getSubPeriodEndUnix(best) : 0;
 
     await db
@@ -221,6 +269,13 @@ export async function POST() {
       subscribed,
       plan: finalPlan,
       priceId,
+      lookupKey,
+      productId,
+      productName,
+      resolutionSource: resolved?.resolutionSource ?? null,
+      expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
+      expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
+      subscriptionItemPriceIds: resolved?.itemPriceIds ?? [],
       currentPeriodEndUnix: currentPeriodEnd || null,
       mode: detectStripeMode(),
     });
@@ -233,6 +288,16 @@ export async function POST() {
         subscriptionId: best?.id ?? null,
         status: bestStatus,
         priceId,
+        subscription_price_id: priceId,
+        subscription_lookup_key: lookupKey,
+        subscription_product_id: productId,
+        subscription_product_name: productName,
+        subscription_item_price_ids: resolved?.itemPriceIds ?? [],
+        subscription_item_lookup_keys: resolved?.itemLookupKeys ?? [],
+        priceResolutionSource: resolved?.resolutionSource ?? null,
+        expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
+        expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
+        expectedEnvSource: resolved?.expected.source ?? null,
         currentPeriodEnd: best && currentPeriodEnd ? new Date(currentPeriodEnd * 1000).toISOString() : null,
         cancelAtPeriodEnd: best?.cancel_at_period_end ?? false,
         lastSyncAt: new Date().toISOString(),

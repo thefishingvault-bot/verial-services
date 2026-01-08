@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-type ProviderPlan = "starter" | "pro" | "elite";
+type ProviderPlan = "starter" | "pro" | "elite" | "unknown";
 
 type SubscriptionStatusResponse = {
   providerId: string;
@@ -17,6 +17,16 @@ type SubscriptionStatusResponse = {
     subscriptionId: string | null;
     status: string | null;
     priceId: string | null;
+    subscription_price_id?: string | null;
+    subscription_lookup_key?: string | null;
+    subscription_product_id?: string | null;
+    subscription_product_name?: string | null;
+    subscription_item_price_ids?: string[];
+    subscription_item_lookup_keys?: Array<string | null>;
+    priceResolutionSource?: string | null;
+    expectedProPriceIdMasked?: string | null;
+    expectedElitePriceIdMasked?: string | null;
+    expectedEnvSource?: string | null;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
     lastSyncAt?: string | null;
@@ -50,12 +60,14 @@ const PLAN_LABEL: Record<ProviderPlan, string> = {
   starter: "Starter",
   pro: "Pro — Monthly",
   elite: "Elite — Monthly",
+  unknown: "Unknown plan",
 };
 
 const PLAN_PRICE: Record<ProviderPlan, string> = {
   starter: "$0 NZD / month",
   pro: "$49 NZD / month",
   elite: "$99 NZD / month",
+  unknown: "—",
 };
 
 const PLAN_COPY: Record<ProviderPlan, {
@@ -98,6 +110,16 @@ const PLAN_COPY: Record<ProviderPlan, {
       "Priority support",
     ],
     feeLine: "0% platform fee per completed booking",
+  },
+  unknown: {
+    headline: "Active subscription detected",
+    description:
+      "We found an active Stripe subscription but couldn't map it to Pro or Elite. Please contact support/admin and share the debug values below.",
+    includes: [
+      "Pro/Elite benefits may not apply until mapping is fixed",
+      "Use Refresh to re-sync from Stripe",
+    ],
+    feeLine: "Standard platform fee may apply until resolved",
   },
 };
 
@@ -197,6 +219,12 @@ export default function ProviderBillingClient() {
     return isNotSubscribedStatus(status) && !isSubscribedStatus(status);
   }, [data?.stripe.status]);
 
+  const showUnknownPlanWarning = useMemo(() => {
+    const status = data?.stripe.status;
+    if (!status) return false;
+    return isSubscribedStatus(status) && currentPlan === "unknown";
+  }, [data?.stripe.status, currentPlan]);
+
   const startCheckout = async (plan: "pro" | "elite") => {
     try {
       setCheckoutPlan(plan);
@@ -273,6 +301,16 @@ export default function ProviderBillingClient() {
         </Alert>
       ) : null}
 
+      {showUnknownPlanWarning ? (
+        <Alert variant="destructive">
+          <AlertTitle>Active subscription found, but plan mapping is unknown</AlertTitle>
+          <AlertDescription>
+            Active Stripe subscription detected but price mapping is unknown: {data?.stripe.subscription_price_id ?? data?.stripe.priceId ?? "(missing price id)"}.
+            Please share the debug panel values with support/admin.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -293,6 +331,16 @@ export default function ProviderBillingClient() {
               <div>subscription_status: {data?.stripe.status ?? "—"}</div>
               <div>subscription_plan: {currentPlan}</div>
               <div>last_sync_at: {data?.stripe.lastSyncAt ?? "—"}</div>
+              <div>subscription_price_id: {data?.stripe.subscription_price_id ?? data?.stripe.priceId ?? "—"}</div>
+              <div>subscription_lookup_key: {data?.stripe.subscription_lookup_key ?? "—"}</div>
+              <div>subscription_product_id: {data?.stripe.subscription_product_id ?? "—"}</div>
+              <div>subscription_product_name: {data?.stripe.subscription_product_name ?? "—"}</div>
+              <div>subscription_item_price_ids: {(data?.stripe.subscription_item_price_ids ?? []).join(", ") || "—"}</div>
+              <div>subscription_item_lookup_keys: {(data?.stripe.subscription_item_lookup_keys ?? []).join(", ") || "—"}</div>
+              <div>priceResolutionSource: {data?.stripe.priceResolutionSource ?? "—"}</div>
+              <div>expectedEnvSource: {data?.stripe.expectedEnvSource ?? "—"}</div>
+              <div>expectedProPriceId: {data?.stripe.expectedProPriceIdMasked ?? "—"}</div>
+              <div>expectedElitePriceId: {data?.stripe.expectedElitePriceIdMasked ?? "—"}</div>
             </div>
           </div>
           <div className="flex gap-2">

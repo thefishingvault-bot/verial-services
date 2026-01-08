@@ -10,7 +10,7 @@ import { createNotification, createNotificationOnce } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
-import { isStripeSubscribedStatus, resolvePlanFromStripePrice } from "@/lib/provider-subscription";
+import { isStripeSubscribedStatus, resolvePlanFromStripeDetails, type ProviderPlan } from "@/lib/provider-subscription";
 import { retrieveStripePriceSafe, detectStripeMode } from "@/lib/stripe";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
@@ -54,7 +54,7 @@ export async function POST(req: Request) {
     stripeSubscriptionPriceId: string | null;
     stripeCurrentPeriodEnd: Date | null;
     stripeCancelAtPeriodEnd: boolean;
-    plan: "starter" | "pro" | "elite";
+    plan: ProviderPlan;
   }) => {
     const {
       source,
@@ -150,6 +150,65 @@ export async function POST(req: Request) {
         stripeSubscriptionId,
       });
     }
+  };
+
+  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
+  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+
+  const resolvePlanForSubscription = async (subscription: Stripe.Subscription): Promise<{
+    plan: ProviderPlan;
+    priceId: string | null;
+    lookupKey: string | null;
+    productId: string | null;
+    productName: string | null;
+    resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none";
+  }> => {
+    const items = subscription.items?.data ?? [];
+    const preferredItem =
+      items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === eliteKey) ??
+      items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === proKey) ??
+      items[0] ??
+      null;
+
+    const itemPriceId = preferredItem?.price?.id ?? null;
+    const price = itemPriceId ? await retrieveStripePriceSafe(itemPriceId) : null;
+    const lookupKey = (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null;
+
+    const rawProduct = (price as unknown as { product?: string | Stripe.Product | null })?.product ?? null;
+    const productId = typeof rawProduct === "string" ? rawProduct : rawProduct?.id ?? null;
+    let productName = typeof rawProduct === "string" ? null : rawProduct?.name ?? null;
+
+    let resolution = resolvePlanFromStripeDetails({
+      mode,
+      priceId: itemPriceId,
+      lookupKey,
+      productName,
+    });
+
+    if (resolution.plan === "unknown" && productId && !productName) {
+      try {
+        const prod = await stripe.products.retrieve(productId);
+        productName = prod?.name ?? null;
+      } catch {
+        productName = null;
+      }
+
+      resolution = resolvePlanFromStripeDetails({
+        mode,
+        priceId: itemPriceId,
+        lookupKey,
+        productName,
+      });
+    }
+
+    return {
+      plan: resolution.plan,
+      priceId: itemPriceId,
+      lookupKey,
+      productId,
+      productName,
+      resolutionSource: resolution.source,
+    };
   };
 
   const loadBooking = async (bookingId: string) =>
@@ -273,13 +332,23 @@ export async function POST(req: Request) {
 
       try {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const priceId = subscription.items.data?.[0]?.price?.id ?? null;
-        const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
-        const inferredPlan = resolvePlanFromStripePrice({
-          priceId,
-          priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
+        const subscribed = isStripeSubscribedStatus(subscription.status);
+        const resolved = await resolvePlanForSubscription(subscription);
+        const plan: ProviderPlan = subscribed ? resolved.plan : "starter";
+
+        console.info("[API_STRIPE_WEBHOOK] Subscription mapped", {
+          source: event.type,
+          providerId,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscription.id,
+          status: subscription.status,
+          priceId: resolved.priceId,
+          lookupKey: resolved.lookupKey,
+          productId: resolved.productId,
+          productName: resolved.productName,
+          resolvedPlan: plan,
+          resolutionSource: resolved.resolutionSource,
         });
-        const plan = inferredPlan ?? "starter";
 
         const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
@@ -289,7 +358,7 @@ export async function POST(req: Request) {
           stripeCustomerId: customerId,
           stripeSubscriptionId: subscription.id,
           stripeSubscriptionStatus: subscription.status,
-          stripeSubscriptionPriceId: priceId,
+          stripeSubscriptionPriceId: resolved.priceId,
           stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
           stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           plan,
@@ -307,15 +376,23 @@ export async function POST(req: Request) {
       const subscription = event.data.object as Stripe.Subscription;
       const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
 
-      const priceId = subscription.items.data?.[0]?.price?.id ?? null;
-      const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
-      const inferredPlan = resolvePlanFromStripePrice({
-        priceId,
-        priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
-      });
-
       const subscribed = isStripeSubscribedStatus(subscription.status);
-      const plan = event.type === "customer.subscription.deleted" ? "starter" : subscribed ? (inferredPlan ?? "starter") : "starter";
+      const resolved = await resolvePlanForSubscription(subscription);
+      const plan: ProviderPlan = event.type === "customer.subscription.deleted" ? "starter" : subscribed ? resolved.plan : "starter";
+
+      console.info("[API_STRIPE_WEBHOOK] Subscription mapped", {
+        source: event.type,
+        providerId: null,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        status: subscription.status,
+        priceId: resolved.priceId,
+        lookupKey: resolved.lookupKey,
+        productId: resolved.productId,
+        productName: resolved.productName,
+        resolvedPlan: plan,
+        resolutionSource: resolved.resolutionSource,
+      });
 
       const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
@@ -325,7 +402,7 @@ export async function POST(req: Request) {
         stripeCustomerId: customerId,
         stripeSubscriptionId: subscription.id,
         stripeSubscriptionStatus: subscription.status,
-        stripeSubscriptionPriceId: priceId,
+        stripeSubscriptionPriceId: resolved.priceId,
         stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
         stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
         plan,
@@ -344,15 +421,23 @@ export async function POST(req: Request) {
 
       try {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
-        const priceId = subscription.items.data?.[0]?.price?.id ?? null;
-        const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
-        const inferredPlan = resolvePlanFromStripePrice({
-          priceId,
-          priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
-        });
-
         const subscribed = isStripeSubscribedStatus(subscription.status);
-        const plan = subscribed ? (inferredPlan ?? "starter") : "starter";
+        const resolved = await resolvePlanForSubscription(subscription);
+        const plan: ProviderPlan = subscribed ? resolved.plan : "starter";
+
+        console.info("[API_STRIPE_WEBHOOK] Subscription mapped", {
+          source: event.type,
+          providerId: null,
+          stripeCustomerId: customerId ?? null,
+          stripeSubscriptionId: subscription.id,
+          status: subscription.status,
+          priceId: resolved.priceId,
+          lookupKey: resolved.lookupKey,
+          productId: resolved.productId,
+          productName: resolved.productName,
+          resolvedPlan: plan,
+          resolutionSource: resolved.resolutionSource,
+        });
         const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
         await updateProviderSubscription({
@@ -361,7 +446,7 @@ export async function POST(req: Request) {
           stripeCustomerId: customerId ?? (typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id) ?? null,
           stripeSubscriptionId: subscription.id,
           stripeSubscriptionStatus: subscription.status,
-          stripeSubscriptionPriceId: priceId,
+          stripeSubscriptionPriceId: resolved.priceId,
           stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
           stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
           plan,

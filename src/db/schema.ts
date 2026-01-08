@@ -27,7 +27,7 @@ export const kycStatusEnum = pgEnum("kyc_status", [
   "rejected"
 ]);
 
-export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elite"]);
+export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elite", "unknown"]);
 
 // --- TABLES ---
 
