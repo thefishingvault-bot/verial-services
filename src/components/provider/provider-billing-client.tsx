@@ -19,8 +19,25 @@ type SubscriptionStatusResponse = {
     priceId: string | null;
     currentPeriodEnd: string | null;
     cancelAtPeriodEnd: boolean;
+    lastSyncAt?: string | null;
   };
 };
+
+function isSubscribedStatus(status: string | null | undefined): boolean {
+  return status === "active" || status === "trialing";
+}
+
+function isNotSubscribedStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return (
+    status === "canceled" ||
+    status === "incomplete" ||
+    status === "incomplete_expired" ||
+    status === "past_due" ||
+    status === "unpaid" ||
+    status === "paused"
+  );
+}
 
 function getJsonStringField(json: unknown, key: string): string | null {
   if (!json || typeof json !== "object") return null;
@@ -90,6 +107,7 @@ export default function ProviderBillingClient() {
   const [data, setData] = useState<SubscriptionStatusResponse | null>(null);
   const [checkoutPlan, setCheckoutPlan] = useState<"pro" | "elite" | null>(null);
   const [billingUnavailable, setBillingUnavailable] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const currentPlan = data?.plan ?? "starter";
 
@@ -123,14 +141,60 @@ export default function ProviderBillingClient() {
     }
   }, [toast]);
 
+  const refreshFromStripe = useCallback(async () => {
+    try {
+      setRefreshing(true);
+      const res = await fetch("/api/provider/subscription/refresh", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      const contentType = res.headers.get("content-type") || "";
+      const json: unknown = contentType.includes("application/json") ? await res.json().catch(() => null) : null;
+
+      if (!res.ok) {
+        const message = getJsonStringField(json, "error") ?? "Failed to refresh from Stripe";
+        throw new Error(message);
+      }
+
+      setData(json as SubscriptionStatusResponse);
+      toast({ title: "Synced", description: "Billing status refreshed from Stripe." });
+    } catch (err) {
+      console.error("[PROVIDER_BILLING_REFRESH]", err);
+      toast({
+        title: "Error",
+        description: err instanceof Error ? err.message : "Failed to refresh",
+        variant: "destructive",
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
     fetchStatus();
   }, [fetchStatus]);
+
+  useEffect(() => {
+    // After returning from Stripe Checkout, do an immediate server-side resync.
+    // This avoids waiting for webhook timing to update the DB.
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("success") === "1") {
+      refreshFromStripe();
+    }
+  }, [refreshFromStripe]);
 
   const currentStatusLabel = useMemo(() => {
     const status = data?.stripe.status;
     if (!status) return null;
     return status.replace(/_/g, " ");
+  }, [data?.stripe.status]);
+
+  const showBillingWarning = useMemo(() => {
+    const status = data?.stripe.status;
+    if (!status) return false;
+    return isNotSubscribedStatus(status) && !isSubscribedStatus(status);
   }, [data?.stripe.status]);
 
   const startCheckout = async (plan: "pro" | "elite") => {
@@ -200,6 +264,15 @@ export default function ProviderBillingClient() {
         </Alert>
       ) : null}
 
+      {showBillingWarning ? (
+        <Alert variant="destructive">
+          <AlertTitle>Subscription needs attention</AlertTitle>
+          <AlertDescription>
+            Stripe reports your subscription status as {currentStatusLabel ?? "unknown"}. You may lose Pro/Elite benefits until this is resolved.
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
@@ -214,9 +287,18 @@ export default function ProviderBillingClient() {
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             Subscription changes are managed securely through Stripe.
+            <div className="mt-2 text-xs">
+              <div>stripe_customer_id: {data?.stripe.customerId ?? "—"}</div>
+              <div>stripe_subscription_id: {data?.stripe.subscriptionId ?? "—"}</div>
+              <div>subscription_status: {data?.stripe.status ?? "—"}</div>
+              <div>subscription_plan: {currentPlan}</div>
+              <div>last_sync_at: {data?.stripe.lastSyncAt ?? "—"}</div>
+            </div>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={fetchStatus}>Refresh</Button>
+            <Button variant="outline" onClick={refreshFromStripe} disabled={refreshing || checkoutPlan !== null}>
+              {refreshing ? "Refreshing..." : "Refresh"}
+            </Button>
             <Button onClick={openPortal} disabled={!data?.stripe.customerId}>Manage billing</Button>
           </div>
         </CardContent>
@@ -256,7 +338,7 @@ export default function ProviderBillingClient() {
                   <div className="pt-1">
                     <Badge
                       variant="secondary"
-                      className="w-full justify-center whitespace-normal text-center leading-snug break-words"
+                      className="w-full justify-center whitespace-normal text-center leading-snug wrap-break-word"
                     >
                       {copy.feeLine}
                     </Badge>

@@ -15,7 +15,13 @@ vi.mock("@/lib/stripe", () => {
     stripe: {
       webhooks: { constructEvent },
       paymentIntents,
+      subscriptions: { retrieve: vi.fn() },
+      customers: { create: vi.fn(), search: vi.fn() },
+      prices: { list: vi.fn(), retrieve: vi.fn() },
+      checkout: { sessions: { create: vi.fn() } },
     },
+    detectStripeMode: () => "test",
+    retrieveStripePriceSafe: vi.fn(async () => null),
   };
 });
 

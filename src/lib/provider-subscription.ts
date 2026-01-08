@@ -1,5 +1,21 @@
 export type ProviderPlan = "starter" | "pro" | "elite";
 
+export function isStripeSubscribedStatus(status: string | null | undefined): boolean {
+  return status === "active" || status === "trialing";
+}
+
+export function isStripeNotSubscribedStatus(status: string | null | undefined): boolean {
+  if (!status) return false;
+  return (
+    status === "canceled" ||
+    status === "incomplete" ||
+    status === "incomplete_expired" ||
+    status === "past_due" ||
+    status === "unpaid" ||
+    status === "paused"
+  );
+}
+
 export function normalizeProviderPlan(value: unknown): ProviderPlan {
   if (value === "pro" || value === "elite") return value;
   return "starter";
@@ -39,5 +55,24 @@ export function planFromStripePriceId(priceId: string | null | undefined): Provi
   const elite = process.env.STRIPE_PRICE_ELITE_MONTHLY ?? process.env.STRIPE_PRICE_ELITE;
   if (pro && priceId === pro) return "pro";
   if (elite && priceId === elite) return "elite";
+  return null;
+}
+
+export function resolvePlanFromStripePrice(params: {
+  priceId: string | null | undefined;
+  priceLookupKey?: string | null | undefined;
+}): ProviderPlan | null {
+  const byId = planFromStripePriceId(params.priceId);
+  if (byId) return byId;
+
+  const lookupKey = params.priceLookupKey ?? null;
+  if (!lookupKey) return null;
+
+  // Default lookup keys, overridable via env vars.
+  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
+  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+
+  if (lookupKey === eliteKey) return "elite";
+  if (lookupKey === proKey) return "pro";
   return null;
 }

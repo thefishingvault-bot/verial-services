@@ -2,6 +2,9 @@ import { Suspense } from "react";
 import { requireProvider } from "@/lib/auth-guards";
 import ProviderBillingClient from "@/components/provider/provider-billing-client";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default async function ProviderBillingPage() {
   await requireProvider();
 

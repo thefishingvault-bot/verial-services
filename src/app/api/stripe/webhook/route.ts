@@ -10,7 +10,8 @@ import { createNotification, createNotificationOnce } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
-import { planFromStripePriceId } from "@/lib/provider-subscription";
+import { isStripeSubscribedStatus, resolvePlanFromStripePrice } from "@/lib/provider-subscription";
+import { retrieveStripePriceSafe, detectStripeMode } from "@/lib/stripe";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
@@ -18,12 +19,17 @@ export const runtime = "nodejs";
 export async function POST(req: Request) {
   const body = await req.text();
   const headersList = await headers();
-  const signature = headersList.get("Stripe-Signature") as string;
-  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+  const signature = (headersList.get("stripe-signature") ?? headersList.get("Stripe-Signature")) as string;
+  const webhookSecret = process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
 
   if (!webhookSecret) {
     console.error("[API_STRIPE_WEBHOOK] Missing Stripe webhook secret");
     return new NextResponse("Webhook secret not configured", { status: 500 });
+  }
+
+  if (!signature) {
+    console.warn("[API_STRIPE_WEBHOOK] Missing Stripe-Signature header");
+    return new NextResponse("Missing Stripe-Signature header", { status: 400 });
   }
 
   let event: Stripe.Event;
@@ -35,6 +41,116 @@ export async function POST(req: Request) {
     console.warn(`[API_STRIPE_WEBHOOK] Webhook signature verification failed: ${message}`);
     return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
   }
+
+  const mode = detectStripeMode();
+  console.info("[API_STRIPE_WEBHOOK] Received", { type: event.type, eventId: event.id, mode });
+
+  const updateProviderSubscription = async (params: {
+    source: string;
+    providerId?: string | null;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string | null;
+    stripeSubscriptionStatus: string | null;
+    stripeSubscriptionPriceId: string | null;
+    stripeCurrentPeriodEnd: Date | null;
+    stripeCancelAtPeriodEnd: boolean;
+    plan: "starter" | "pro" | "elite";
+  }) => {
+    const {
+      source,
+      providerId,
+      stripeCustomerId,
+      stripeSubscriptionId,
+      stripeSubscriptionStatus,
+      stripeSubscriptionPriceId,
+      stripeCurrentPeriodEnd,
+      stripeCancelAtPeriodEnd,
+      plan,
+    } = params;
+
+    if (!providerId && !stripeCustomerId && !stripeSubscriptionId) {
+      console.warn("[API_STRIPE_WEBHOOK] Cannot update provider subscription (missing identifiers)", {
+        source,
+        stripeCustomerId,
+        stripeSubscriptionId,
+      });
+      return;
+    }
+
+    let updatedProviderId: string | null = null;
+
+    if (providerId) {
+      const res = await db
+        .update(providers)
+        .set({
+          plan,
+          stripeCustomerId: stripeCustomerId ?? undefined,
+          stripeSubscriptionId,
+          stripeSubscriptionStatus,
+          stripeSubscriptionPriceId,
+          stripeCurrentPeriodEnd,
+          stripeCancelAtPeriodEnd,
+          stripeSubscriptionUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.id, providerId))
+        .returning({ id: providers.id });
+      updatedProviderId = res[0]?.id ?? null;
+    } else if (stripeCustomerId) {
+      const res = await db
+        .update(providers)
+        .set({
+          plan,
+          stripeCustomerId,
+          stripeSubscriptionId,
+          stripeSubscriptionStatus,
+          stripeSubscriptionPriceId,
+          stripeCurrentPeriodEnd,
+          stripeCancelAtPeriodEnd,
+          stripeSubscriptionUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.stripeCustomerId, stripeCustomerId))
+        .returning({ id: providers.id });
+      updatedProviderId = res[0]?.id ?? null;
+    } else if (stripeSubscriptionId) {
+      const res = await db
+        .update(providers)
+        .set({
+          plan,
+          stripeSubscriptionId,
+          stripeSubscriptionStatus,
+          stripeSubscriptionPriceId,
+          stripeCurrentPeriodEnd,
+          stripeCancelAtPeriodEnd,
+          stripeSubscriptionUpdatedAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.stripeSubscriptionId, stripeSubscriptionId))
+        .returning({ id: providers.id });
+      updatedProviderId = res[0]?.id ?? null;
+    }
+
+    console.info("[API_STRIPE_WEBHOOK] Provider subscription updated", {
+      source,
+      providerId: providerId ?? updatedProviderId,
+      stripeCustomerId,
+      stripeSubscriptionId,
+      status: stripeSubscriptionStatus,
+      plan,
+      priceId: stripeSubscriptionPriceId,
+      currentPeriodEnd: stripeCurrentPeriodEnd ? stripeCurrentPeriodEnd.toISOString() : null,
+      cancelAtPeriodEnd: stripeCancelAtPeriodEnd,
+    });
+
+    if (!updatedProviderId && !providerId) {
+      console.warn("[API_STRIPE_WEBHOOK] No provider row updated", {
+        source,
+        stripeCustomerId,
+        stripeSubscriptionId,
+      });
+    }
+  };
 
   const loadBooking = async (bookingId: string) =>
     db.query.bookings.findFirst({
@@ -153,27 +269,31 @@ export async function POST(req: Request) {
       const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
       if (!customerId || !subscriptionId) break;
 
+      const providerId = (session.metadata as Record<string, string> | null | undefined)?.providerId ?? null;
+
       try {
         const subscription = await stripe.subscriptions.retrieve(subscriptionId);
         const priceId = subscription.items.data?.[0]?.price?.id ?? null;
-        const plan = planFromStripePriceId(priceId) ?? "starter";
+        const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
+        const inferredPlan = resolvePlanFromStripePrice({
+          priceId,
+          priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
+        });
+        const plan = inferredPlan ?? "starter";
 
         const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
-        await db
-          .update(providers)
-          .set({
-            plan,
-            stripeCustomerId: customerId,
-            stripeSubscriptionId: subscription.id,
-            stripeSubscriptionStatus: subscription.status,
-            stripeSubscriptionPriceId: priceId,
-            stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
-            stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
-            stripeSubscriptionUpdatedAt: new Date(),
-            updatedAt: new Date(),
-          })
-          .where(eq(providers.stripeCustomerId, customerId));
+        await updateProviderSubscription({
+          source: event.type,
+          providerId,
+          stripeCustomerId: customerId,
+          stripeSubscriptionId: subscription.id,
+          stripeSubscriptionStatus: subscription.status,
+          stripeSubscriptionPriceId: priceId,
+          stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
+          stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+          plan,
+        });
       } catch (err) {
         console.warn("[API_STRIPE_WEBHOOK] Failed to sync checkout subscription", err);
       }
@@ -188,25 +308,72 @@ export async function POST(req: Request) {
       const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
 
       const priceId = subscription.items.data?.[0]?.price?.id ?? null;
-      const inferredPlan = planFromStripePriceId(priceId);
-      const plan = event.type === "customer.subscription.deleted" ? "starter" : (inferredPlan ?? "starter");
+      const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
+      const inferredPlan = resolvePlanFromStripePrice({
+        priceId,
+        priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
+      });
+
+      const subscribed = isStripeSubscribedStatus(subscription.status);
+      const plan = event.type === "customer.subscription.deleted" ? "starter" : subscribed ? (inferredPlan ?? "starter") : "starter";
 
       const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
 
-      await db
-        .update(providers)
-        .set({
-          plan,
-          stripeCustomerId: customerId,
+      await updateProviderSubscription({
+        source: event.type,
+        providerId: null,
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: subscription.id,
+        stripeSubscriptionStatus: subscription.status,
+        stripeSubscriptionPriceId: priceId,
+        stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
+        stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
+        plan,
+      });
+
+      break;
+    }
+
+    case "invoice.paid":
+    case "invoice.payment_succeeded": {
+      // These events can reflect status transitions; resync the linked subscription if present.
+      const invoice = event.data.object as Stripe.Invoice;
+      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+      const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
+      if (!subscriptionId) break;
+
+      try {
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+        const priceId = subscription.items.data?.[0]?.price?.id ?? null;
+        const price = priceId ? await retrieveStripePriceSafe(priceId) : null;
+        const inferredPlan = resolvePlanFromStripePrice({
+          priceId,
+          priceLookupKey: (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null,
+        });
+
+        const subscribed = isStripeSubscribedStatus(subscription.status);
+        const plan = subscribed ? (inferredPlan ?? "starter") : "starter";
+        const currentPeriodEnd = (subscription as unknown as { current_period_end?: number }).current_period_end;
+
+        await updateProviderSubscription({
+          source: event.type,
+          providerId: null,
+          stripeCustomerId: customerId ?? (typeof subscription.customer === "string" ? subscription.customer : subscription.customer?.id) ?? null,
           stripeSubscriptionId: subscription.id,
           stripeSubscriptionStatus: subscription.status,
           stripeSubscriptionPriceId: priceId,
           stripeCurrentPeriodEnd: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
           stripeCancelAtPeriodEnd: subscription.cancel_at_period_end ?? false,
-          stripeSubscriptionUpdatedAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(providers.stripeCustomerId, customerId));
+          plan,
+        });
+      } catch (err) {
+        console.warn("[API_STRIPE_WEBHOOK] Failed to sync subscription from invoice event", {
+          eventId: event.id,
+          type: event.type,
+          subscriptionId,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
 
       break;
     }

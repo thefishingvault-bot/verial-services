@@ -46,6 +46,7 @@ export async function GET() {
         stripeSubscriptionPriceId: true,
         stripeCurrentPeriodEnd: true,
         stripeCancelAtPeriodEnd: true,
+        stripeSubscriptionUpdatedAt: true,
       },
     });
 
@@ -66,6 +67,12 @@ export async function GET() {
               ? String(provider.stripeCurrentPeriodEnd)
               : null,
         cancelAtPeriodEnd: provider.stripeCancelAtPeriodEnd ?? false,
+        lastSyncAt:
+          provider.stripeSubscriptionUpdatedAt instanceof Date
+            ? provider.stripeSubscriptionUpdatedAt.toISOString()
+            : provider.stripeSubscriptionUpdatedAt
+              ? String(provider.stripeSubscriptionUpdatedAt)
+              : null,
       },
     });
   } catch (error) {
