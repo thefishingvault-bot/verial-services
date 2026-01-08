@@ -91,7 +91,7 @@ async function updateProviderFromAccount(params: {
     chargesEnabled: account.charges_enabled,
     payoutsEnabled: account.payouts_enabled,
     eventId,
-    matchedBy: (provider as any).matchedBy ?? null,
+    matchedBy: provider.matchedBy ?? null,
   });
 
   // Best-effort notifications (do not block webhook response)
@@ -194,7 +194,7 @@ export async function POST(req: Request) {
 
     case "person.updated": {
       const person = event.data.object as Stripe.Person;
-      const accountId = typeof person.account === "string" ? person.account : (person.account as any)?.id;
+      const accountId = typeof person.account === "string" ? person.account : person.account?.id;
       console.info("[API_STRIPE_CONNECT_WEBHOOK] person.updated", { accountId, eventId: event.id });
       if (accountId) {
         const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
@@ -205,7 +205,8 @@ export async function POST(req: Request) {
 
     case "account.external_account.updated": {
       const external = event.data.object as Stripe.BankAccount | Stripe.Card;
-      const accountId = typeof (external as any).account === "string" ? (external as any).account : (external as any).account?.id;
+      const accountRef = (external as unknown as { account?: string | Stripe.Account | null }).account;
+      const accountId = typeof accountRef === "string" ? accountRef : accountRef?.id;
       console.info("[API_STRIPE_CONNECT_WEBHOOK] account.external_account.updated", { accountId, eventId: event.id });
       if (accountId) {
         const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
@@ -215,8 +216,14 @@ export async function POST(req: Request) {
     }
 
     case "account.application.deauthorized": {
-      const obj = event.data.object as any;
-      const accountId: string | undefined = obj?.account;
+      const obj: unknown = event.data.object as unknown;
+      const accountId =
+        obj &&
+        typeof obj === "object" &&
+        "account" in obj &&
+        typeof (obj as { account?: unknown }).account === "string"
+          ? ((obj as { account: string }).account ?? undefined)
+          : undefined;
       console.info("[API_STRIPE_CONNECT_WEBHOOK] account.application.deauthorized", { accountId, eventId: event.id });
       if (accountId) {
         const provider = await db.query.providers.findFirst({

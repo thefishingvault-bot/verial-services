@@ -108,13 +108,12 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
   } = props;
 
   const router = useRouter();
-  const params = useParams();
+  const params = useParams<{ serviceId?: string }>();
   const { toast } = useToast();
 
   const serviceId = useMemo(() => {
     if (mode !== 'edit') return null;
-    const raw = (params as any)?.serviceId as string | undefined;
-    return raw ?? null;
+    return params?.serviceId ?? null;
   }, [mode, params]);
 
   const [isLoading, setIsLoading] = useState(mode === 'edit');
@@ -177,7 +176,7 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
     setCoverError(null);
 
     setCoverUploadState('validating');
-    if (!allowedImageTypes.includes(file.type as any)) {
+    if (!allowedImageTypes.includes(file.type as (typeof allowedImageTypes)[number])) {
       setCoverUploadState('error');
       setCoverError('Invalid file type. Please upload a JPG, PNG, or WEBP image.');
       return;

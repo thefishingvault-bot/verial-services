@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { services, providers, users, reviews, serviceFavorites } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte } from 'drizzle-orm';
+import { eq, and, or, like, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
 
@@ -184,7 +184,7 @@ export async function getServicesDataFromSearchParams(
 
   const priceNullsLastExpr = sql<number>`CASE WHEN ${services.priceInCents} IS NULL THEN 1 ELSE 0 END`;
 
-  let orderBy: any[] = [desc(services.createdAt)];
+  let orderBy: SQL[] = [desc(services.createdAt)];
   switch (filters.sort) {
     case 'rating_desc':
       orderBy = [desc(avgRatingExpr)];

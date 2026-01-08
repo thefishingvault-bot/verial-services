@@ -169,9 +169,6 @@ export async function POST(req: Request) {
     }
   };
 
-  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
-
   const resolvePlanForSubscription = async (subscription: Stripe.Subscription): Promise<{
     plan: ProviderPlan;
     priceId: string | null;
@@ -189,7 +186,7 @@ export async function POST(req: Request) {
 
     const rawProduct = (item?.price as unknown as { product?: string | Stripe.Product | null } | null)?.product ?? null;
     const productId = typeof rawProduct === "string" ? rawProduct : rawProduct?.id ?? null;
-    let productName = typeof rawProduct === "string" ? null : rawProduct?.name ?? null;
+    const productName = typeof rawProduct === "string" ? null : rawProduct?.name ?? null;
 
     // If price wasn't expanded to include lookup_key, fetch it.
     let effectiveLookupKey = lookupKey;

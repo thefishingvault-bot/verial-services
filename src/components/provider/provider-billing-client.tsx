@@ -116,7 +116,7 @@ const PLAN_COPY: Record<ProviderPlan, {
   unknown: {
     headline: "Active subscription detected",
     description:
-      "We found an active Stripe subscription but couldn't map it to Pro or Elite. Please contact support/admin and share the debug values below.",
+      "We found an active Stripe subscription but couldn't map it to a plan. Please contact support.",
     includes: [
       "Pro/Elite benefits may not apply until mapping is fixed",
       "Use Refresh to re-sync from Stripe",
@@ -298,7 +298,7 @@ export default function ProviderBillingClient() {
         <Alert variant="destructive">
           <AlertTitle>Subscription needs attention</AlertTitle>
           <AlertDescription>
-            Stripe reports your subscription status as {currentStatusLabel ?? "unknown"}. You may lose Pro/Elite benefits until this is resolved.
+            Your subscription is not active. Please update billing.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -307,8 +307,7 @@ export default function ProviderBillingClient() {
         <Alert variant="destructive">
           <AlertTitle>Active subscription found, but plan mapping is unknown</AlertTitle>
           <AlertDescription>
-            Active Stripe subscription detected but price mapping is unknown: {data?.stripe.subscription_price_id ?? data?.stripe.priceId ?? "(missing price id)"}.
-            Please share the debug panel values with support/admin.
+            We detected an active subscription but couldn’t map it to a plan. Please contact support.
           </AlertDescription>
         </Alert>
       ) : null}
@@ -319,33 +318,14 @@ export default function ProviderBillingClient() {
             Current Plan
             <Badge variant={currentPlan === "starter" ? "secondary" : "default"}>{PLAN_LABEL[currentPlan]}</Badge>
           </CardTitle>
-          <CardDescription>
-            {PLAN_PRICE[currentPlan]}
-            {currentStatusLabel ? ` • Status: ${currentStatusLabel}` : ""}
+          <CardDescription className="flex flex-wrap items-center gap-2">
+            <span>{PLAN_PRICE[currentPlan]}</span>
+            {currentStatusLabel ? <Badge variant="outline">Status: {currentStatusLabel}</Badge> : null}
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="text-sm text-muted-foreground">
             Subscription changes are managed securely through Stripe.
-            <div className="mt-2 text-xs">
-              <div>stripe_customer_id: {data?.stripe.customerId ?? "—"}</div>
-              <div>stripe_subscription_id: {data?.stripe.subscriptionId ?? "—"}</div>
-              <div>subscription_status: {data?.stripe.status ?? "—"}</div>
-              <div>mode: {data?.stripe.mode ?? "—"}</div>
-              <div>subscription_plan: {currentPlan}</div>
-              <div>last_sync_at: {data?.stripe.lastSyncAt ?? "—"}</div>
-              <div>subscription_price_id: {data?.stripe.subscription_price_id ?? data?.stripe.priceId ?? "—"}</div>
-              <div>subscription_lookup_key: {data?.stripe.subscription_lookup_key ?? "—"}</div>
-              <div>subscription_product_id: {data?.stripe.subscription_product_id ?? "—"}</div>
-              <div>subscription_product_name: {data?.stripe.subscription_product_name ?? "—"}</div>
-              <div>subscription_item_price_ids: {(data?.stripe.subscription_item_price_ids ?? []).join(", ") || "—"}</div>
-              <div>subscription_item_lookup_keys: {(data?.stripe.subscription_item_lookup_keys ?? []).join(", ") || "—"}</div>
-              <div>priceResolutionSource: {data?.stripe.priceResolutionSource ?? "—"}</div>
-              <div>matched: {typeof data?.stripe.matched === "boolean" ? String(data.stripe.matched) : "—"}</div>
-              <div>expectedEnvSource: {data?.stripe.expectedEnvSource ?? "—"}</div>
-              <div>expectedProPriceId: {data?.stripe.expectedProPriceIdMasked ?? "—"}</div>
-              <div>expectedElitePriceId: {data?.stripe.expectedElitePriceIdMasked ?? "—"}</div>
-            </div>
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={refreshFromStripe} disabled={refreshing || checkoutPlan !== null}>

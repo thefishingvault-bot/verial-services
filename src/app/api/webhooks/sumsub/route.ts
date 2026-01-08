@@ -10,13 +10,20 @@ export const runtime = "nodejs";
 
 type SumsubWebhookPayload = Record<string, unknown>;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object") return null;
+  return value as Record<string, unknown>;
+}
+
 function pickExternalUserId(payload: SumsubWebhookPayload): string | null {
+  const applicant = asRecord(payload.applicant);
+  const review = asRecord(payload.review);
+
   const candidates: unknown[] = [
     payload.externalUserId,
     payload.applicantExternalId,
-    (payload.applicant as any)?.externalUserId,
-    (payload.review as any)?.externalUserId,
-    (payload.applicant as any)?.externalUserId,
+    applicant?.externalUserId,
+    review?.externalUserId,
   ];
 
   for (const value of candidates) {
@@ -29,12 +36,15 @@ function pickExternalUserId(payload: SumsubWebhookPayload): string | null {
 }
 
 function pickApplicantId(payload: SumsubWebhookPayload): string | null {
+  const applicant = asRecord(payload.applicant);
+  const review = asRecord(payload.review);
+
   const candidates: unknown[] = [
-    (payload as any).applicantId,
-    (payload as any).applicant_id,
-    (payload.applicant as any)?.id,
-    (payload.applicant as any)?.applicantId,
-    (payload.review as any)?.applicantId,
+    payload.applicantId,
+    payload.applicant_id,
+    applicant?.id,
+    applicant?.applicantId,
+    review?.applicantId,
   ];
 
   for (const value of candidates) {
@@ -47,11 +57,14 @@ function pickApplicantId(payload: SumsubWebhookPayload): string | null {
 }
 
 function pickInspectionId(payload: SumsubWebhookPayload): string | null {
+  const applicant = asRecord(payload.applicant);
+  const review = asRecord(payload.review);
+
   const candidates: unknown[] = [
-    (payload as any).inspectionId,
-    (payload as any).inspection_id,
-    (payload.applicant as any)?.inspectionId,
-    (payload.review as any)?.inspectionId,
+    payload.inspectionId,
+    payload.inspection_id,
+    applicant?.inspectionId,
+    review?.inspectionId,
   ];
 
   for (const value of candidates) {
@@ -69,7 +82,7 @@ function mapKycStatus(payload: SumsubWebhookPayload): {
   setVerifiedAt: boolean;
 } | null {
   const reviewStatus = typeof payload.reviewStatus === "string" ? payload.reviewStatus : null;
-  const reviewResult = payload.reviewResult as any;
+  const reviewResult = asRecord(payload.reviewResult);
   const reviewAnswer = typeof reviewResult?.reviewAnswer === "string" ? reviewResult.reviewAnswer : null;
 
   // Best-effort mapping to our enum:

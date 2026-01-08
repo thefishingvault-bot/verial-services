@@ -14,20 +14,22 @@ type AccessTokenResponse = {
   expiresAt?: string;
 };
 
+type SumsubWebSdkInstance = {
+  withConf: (conf: Record<string, unknown>) => SumsubWebSdkInstance;
+  withOptions: (opts: Record<string, unknown>) => SumsubWebSdkInstance;
+  on: (event: string, cb: (...args: unknown[]) => void) => SumsubWebSdkInstance;
+  build: () => {
+    launch: (selector: string) => void;
+  };
+};
+
 declare global {
   interface Window {
     snsWebSdk?: {
       init: (
         accessToken: string,
         refreshToken: () => Promise<string>,
-      ) => {
-        withConf: (conf: Record<string, unknown>) => any;
-        withOptions: (opts: Record<string, unknown>) => any;
-        on: (event: string, cb: (...args: any[]) => void) => any;
-        build: () => {
-          launch: (selector: string) => void;
-        };
-      };
+      ) => SumsubWebSdkInstance;
     };
   }
 }
@@ -125,12 +127,18 @@ export default function ProviderKycPage() {
   }, [fetchAccessToken, refreshStatus, scriptLoaded]);
 
   useEffect(() => {
-    void refreshStatus();
+    const schedule = typeof queueMicrotask === "function" ? queueMicrotask : (cb: () => void) => setTimeout(cb, 0);
+    schedule(() => {
+      void refreshStatus();
+    });
   }, [refreshStatus]);
 
   useEffect(() => {
     if (scriptLoaded) {
-      void launchSdk();
+      const schedule = typeof queueMicrotask === "function" ? queueMicrotask : (cb: () => void) => setTimeout(cb, 0);
+      schedule(() => {
+        void launchSdk();
+      });
     }
   }, [launchSdk, scriptLoaded]);
 
