@@ -8,8 +8,6 @@ import { stripe, detectStripeMode } from "@/lib/stripe";
 import { providers, users } from "@/db/schema";
 import {
   normalizeProviderPlan,
-  resolvePlanFromStripeDetails,
-  isStripeSubscribedStatus,
   getExpectedStripePriceIds,
   type ProviderPlan,
 } from "@/lib/provider-subscription";
@@ -30,7 +28,8 @@ function getSubPeriodEndUnix(sub: Stripe.Subscription): number {
 }
 
 function pickBestSubscription(subs: Stripe.Subscription[]): Stripe.Subscription | null {
-  const subscribed = subs.filter((s) => isStripeSubscribedStatus(s.status));
+  // Per spec, treat only active/trialing as "subscribed".
+  const subscribed = subs.filter((s) => s.status === "active" || s.status === "trialing");
   const byLatestEnd = (a: Stripe.Subscription, b: Stripe.Subscription) => getSubPeriodEndUnix(b) - getSubPeriodEndUnix(a);
   return (
     subscribed.sort(byLatestEnd)[0] ??
@@ -50,10 +49,7 @@ async function resolvePlanFromSubscription(sub: Stripe.Subscription): Promise<{
   resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none";
   expected: ReturnType<typeof getExpectedStripePriceIds>;
 }> {
-  // Prefer the highest plan across items.
-  // Note: items may be expanded as Stripe.Price objects.
   const items = sub.items?.data ?? [];
-
   const mode = detectStripeMode();
   const expected = getExpectedStripePriceIds({ mode });
 
@@ -62,50 +58,61 @@ async function resolvePlanFromSubscription(sub: Stripe.Subscription): Promise<{
     (it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) as string | null,
   );
 
-  // Prefer an item that matches known lookup_keys (fast path).
-  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
-  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
-  const preferredItem =
-    items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === eliteKey) ??
-    items.find((it) => ((it.price as unknown as { lookup_key?: string | null })?.lookup_key ?? null) === proKey) ??
-    items[0] ??
-    null;
+  // Per spec: use the FIRST subscription item.
+  const item = items[0] ?? null;
+  const priceId = item?.price?.id ?? null;
+  const lookupKey = (item?.price as unknown as { lookup_key?: string | null } | null)?.lookup_key ?? null;
 
-  const price = preferredItem?.price ?? null;
-  const priceId = price?.id ?? null;
-  const lookupKey = (price as unknown as { lookup_key?: string | null })?.lookup_key ?? null;
+  const rawProduct = (item?.price as unknown as { product?: unknown } | null)?.product ?? null;
+  const productId =
+    typeof rawProduct === "string"
+      ? rawProduct
+      : rawProduct && typeof rawProduct === "object" && "id" in rawProduct && typeof (rawProduct as { id?: unknown }).id === "string"
+        ? (rawProduct as { id: string }).id
+        : null;
 
-  const rawProduct = (price as unknown as { product?: string | Stripe.Product | null })?.product ?? null;
-  const productId = typeof rawProduct === "string" ? rawProduct : rawProduct?.id ?? null;
-  let productName = typeof rawProduct === "string" ? null : rawProduct?.name ?? null;
-
-  // Last-resort mapping uses product name, so fetch it only if needed.
-  // Note: resolvePlanFromStripeDetails will only use productName if lookup_key and env matching fail.
-  if (!productName && productId) {
+  // Fetch product name via a second call (NOT via deep expand).
+  let productName: string | null = null;
+  if (productId) {
     try {
-      const prod = await stripe.products.retrieve(productId);
-      productName = prod?.name ?? null;
+      const product = await stripe.products.retrieve(productId);
+      productName = product?.name ?? null;
     } catch {
       productName = null;
     }
   }
 
-  const resolution = resolvePlanFromStripeDetails({
-    mode,
-    priceId,
-    lookupKey,
-    productName,
-  });
+  // Mapping priority (do NOT default to starter when active/trialing):
+  // lookup_key → env price id → (handled by caller: unknown if active/trialing, starter otherwise)
+  const proKey = process.env.STRIPE_LOOKUP_KEY_PRO_MONTHLY ?? "verial_pro_monthly";
+  const eliteKey = process.env.STRIPE_LOOKUP_KEY_ELITE_MONTHLY ?? "verial_elite_monthly";
+
+  let plan: ProviderPlan = "unknown";
+  let resolutionSource: "lookup_key" | "env_price_id" | "product_name" | "none" = "none";
+
+  if (lookupKey && lookupKey === proKey) {
+    plan = "pro";
+    resolutionSource = "lookup_key";
+  } else if (lookupKey && lookupKey === eliteKey) {
+    plan = "elite";
+    resolutionSource = "lookup_key";
+  } else if (priceId && expected.pro && priceId === expected.pro) {
+    plan = "pro";
+    resolutionSource = "env_price_id";
+  } else if (priceId && expected.elite && priceId === expected.elite) {
+    plan = "elite";
+    resolutionSource = "env_price_id";
+  }
 
   return {
-    plan: resolution.plan,
+    plan,
     matchedPriceId: priceId,
     matchedLookupKey: lookupKey,
     matchedProductId: productId,
     matchedProductName: productName,
     itemPriceIds,
     itemLookupKeys,
-    resolutionSource: resolution.source,
+    resolutionSource,
     expected,
   };
 }
@@ -228,18 +235,22 @@ export async function POST() {
       customer: customerId,
       status: "all",
       limit: 100,
-      expand: ["data.items.data.price", "data.items.data.price.product"],
+      // NOTE: Avoid deep expands (Stripe enforces a max expansion depth).
+      // Only expand price; fetch product details via a separate call if needed.
+      expand: ["data.items.data.price"],
     });
 
     const subs = subsRes.data ?? [];
     const best = pickBestSubscription(subs);
 
     const bestStatus = best?.status ?? null;
-    const subscribed = isStripeSubscribedStatus(bestStatus);
+    const subscribed = bestStatus === "active" || bestStatus === "trialing";
 
     const resolved = best ? await resolvePlanFromSubscription(best) : null;
 
-    const finalPlan: ProviderPlan = subscribed ? (resolved?.plan ?? "unknown") : "starter";
+    const finalPlan: ProviderPlan = subscribed
+      ? (resolved?.plan === "pro" || resolved?.plan === "elite" ? resolved.plan : "unknown")
+      : "starter";
     const priceId = resolved?.matchedPriceId ?? best?.items?.data?.[0]?.price?.id ?? null;
     const lookupKey = resolved?.matchedLookupKey ?? null;
     const productId = resolved?.matchedProductId ?? null;
@@ -295,6 +306,7 @@ export async function POST() {
         subscription_item_price_ids: resolved?.itemPriceIds ?? [],
         subscription_item_lookup_keys: resolved?.itemLookupKeys ?? [],
         priceResolutionSource: resolved?.resolutionSource ?? null,
+        mapping_source: resolved?.resolutionSource ?? null,
         expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
         expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
         expectedEnvSource: resolved?.expected.source ?? null,
