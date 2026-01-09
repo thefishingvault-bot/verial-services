@@ -246,7 +246,7 @@ export default function ProviderBookingDetailPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Decline
                   </>
                 ) : (
-                Decline
+                  "Decline"
                 )}
               </Button>
               <Button
@@ -279,7 +279,7 @@ export default function ProviderBookingDetailPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancel
                   </>
                 ) : (
-                Cancel
+                  "Cancel"
                 )}
               </Button>
               <div className="text-xs text-muted-foreground self-center">
