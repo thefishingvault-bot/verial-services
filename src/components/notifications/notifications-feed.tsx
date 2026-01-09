@@ -18,6 +18,7 @@ export interface NotificationItem {
   isRead: boolean;
   createdAt: string;
   bookingId?: string | null;
+  type?: string | null;
 }
 
 function isMeaningfulUrl(url: string | null | undefined) {
@@ -25,15 +26,23 @@ function isMeaningfulUrl(url: string | null | undefined) {
   const trimmed = url.trim();
   if (!trimmed) return false;
   if (trimmed === "/dashboard") return false;
+  if (trimmed === "/dashboard/provider") return false;
+  if (trimmed === "/dashboard/bookings/provider") return false;
   return true;
 }
 
-function getNotificationTarget(notification: NotificationItem) {
+function getNotificationTarget(notification: NotificationItem): string | null {
   if (isMeaningfulUrl(notification.actionUrl)) return notification.actionUrl as string;
   if (isMeaningfulUrl(notification.href)) return notification.href as string;
   const bookingId = typeof notification.bookingId === "string" ? notification.bookingId : null;
-  if (bookingId) return `/dashboard/provider/bookings/${bookingId}`;
-  return "/dashboard/provider/bookings";
+  if (!bookingId) return null;
+
+  const title = `${notification.title ?? ""} ${notification.message ?? ""} ${notification.body ?? ""}`.toLowerCase();
+  const looksLikeReschedule = title.includes("reschedule");
+
+  if (notification.type === "message") return `/dashboard/provider/messages/${bookingId}`;
+  if (looksLikeReschedule) return `/dashboard/provider/bookings/${bookingId}?focus=reschedule`;
+  return `/dashboard/provider/bookings/${bookingId}`;
 }
 
 interface Props {

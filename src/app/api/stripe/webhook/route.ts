@@ -336,7 +336,10 @@ export async function POST(req: Request) {
         title: "Booking refunded",
         body: `A refund was processed for booking ${bookingId}.`,
         bookingId,
-        actionUrl: `/dashboard/bookings/provider`,
+        type: "payment",
+        actionUrl: `/dashboard/provider/bookings/${bookingId}`,
+        providerId: booking.providerId,
+        serviceId: booking.serviceId,
       });
     }
 
@@ -622,7 +625,7 @@ export async function POST(req: Request) {
                 type: "payment",
                 title: "Booking paid",
                 body: `${booking.service?.title ?? "A booking"} has been paid. Earnings are now awaiting payout.`,
-                actionUrl: "/dashboard/provider/earnings",
+                actionUrl: `/dashboard/provider/bookings/${bookingId}`,
                 bookingId,
                 providerId: booking.providerId,
                 serviceId: booking.serviceId,
@@ -684,10 +687,20 @@ export async function POST(req: Request) {
             }
 
             if (booking.provider?.userId) {
-              await createNotification({
+              await createNotificationOnce({
+                event: `stripe:payment_intent.payment_failed:${paymentFailedIntent.id}`,
+                bookingId: booking.id,
                 userId: booking.provider.userId,
-                message: `Payment failed for booking ${booking.id}.`,
-                href: `/dashboard/bookings/provider`,
+                ttlSeconds: 60 * 60 * 24,
+                payload: {
+                  type: "payment",
+                  title: "Payment failed",
+                  body: `Payment failed for booking ${booking.id}. The customer can retry payment from their dashboard.`,
+                  actionUrl: `/dashboard/provider/bookings/${booking.id}`,
+                  bookingId: booking.id,
+                  providerId: booking.providerId,
+                  serviceId: booking.serviceId,
+                },
               });
             }
           }

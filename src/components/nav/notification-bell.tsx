@@ -29,17 +29,31 @@ function isMeaningfulUrl(url: string | null | undefined) {
   if (!trimmed) return false;
   // Treat the default as "not meaningful" for navigation.
   if (trimmed === "/dashboard") return false;
+  if (trimmed === "/dashboard/provider") return false;
+  // Legacy route used by older provider flows; providers may be redirected away from it.
+  if (trimmed === "/dashboard/bookings/provider") return false;
   return true;
 }
 
-function getNotificationTarget(notification: Notification) {
+function getNotificationTarget(notification: Notification, isProviderDashboard: boolean): string | null {
   if (isMeaningfulUrl(notification.actionUrl)) return notification.actionUrl as string;
   if (isMeaningfulUrl(notification.href)) return notification.href as string;
 
   const bookingId = typeof notification.bookingId === "string" ? notification.bookingId : null;
-  if (bookingId) return `/dashboard/provider/bookings/${bookingId}`;
+  if (!bookingId) return null;
 
-  return "/dashboard/provider/bookings";
+  const title = `${notification.title ?? ""} ${notification.message ?? ""} ${notification.body ?? ""}`.toLowerCase();
+  const looksLikeReschedule = title.includes("reschedule");
+
+  if (isProviderDashboard) {
+    if (notification.type === "message") return `/dashboard/provider/messages/${bookingId}`;
+    if (looksLikeReschedule) return `/dashboard/provider/bookings/${bookingId}?focus=reschedule`;
+    return `/dashboard/provider/bookings/${bookingId}`;
+  }
+
+  if (notification.type === "message") return `/dashboard/messages/${bookingId}`;
+  if (looksLikeReschedule) return `/dashboard/bookings/${bookingId}?focus=reschedule`;
+  return `/dashboard/bookings/${bookingId}`;
 }
 
 export function NotificationBell() {
@@ -187,7 +201,11 @@ export function NotificationBell() {
               <button
                 key={notif.id}
                 type="button"
-                onClick={() => handleNotificationClick(notif, getNotificationTarget(notif))}
+                onClick={() => {
+                  const target = getNotificationTarget(notif, isProviderDashboard);
+                  if (!target) return;
+                  handleNotificationClick(notif, target);
+                }}
                 className={cn(
                   "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
                   notif.isRead
