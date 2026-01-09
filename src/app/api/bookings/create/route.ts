@@ -226,7 +226,9 @@ export async function POST(req: Request) {
             userId: providerUser.id,
             payload: {
               message: `New request for ${service.title}`,
-              href: "/dashboard/bookings/provider",
+              actionUrl: `/dashboard/provider/bookings/${created.id}`,
+              bookingId: created.id,
+              providerId: service.providerId,
             },
             ttlSeconds: 6 * 60 * 60,
           });

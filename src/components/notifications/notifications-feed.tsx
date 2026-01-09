@@ -13,10 +13,27 @@ export interface NotificationItem {
   title: string;
   body: string | null;
   message: string;
-  actionUrl: string;
-  href: string;
+  actionUrl?: string | null;
+  href?: string | null;
   isRead: boolean;
   createdAt: string;
+  bookingId?: string | null;
+}
+
+function isMeaningfulUrl(url: string | null | undefined) {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  if (trimmed === "/dashboard") return false;
+  return true;
+}
+
+function getNotificationTarget(notification: NotificationItem) {
+  if (isMeaningfulUrl(notification.actionUrl)) return notification.actionUrl as string;
+  if (isMeaningfulUrl(notification.href)) return notification.href as string;
+  const bookingId = typeof notification.bookingId === "string" ? notification.bookingId : null;
+  if (bookingId) return `/dashboard/provider/bookings/${bookingId}`;
+  return "/dashboard/provider/bookings";
 }
 
 interface Props {
@@ -84,7 +101,7 @@ export function NotificationsFeed({ initialNotifications, initialNextCursor }: P
     if (!notification.isRead) {
       await markOneRead(notification.id);
     }
-    const target = notification.actionUrl || notification.href;
+    const target = getNotificationTarget(notification);
     if (target) {
       window.location.href = target;
     }

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -15,10 +16,31 @@ interface Notification {
   title: string;
   body: string | null;
   message: string;
-  actionUrl: string;
-  href: string;
+  actionUrl?: string | null;
+  href?: string | null;
   isRead: boolean;
   createdAt: string;
+  bookingId?: string | null;
+  type?: string | null;
+}
+
+function isMeaningfulUrl(url: string | null | undefined) {
+  if (!url) return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // Treat the default as "not meaningful" for navigation.
+  if (trimmed === "/dashboard") return false;
+  return true;
+}
+
+function getNotificationTarget(notification: Notification) {
+  if (isMeaningfulUrl(notification.actionUrl)) return notification.actionUrl as string;
+  if (isMeaningfulUrl(notification.href)) return notification.href as string;
+
+  const bookingId = typeof notification.bookingId === "string" ? notification.bookingId : null;
+  if (bookingId) return `/dashboard/provider/bookings/${bookingId}`;
+
+  return "/dashboard/provider/bookings";
 }
 
 export function NotificationBell() {
@@ -90,14 +112,10 @@ export function NotificationBell() {
     });
   };
 
-  const handleNotificationClick = async (notification: Notification) => {
+  const handleNotificationClick = (notification: Notification) => {
     setIsOpen(false);
     if (!notification.isRead) {
-      await markAsRead([notification.id]);
-    }
-    const target = notification.actionUrl || notification.href;
-    if (target) {
-      window.location.href = target;
+      void markAsRead([notification.id]);
     }
   };
 
@@ -152,7 +170,7 @@ export function NotificationBell() {
             )}
           </div>
         </div>
-        <div className="max-h-[300px] overflow-y-auto">
+        <div className="max-h-75 overflow-y-auto">
           {isLoading && (
             <p className="py-4 text-center text-xs text-muted-foreground">Loading...</p>
           )}
@@ -164,8 +182,9 @@ export function NotificationBell() {
           )}
           {!isLoading &&
             notifications.map((notif) => (
-              <div
+              <Link
                 key={notif.id}
+                href={getNotificationTarget(notif)}
                 onClick={() => handleNotificationClick(notif)}
                 className={cn(
                   "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
@@ -189,7 +208,7 @@ export function NotificationBell() {
                     )}
                   </div>
                   {!notif.isRead && (
-                    <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
@@ -197,7 +216,7 @@ export function NotificationBell() {
                     ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
                     : ""}
                 </p>
-              </div>
+              </Link>
             ))}
         </div>
         <div className="border-t bg-muted/40 px-4 py-2 text-right">
