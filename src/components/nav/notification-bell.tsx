@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@clerk/nextjs";
+import { useAuth, useUser } from "@clerk/nextjs";
 import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,6 +58,7 @@ function getNotificationTarget(notification: Notification, isProviderDashboard: 
 
 export function NotificationBell() {
   const { isSignedIn } = useAuth();
+  const { user } = useUser();
   const pathname = usePathname();
   const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -66,8 +67,10 @@ export function NotificationBell() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
 
-  const isProviderDashboard = pathname?.startsWith("/dashboard/provider") ?? false;
-  const viewAllHref = isProviderDashboard ? "/dashboard/provider/notifications" : "/dashboard/notifications";
+  const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+  const isProviderUser = role === "provider" || role === "admin";
+  const isProviderContext = isProviderUser || (pathname?.startsWith("/dashboard/provider") ?? false);
+  const viewAllHref = isProviderContext ? "/dashboard/provider/notifications" : "/dashboard/notifications";
 
   const fetchUnreadCount = () => {
     fetch("/api/notifications/unread-count")
@@ -202,7 +205,7 @@ export function NotificationBell() {
                 key={notif.id}
                 type="button"
                 onClick={() => {
-                  const target = getNotificationTarget(notif, isProviderDashboard);
+                  const target = getNotificationTarget(notif, isProviderContext);
                   if (!target) return;
                   handleNotificationClick(notif, target);
                 }}
