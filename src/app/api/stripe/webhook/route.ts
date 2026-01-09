@@ -24,6 +24,8 @@ export async function POST(req: Request) {
   const webhookSecrets: Array<{ name: string; value: string }> = [
     { name: "STRIPE_WEBHOOK_SECRET", value: process.env.STRIPE_WEBHOOK_SECRET ?? "" },
     { name: "STRIPE_BILLING_WEBHOOK_SECRET", value: process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? "" },
+    // Safety: some environments accidentally set the booking webhook to the connect secret.
+    { name: "STRIPE_CONNECT_WEBHOOK_SECRET", value: process.env.STRIPE_CONNECT_WEBHOOK_SECRET ?? "" },
   ].filter((s) => !!s.value);
 
   if (webhookSecrets.length === 0) {
@@ -562,6 +564,16 @@ export async function POST(req: Request) {
         return new NextResponse("Metadata missing", { status: 200 });
       }
 
+      console.info("[API_STRIPE_WEBHOOK] payment_intent.succeeded", {
+        eventId: event.id,
+        type: event.type,
+        account: (event as unknown as { account?: string | null }).account ?? null,
+        paymentIntentId: paymentIntent.id,
+        paymentIntentStatus: paymentIntent.status,
+        metadataBookingId: bookingIdFromMeta ?? null,
+        resolvedBookingId: bookingId,
+      });
+
       console.log(`[API_STRIPE_WEBHOOK] Payment succeeded for Booking: ${bookingId}. Updating database...`);
 
       try {
@@ -592,23 +604,37 @@ export async function POST(req: Request) {
 
         if (!alreadyPaid) {
           assertTransition(current, "paid");
-          await db
+          const updated = await db
             .update(bookings)
             .set({
               status: "paid",
               paymentIntentId: paymentIntent.id,
               updatedAt: new Date(),
             })
-            .where(eq(bookings.id, bookingId));
+            .where(eq(bookings.id, bookingId))
+            .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
+
+          console.info("[API_STRIPE_WEBHOOK] Booking updated", {
+            bookingId,
+            updatedCount: updated.length,
+            updated,
+          });
         } else if (existing.paymentIntentId !== paymentIntent.id) {
           // Idempotency / recovery: ensure booking is linked to the PI we received.
-          await db
+          const updated = await db
             .update(bookings)
             .set({
               paymentIntentId: paymentIntent.id,
               updatedAt: new Date(),
             })
-            .where(eq(bookings.id, bookingId));
+            .where(eq(bookings.id, bookingId))
+            .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
+
+          console.info("[API_STRIPE_WEBHOOK] Booking linked to PI", {
+            bookingId,
+            updatedCount: updated.length,
+            updated,
+          });
         }
 
         // Compute earnings deterministically using stored price and GST settings

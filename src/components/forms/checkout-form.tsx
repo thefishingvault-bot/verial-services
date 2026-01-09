@@ -20,7 +20,7 @@ const mapStatusToMessage = (status: string | undefined) => {
   }
 };
 
-export function CheckoutForm() {
+export function CheckoutForm({ bookingId }: { bookingId: string }) {
   const stripe = useStripe();
   const elements = useElements();
 
@@ -35,10 +35,10 @@ export function CheckoutForm() {
 
     if (result.paymentIntent?.status === 'succeeded') {
       setTimeout(() => {
-        window.location.href = '/dashboard/bookings?success=1';
+        window.location.href = `/dashboard/bookings?success=1&bookingId=${encodeURIComponent(bookingId)}`;
       }, 1200);
     }
-  }, [stripe]);
+  }, [stripe, bookingId]);
 
   // Surface status if redirected back with PI client secret
   useEffect(() => {
@@ -64,7 +64,7 @@ export function CheckoutForm() {
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/dashboard/bookings?success=1`,
+        return_url: `${window.location.origin}/dashboard/bookings?success=1&bookingId=${encodeURIComponent(bookingId)}`,
       },
       redirect: "if_required",
     });

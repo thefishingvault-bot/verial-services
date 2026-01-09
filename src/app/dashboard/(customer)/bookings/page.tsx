@@ -145,6 +145,7 @@ export default function CustomerBookingsPage() {
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
   const [stripeReturnSignal, setStripeReturnSignal] = useState<string | null>(null);
+  const [stripeReturnBookingId, setStripeReturnBookingId] = useState<string | null>(null);
 
   const fetchBookings = useCallback(() => {
     setIsLoading(true);
@@ -182,6 +183,9 @@ export default function CustomerBookingsPage() {
       (params.get('payment_intent_client_secret') ? 'payment_intent_client_secret' : null);
 
     if (signal) setStripeReturnSignal(signal);
+
+    const bookingId = params.get('bookingId');
+    if (bookingId) setStripeReturnBookingId(bookingId);
   }, []);
 
   useEffect(() => {
@@ -190,6 +194,17 @@ export default function CustomerBookingsPage() {
     // Ensure we refresh server data (if any) and re-fetch the list.
     router.refresh();
     fetchBookings();
+
+    // Deterministic fallback: if we know which booking was just paid, confirm with Stripe server-side.
+    if (stripeReturnBookingId) {
+      void fetch('/api/stripe/confirm-booking-payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookingId: stripeReturnBookingId }),
+      }).catch(() => {
+        // ignore
+      });
+    }
 
     // Webhooks can lag slightly; poll briefly to pick up the paid status.
     const startedAt = Date.now();
@@ -201,7 +216,7 @@ export default function CustomerBookingsPage() {
     }, 1200);
 
     return () => window.clearInterval(interval);
-  }, [stripeReturnSignal, fetchBookings, router]);
+  }, [stripeReturnSignal, stripeReturnBookingId, fetchBookings, router]);
 
   const handlePayNow = (booking: CustomerBooking) => {
     router.push(`/checkout/${booking.id}`);

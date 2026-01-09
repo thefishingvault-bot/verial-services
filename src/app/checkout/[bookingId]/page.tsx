@@ -69,7 +69,7 @@ export default function CheckoutPage() {
     }
     return (
       <StripeProvider clientSecret={clientSecret}>
-        <CheckoutForm />
+        <CheckoutForm bookingId={bookingId} />
       </StripeProvider>
     );
   };
