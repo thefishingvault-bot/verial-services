@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AlertTriangle, Loader2 } from "lucide-react";
 
@@ -56,8 +56,17 @@ type ProviderBookingDetail = {
     providerDeclineReason?: string | null;
     providerQuotedPrice?: number | null;
     service: { title: string; slug: string };
-    user: { firstName: string | null; lastName: string | null; email: string | null };
+    user: { id: string; firstName: string | null; lastName: string | null; email: string | null };
   };
+  pendingReschedule?: {
+    id: string;
+    status: "pending";
+    proposedDate: Date | string;
+    customerNote: string | null;
+    providerNote: string | null;
+    requesterId: string;
+    createdAt: Date | string;
+  } | null;
 };
 
 export default function ProviderBookingDetailPage() {
@@ -76,19 +85,25 @@ export default function ProviderBookingDetailPage() {
   const [messageToCustomer, setMessageToCustomer] = useState("");
   const [finalPriceNzd, setFinalPriceNzd] = useState("");
 
+  const [rescheduleDialogOpen, setRescheduleDialogOpen] = useState(false);
+  const [rescheduleProposedAt, setRescheduleProposedAt] = useState("");
+  const [rescheduleNote, setRescheduleNote] = useState("");
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+  const [isReschedulePending, startRescheduleTransition] = useTransition();
+
+  const loadBooking = useCallback(async (signal?: AbortSignal) => {
+    const res = await fetch(`/api/provider/bookings/${bookingId}`, { signal });
+    if (!res.ok) throw new Error("Failed to load booking");
+    const json = await res.json() as ProviderBookingDetail;
+    setData(json);
+  }, [loadBooking]);
+
   useEffect(() => {
     const controller = new AbortController();
     setIsLoading(true);
 
-    fetch(`/api/provider/bookings/${bookingId}`, { signal: controller.signal })
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load booking");
-        return res.json();
-      })
-      .then((json: ProviderBookingDetail) => {
-        setData(json);
-        setIsLoading(false);
-      })
+    loadBooking(controller.signal)
+      .then(() => setIsLoading(false))
       .catch((err) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(err instanceof Error ? err.message : "Failed to load booking");
@@ -97,6 +112,18 @@ export default function ProviderBookingDetailPage() {
 
     return () => controller.abort();
   }, [bookingId]);
+
+  const refreshBooking = useCallback(async () => {
+    try {
+      await loadBooking();
+    } catch (err) {
+      toast({
+        variant: "destructive",
+        title: "Refresh failed",
+        description: err instanceof Error ? err.message : "Unknown error",
+      });
+    }
+  }, [loadBooking, toast]);
 
   const handleAction = async (action: keyof typeof ACTIONS, actionReason?: string, providerMessage?: string | null) => {
     setActionLoading(action);
@@ -138,7 +165,7 @@ export default function ProviderBookingDetailPage() {
         return;
       }
 
-      router.refresh();
+      await refreshBooking();
     } catch (err) {
       toast({
         variant: "destructive",
@@ -148,6 +175,73 @@ export default function ProviderBookingDetailPage() {
     } finally {
       setActionLoading(null);
     }
+  };
+
+  const submitRescheduleRequest = (opts?: { declineExistingRescheduleId?: string }) => {
+    setRescheduleError(null);
+    startRescheduleTransition(async () => {
+      try {
+        if (!data) return;
+        const parsed = new Date(rescheduleProposedAt);
+        if (!rescheduleProposedAt || Number.isNaN(parsed.getTime())) {
+          setRescheduleError("Please select a valid date and time");
+          return;
+        }
+
+        if (opts?.declineExistingRescheduleId) {
+          await fetch(`/api/bookings/${bookingId}/reschedule/respond`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "decline",
+              rescheduleId: opts.declineExistingRescheduleId,
+              note: rescheduleNote.trim() || null,
+            }),
+          }).catch(() => null);
+        }
+
+        const res = await fetch(`/api/bookings/${bookingId}/reschedule/request`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ proposedDate: parsed.toISOString(), note: rescheduleNote.trim() || null }),
+        });
+
+        if (!res.ok) {
+          const text = await res.text();
+          setRescheduleError(text || "Failed to submit reschedule request");
+          return;
+        }
+
+        toast({ title: "Reschedule sent" });
+        setRescheduleDialogOpen(false);
+        setRescheduleProposedAt("");
+        setRescheduleNote("");
+        await refreshBooking();
+      } catch (err) {
+        setRescheduleError(err instanceof Error ? err.message : "Failed to submit reschedule request");
+      }
+    });
+  };
+
+  const respondToReschedule = (action: "approve" | "decline", rescheduleId: string) => {
+    setRescheduleError(null);
+    startRescheduleTransition(async () => {
+      const res = await fetch(`/api/bookings/${bookingId}/reschedule/respond`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action, rescheduleId, note: rescheduleNote.trim() || null }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        setRescheduleError(text || "Failed to update reschedule request");
+        return;
+      }
+
+      toast({ title: action === "approve" ? "Reschedule approved" : "Reschedule declined" });
+      setRescheduleNote("");
+      await refreshBooking();
+    });
   };
 
   const startReasonAction = (action: "decline" | "cancel") => {
@@ -176,6 +270,9 @@ export default function ProviderBookingDetailPage() {
   const { booking } = data;
   const scheduled = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
   const isSubmitting = actionLoading !== null;
+  const pendingReschedule = data.pendingReschedule ?? null;
+  const isRescheduleEligible = booking.status === "accepted" || booking.status === "paid";
+  const pendingRequestedByCustomer = !!pendingReschedule && pendingReschedule.requesterId === booking.user.id;
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-4">
@@ -309,6 +406,92 @@ export default function ProviderBookingDetailPage() {
         </CardFooter>
       </Card>
 
+      {isRescheduleEligible && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Reschedule</CardTitle>
+            <CardDescription>Propose or respond to time changes</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            {pendingReschedule ? (
+              <>
+                <div>
+                  <span className="text-muted-foreground">Proposed time</span>
+                  <div className="font-semibold">{new Date(pendingReschedule.proposedDate).toLocaleString()}</div>
+                </div>
+                {pendingRequestedByCustomer && pendingReschedule.customerNote && (
+                  <div className="rounded-md bg-muted p-3">
+                    <div className="font-medium text-foreground">Customer note</div>
+                    <div className="whitespace-pre-wrap text-muted-foreground">{pendingReschedule.customerNote}</div>
+                  </div>
+                )}
+                {!pendingRequestedByCustomer && pendingReschedule.providerNote && (
+                  <div className="rounded-md bg-muted p-3">
+                    <div className="font-medium text-foreground">Your note</div>
+                    <div className="whitespace-pre-wrap text-muted-foreground">{pendingReschedule.providerNote}</div>
+                  </div>
+                )}
+
+                {pendingRequestedByCustomer ? (
+                  <>
+                    <div>
+                      <label className="text-xs font-medium text-muted-foreground" htmlFor="reschedule-note">
+                        Your note (optional)
+                      </label>
+                      <Textarea
+                        id="reschedule-note"
+                        rows={3}
+                        value={rescheduleNote}
+                        onChange={(e) => setRescheduleNote(e.target.value)}
+                        placeholder="Share context for approving or proposing a different time"
+                        disabled={isReschedulePending}
+                      />
+                    </div>
+                    {rescheduleError && <p className="text-sm text-destructive">{rescheduleError}</p>}
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={() => respondToReschedule("approve", pendingReschedule.id)}
+                        disabled={isReschedulePending}
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => respondToReschedule("decline", pendingReschedule.id)}
+                        disabled={isReschedulePending}
+                      >
+                        Decline
+                      </Button>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setRescheduleDialogOpen(true);
+                        }}
+                        disabled={isReschedulePending}
+                      >
+                        Propose different time
+                      </Button>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Proposing a different time will decline the current request.
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Waiting for the customer to respond.</p>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground">No pending reschedule requests.</p>
+                <Button variant="outline" onClick={() => setRescheduleDialogOpen(true)}>
+                  Propose new time
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       <Dialog
         open={reasonDialogOpen}
         onOpenChange={(open: boolean) => {
@@ -388,6 +571,72 @@ export default function ProviderBookingDetailPage() {
               ) : (
                 "Confirm"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={rescheduleDialogOpen}
+        onOpenChange={(open: boolean) => {
+          if (!open && !isReschedulePending) {
+            setRescheduleDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Propose a new time</DialogTitle>
+            <DialogDescription>Pick a new date/time and optionally add a note.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="proposedAt">
+                Proposed date & time
+              </label>
+              <Input
+                id="proposedAt"
+                type="datetime-local"
+                value={rescheduleProposedAt}
+                onChange={(e) => setRescheduleProposedAt(e.target.value)}
+                disabled={isReschedulePending}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="note">
+                Note (optional)
+              </label>
+              <Textarea
+                id="note"
+                value={rescheduleNote}
+                onChange={(e) => setRescheduleNote(e.target.value)}
+                placeholder="Share any context about the new time"
+                disabled={isReschedulePending}
+              />
+            </div>
+            {rescheduleError && <p className="text-sm text-destructive">{rescheduleError}</p>}
+          </div>
+          <DialogFooter className="mt-4 flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (!isReschedulePending) setRescheduleDialogOpen(false);
+              }}
+              disabled={isReschedulePending}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                if (pendingReschedule && pendingRequestedByCustomer) {
+                  submitRescheduleRequest({ declineExistingRescheduleId: pendingReschedule.id });
+                  return;
+                }
+                submitRescheduleRequest();
+              }}
+              disabled={isReschedulePending}
+            >
+              {isReschedulePending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Send"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
-import { bookings, providers } from "@/db/schema";
+import { bookingReschedules, bookings, providers } from "@/db/schema";
 
 export const runtime = "nodejs";
 
@@ -50,5 +50,20 @@ export async function GET(
     return new NextResponse("Booking not found", { status: 404 });
   }
 
-  return NextResponse.json({ booking });
+  const pendingReschedule = await db.query.bookingReschedules.findFirst({
+    where: and(eq(bookingReschedules.bookingId, booking.id), eq(bookingReschedules.status, "pending")),
+    columns: {
+      id: true,
+      status: true,
+      proposedDate: true,
+      customerNote: true,
+      providerNote: true,
+      requesterId: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+    orderBy: [desc(bookingReschedules.createdAt)],
+  });
+
+  return NextResponse.json({ booking, pendingReschedule });
 }

@@ -47,15 +47,26 @@ export async function POST(
 
   try {
     const result = await withIdempotency(idemKey, 6 * 60 * 60, async () => {
-      const provider = await db.query.providers.findFirst({ where: eq(providers.userId, userId) });
-      if (!provider) throw new Error("PROVIDER_NOT_FOUND");
+      const provider = await db.query.providers.findFirst({
+        where: eq(providers.userId, userId),
+        columns: { id: true, userId: true },
+      });
 
       const booking = await db.query.bookings.findFirst({
-        where: and(eq(bookings.id, bookingId), eq(bookings.providerId, provider.id)),
-        with: { user: { columns: { id: true } }, service: { columns: { title: true } } },
+        where: eq(bookings.id, bookingId),
+        columns: { id: true, providerId: true, status: true, scheduledDate: true },
+        with: {
+          user: { columns: { id: true } },
+          provider: { columns: { id: true, userId: true } },
+          service: { columns: { title: true } },
+        },
       });
 
       if (!booking) throw new Error("NOT_FOUND");
+
+      const viewerIsCustomer = booking.user?.id === userId;
+      const viewerIsProvider = !!provider && booking.providerId === provider.id;
+      if (!viewerIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
 
       if (!isRescheduleEligible(booking.status)) {
         throw new Error("INVALID_STATE");
@@ -77,6 +88,15 @@ export async function POST(
 
       const now = new Date();
 
+      const requesterIsCustomer = pendingReschedule.requesterId === booking.user?.id;
+      const requesterIsProvider = pendingReschedule.requesterId === booking.provider?.userId;
+
+      if (requesterIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
+      if (requesterIsProvider && !viewerIsCustomer) throw new Error("FORBIDDEN");
+      if (!requesterIsCustomer && !requesterIsProvider) throw new Error("FORBIDDEN");
+
+      const providerId = booking.providerId;
+
       if (action === "approve") {
         if (pendingReschedule.proposedDate < new Date()) {
           throw new Error("Proposed time is in the past");
@@ -84,7 +104,7 @@ export async function POST(
 
         const validation = await validateRescheduleProposal({
           bookingId,
-          providerId: provider.id,
+          providerId,
           proposedDate: new Date(pendingReschedule.proposedDate),
         });
 
@@ -92,29 +112,48 @@ export async function POST(
           throw new Error(validation.reason);
         }
 
-        await db.transaction(async (tx) => {
-          await tx
-            .update(bookingReschedules)
-            .set({ status: "approved", responderId: userId, providerNote: note, updatedAt: now })
-            .where(eq(bookingReschedules.id, pendingReschedule.id));
+        await db
+          .update(bookingReschedules)
+          .set({
+            status: "approved",
+            responderId: userId,
+            providerNote: requesterIsCustomer ? note : pendingReschedule.providerNote,
+            customerNote: requesterIsProvider ? note : pendingReschedule.customerNote,
+            updatedAt: now,
+          })
+          .where(eq(bookingReschedules.id, pendingReschedule.id));
 
-          await tx
-            .update(bookings)
-            .set({ scheduledDate: pendingReschedule.proposedDate, updatedAt: now })
-            .where(eq(bookings.id, bookingId));
-        });
+        await db
+          .update(bookings)
+          .set({ scheduledDate: pendingReschedule.proposedDate, updatedAt: now })
+          .where(eq(bookings.id, bookingId));
 
-        if (booking.user?.id) {
+        if (requesterIsCustomer && booking.user?.id) {
           await createNotificationOnce({
-            event: "reschedule_approved",
+            event: `reschedule_approved:${pendingReschedule.id}`,
             bookingId,
             userId: booking.user.id,
             payload: {
               title: "Reschedule approved",
               body: note || `Your booking was rescheduled${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
-              actionUrl: `/dashboard/bookings/${bookingId}`,
+              actionUrl: `/dashboard/bookings/${bookingId}?focus=reschedule`,
               bookingId,
-              providerId: provider.id,
+              providerId,
+            },
+          });
+        }
+
+        if (requesterIsProvider && booking.provider?.userId) {
+          await createNotificationOnce({
+            event: `reschedule_approved:${pendingReschedule.id}`,
+            bookingId,
+            userId: booking.provider.userId,
+            payload: {
+              title: "Reschedule approved",
+              body: note || "Your customer approved the new time.",
+              actionUrl: `/dashboard/provider/bookings/${bookingId}?focus=reschedule`,
+              bookingId,
+              providerId,
             },
           });
         }
@@ -124,20 +163,41 @@ export async function POST(
 
       await db
         .update(bookingReschedules)
-        .set({ status: "declined", responderId: userId, providerNote: note, updatedAt: now })
+        .set({
+          status: "declined",
+          responderId: userId,
+          providerNote: requesterIsCustomer ? note : pendingReschedule.providerNote,
+          customerNote: requesterIsProvider ? note : pendingReschedule.customerNote,
+          updatedAt: now,
+        })
         .where(eq(bookingReschedules.id, pendingReschedule.id));
 
-      if (booking.user?.id) {
+      if (requesterIsCustomer && booking.user?.id) {
         await createNotificationOnce({
-          event: "reschedule_declined",
+          event: `reschedule_declined:${pendingReschedule.id}`,
           bookingId,
           userId: booking.user.id,
           payload: {
             title: "Reschedule declined",
             body: note || "Your provider declined the reschedule request.",
-            actionUrl: `/dashboard/bookings/${bookingId}`,
+            actionUrl: `/dashboard/bookings/${bookingId}?focus=reschedule`,
             bookingId,
-            providerId: provider.id,
+            providerId,
+          },
+        });
+      }
+
+      if (requesterIsProvider && booking.provider?.userId) {
+        await createNotificationOnce({
+          event: `reschedule_declined:${pendingReschedule.id}`,
+          bookingId,
+          userId: booking.provider.userId,
+          payload: {
+            title: "Reschedule declined",
+            body: note || "Your customer declined the new time.",
+            actionUrl: `/dashboard/provider/bookings/${bookingId}?focus=reschedule`,
+            bookingId,
+            providerId,
           },
         });
       }
@@ -149,8 +209,8 @@ export async function POST(
   } catch (error) {
     const message = error instanceof Error ? error.message : "Internal Server Error";
 
-    if (message === "PROVIDER_NOT_FOUND") return new NextResponse("Provider not found", { status: 404 });
     if (message === "NOT_FOUND") return new NextResponse("Booking not found", { status: 404 });
+    if (message === "FORBIDDEN") return new NextResponse("Unauthorized", { status: 403 });
     if (message === "INVALID_STATE") {
       return new NextResponse("Booking cannot be rescheduled in its current state", { status: 400 });
     }

@@ -63,7 +63,8 @@ export async function POST(
       if (!booking) throw new Error("NOT_FOUND");
 
       const viewerIsCustomer = booking.userId === userId;
-      if (!viewerIsCustomer) throw new Error("FORBIDDEN");
+      const viewerIsProvider = booking.provider?.userId === userId;
+      if (!viewerIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
 
       if (!isRescheduleEligible(booking.status)) {
         throw new Error("INVALID_STATE");
@@ -97,22 +98,38 @@ export async function POST(
         requesterId: userId,
         proposedDate,
         status: "pending",
-        customerNote: note,
+        customerNote: viewerIsCustomer ? note : null,
+        providerNote: viewerIsProvider ? note : null,
         createdAt: now,
         updatedAt: now,
       });
 
-      if (booking.provider?.userId) {
+      if (viewerIsCustomer && booking.provider?.userId) {
         await createNotificationOnce({
-          event: "reschedule_requested",
+          event: `reschedule_requested:${rescheduleId}`,
           bookingId,
           userId: booking.provider.userId,
           payload: {
             title: "New reschedule request",
             body: `A customer requested to move this booking${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
-            actionUrl: `/dashboard/bookings/${bookingId}`,
+            actionUrl: `/dashboard/provider/bookings/${bookingId}?focus=reschedule`,
             bookingId,
             providerId: booking.provider.id,
+          },
+        });
+      }
+
+      if (viewerIsProvider && booking.user?.id) {
+        await createNotificationOnce({
+          event: `reschedule_proposed:${rescheduleId}`,
+          bookingId,
+          userId: booking.user.id,
+          payload: {
+            title: "Provider proposed a new time",
+            body: `Your provider proposed a new time for this booking${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
+            actionUrl: `/dashboard/bookings/${bookingId}?focus=reschedule`,
+            bookingId,
+            providerId: booking.provider?.id,
           },
         });
       }

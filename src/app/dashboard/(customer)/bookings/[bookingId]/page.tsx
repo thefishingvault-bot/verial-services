@@ -17,6 +17,7 @@ import { ShieldCheck, CalendarClock, CreditCard, CheckCircle2, MessageCircle } f
 import { CancelBookingButton } from "@/components/bookings/cancel-booking-button";
 import { RequestRescheduleButton } from "@/components/bookings/request-reschedule-button";
 import { RescheduleResponseCard } from "@/components/bookings/reschedule-response-card";
+import { CustomerRescheduleResponseCard } from "@/components/bookings/customer-reschedule-response-card";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,6 +86,8 @@ type LoadedBooking = {
     proposedDate: Date;
     customerNote: string | null;
     providerNote: string | null;
+    requesterId: string;
+    responderId: string | null;
     createdAt: Date;
     updatedAt: Date;
   }[];
@@ -306,6 +309,8 @@ async function loadBooking(
       proposedDate: true,
       customerNote: true,
       providerNote: true,
+      requesterId: true,
+      responderId: true,
       createdAt: true,
       updatedAt: true,
     },
@@ -410,6 +415,7 @@ export default async function BookingDetailPage({
   const { booking, service, provider, customer, review, paymentIntent, timeline, viewerIsProvider, reschedules, viewerIsCustomer } = result;
 
   const pendingReschedule = reschedules.find((reschedule) => reschedule.status === "pending") || null;
+  const pendingRequestedByProvider = !!pendingReschedule && pendingReschedule.requesterId !== booking.userId;
   const showReviewCta = booking.status === "completed" && !review && !viewerIsProvider;
   const canCancel = ["pending", "accepted", "paid"].includes(booking.status);
   const canRequestReschedule = viewerIsCustomer && ["accepted", "paid"].includes(booking.status) && !pendingReschedule;
@@ -581,6 +587,10 @@ export default async function BookingDetailPage({
 
       {viewerIsProvider && pendingReschedule && (
         <RescheduleResponseCard bookingId={booking.id} reschedule={pendingReschedule} />
+      )}
+
+      {viewerIsCustomer && pendingReschedule && pendingRequestedByProvider && (
+        <CustomerRescheduleResponseCard bookingId={booking.id} reschedule={pendingReschedule} />
       )}
 
       {showProviderNote && (
