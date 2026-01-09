@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth, useUser } from "@clerk/nextjs";
 import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
@@ -129,13 +130,11 @@ export function NotificationBell() {
     });
   };
 
-  const handleNotificationClick = (notification: Notification, target: string) => {
+  const handleNotificationActivate = (notification: Notification) => {
     setIsOpen(false);
     if (!notification.isRead) {
       void markAsRead([notification.id]);
     }
-
-    router.push(target);
   };
 
   const handleMarkAllRead = async () => {
@@ -201,45 +200,82 @@ export function NotificationBell() {
           )}
           {!isLoading &&
             notifications.map((notif) => (
-              <button
-                key={notif.id}
-                type="button"
-                onClick={() => {
-                  const target = getNotificationTarget(notif, isProviderContext);
-                  if (!target) return;
-                  handleNotificationClick(notif, target);
-                }}
-                className={cn(
-                  "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
+              (() => {
+                const rowClassName = cn(
+                  "flex w-full flex-col gap-1 border-b px-4 py-3 text-left text-sm last:border-0 transition-colors",
                   notif.isRead
                     ? "bg-background hover:bg-muted/50"
                     : "bg-primary/5 hover:bg-primary/10",
-                )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="flex flex-col gap-0.5">
-                    <p
-                      className={cn(
-                        "leading-tight",
-                        !notif.isRead && "font-medium text-foreground",
+                );
+
+                const content = (
+                  <>
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex flex-col gap-0.5">
+                        <p
+                          className={cn(
+                            "leading-tight",
+                            !notif.isRead && "font-medium text-foreground",
+                          )}
+                        >
+                          {notif.title || notif.message}
+                        </p>
+                        {notif.body && (
+                          <p className="text-xs text-muted-foreground line-clamp-2">
+                            {notif.body}
+                          </p>
+                        )}
+                      </div>
+                      {!notif.isRead && (
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
                       )}
-                    >
-                      {notif.title || notif.message}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      {isHydrated
+                        ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
+                        : ""}
                     </p>
-                    {notif.body && (
-                      <p className="text-xs text-muted-foreground line-clamp-2">{notif.body}</p>
-                    )}
-                  </div>
-                  {!notif.isRead && (
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {isHydrated
-                    ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
-                    : ""}
-                </p>
-              </button>
+                  </>
+                );
+
+                if (isProviderContext) {
+                  return (
+                    <button
+                      key={notif.id}
+                      type="button"
+                      onClick={() => handleNotificationActivate(notif)}
+                      className={rowClassName}
+                    >
+                      {content}
+                    </button>
+                  );
+                }
+
+                const target = getNotificationTarget(notif, false);
+                if (!target) {
+                  return (
+                    <button
+                      key={notif.id}
+                      type="button"
+                      onClick={() => handleNotificationActivate(notif)}
+                      className={rowClassName}
+                    >
+                      {content}
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={notif.id}
+                    href={target}
+                    className={rowClassName}
+                    onClick={() => handleNotificationActivate(notif)}
+                  >
+                    {content}
+                  </Link>
+                );
+              })()
             ))}
         </div>
         <div className="border-t bg-muted/40 px-4 py-2 text-right">
@@ -249,6 +285,7 @@ export function NotificationBell() {
             className="px-0 text-xs"
             onClick={() => {
               setIsOpen(false);
+              if (isProviderContext) return;
               router.push(viewAllHref);
             }}
           >
