@@ -250,6 +250,11 @@ export const bookings = pgTable("bookings", {
   providerDeclineReason: text("provider_decline_reason"),
   providerCancelReason: text("provider_cancel_reason"),
 
+  // Customer-visible notes from provider (e.g., after accepting a quote)
+  providerMessage: text("provider_message"),
+  // Stores provider-quoted price for quote-based bookings (in cents)
+  providerQuotedPrice: integer("provider_quoted_price"),
+
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

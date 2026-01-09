@@ -11,6 +11,7 @@
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
     "drizzle:push": "drizzle-kit push",
+    "drizzle:check-journal": "node scripts/check-drizzle-journal.mjs",
     "drizzle:studio": "drizzle-kit studio",
     "data:nz": "node scripts/generate-nz-regions.mjs",
     "test": "pnpm exec vitest run",

@@ -52,6 +52,9 @@ type ProviderBookingDetail = {
     priceAtBooking: number;
     scheduledDate: string | null;
     paymentIntentId: string | null;
+    providerMessage?: string | null;
+    providerDeclineReason?: string | null;
+    providerQuotedPrice?: number | null;
     service: { title: string; slug: string };
     user: { firstName: string | null; lastName: string | null; email: string | null };
   };
@@ -70,6 +73,7 @@ export default function ProviderBookingDetailPage() {
   const [reasonDialogOpen, setReasonDialogOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<"decline" | "cancel" | null>(null);
   const [reason, setReason] = useState("");
+  const [messageToCustomer, setMessageToCustomer] = useState("");
   const [finalPriceNzd, setFinalPriceNzd] = useState("");
 
   useEffect(() => {
@@ -94,9 +98,10 @@ export default function ProviderBookingDetailPage() {
     return () => controller.abort();
   }, [bookingId]);
 
-  const handleAction = async (action: keyof typeof ACTIONS, actionReason?: string) => {
+  const handleAction = async (action: keyof typeof ACTIONS, actionReason?: string, providerMessage?: string | null) => {
     setActionLoading(action);
     try {
+      const isQuoteFlow = data?.booking.status === "pending" && data.booking.priceAtBooking === 0;
       const finalPriceInCents =
         action === 'accept' && data?.booking.priceAtBooking === 0
           ? Math.round((parseFloat(finalPriceNzd) || 0) * 100)
@@ -105,7 +110,13 @@ export default function ProviderBookingDetailPage() {
       const res = await fetch("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId, action, reason: actionReason, finalPriceInCents }),
+        body: JSON.stringify({
+          bookingId,
+          action,
+          ...(action === "decline" ? { declineReason: actionReason } : action === "cancel" ? { cancelReason: actionReason } : {}),
+          providerMessage: providerMessage ?? undefined,
+          finalPriceInCents,
+        }),
       });
 
       if (!res.ok) {
@@ -113,7 +124,20 @@ export default function ProviderBookingDetailPage() {
         throw new Error(text || "Failed to update booking");
       }
 
-      toast({ title: `${ACTIONS[action]} successful` });
+      if (action === "accept") {
+        toast({ title: isQuoteFlow ? "Quote sent" : "Booking accepted" });
+      } else if (action === "decline") {
+        toast({ title: isQuoteFlow ? "Quote declined" : "Booking declined" });
+      } else {
+        toast({ title: `${ACTIONS[action]} successful` });
+      }
+
+      if (action === "accept" || action === "decline") {
+        router.replace("/dashboard/provider/bookings");
+        setTimeout(() => router.refresh(), 0);
+        return;
+      }
+
       router.refresh();
     } catch (err) {
       toast({
@@ -151,6 +175,7 @@ export default function ProviderBookingDetailPage() {
 
   const { booking } = data;
   const scheduled = booking.scheduledDate ? new Date(booking.scheduledDate) : null;
+  const isSubmitting = actionLoading !== null;
 
   return (
     <div className="max-w-3xl mx-auto p-4 md:p-8 space-y-4">
@@ -192,9 +217,21 @@ export default function ProviderBookingDetailPage() {
               </div>
             )}
           </div>
-          <div className="text-muted-foreground text-xs">
-            Payment Intent: {booking.paymentIntentId || "not created"}
-          </div>
+
+          {booking.status === 'pending' && (
+            <div>
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="provider-message">
+                Message to customer (optional)
+              </label>
+              <Textarea
+                id="provider-message"
+                rows={4}
+                value={messageToCustomer}
+                onChange={(e) => setMessageToCustomer(e.target.value)}
+                placeholder="Add any helpful details for the customer"
+              />
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex flex-wrap gap-2">
           {booking.status === "pending" && (
@@ -202,18 +239,30 @@ export default function ProviderBookingDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => startReasonAction("decline")}
-                disabled={actionLoading === "decline"}
+                disabled={isSubmitting}
               >
+                {actionLoading === "decline" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Decline
+                  </>
+                ) : (
                 Decline
+                )}
               </Button>
               <Button
-                onClick={() => handleAction("accept")}
+                onClick={() => handleAction("accept", undefined, messageToCustomer.trim() || null)}
                 disabled={
-                  actionLoading === "accept" ||
+                  isSubmitting ||
                   (booking.priceAtBooking === 0 && (!(parseFloat(finalPriceNzd) > 0)))
                 }
               >
-                Accept
+                {actionLoading === "accept" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Accept
+                  </>
+                ) : (
+                  "Accept"
+                )}
               </Button>
             </>
           )}
@@ -223,9 +272,15 @@ export default function ProviderBookingDetailPage() {
               <Button
                 variant="outline"
                 onClick={() => startReasonAction("cancel")}
-                disabled={actionLoading === "cancel"}
+                disabled={isSubmitting}
               >
+                {actionLoading === "cancel" ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Cancel
+                  </>
+                ) : (
                 Cancel
+                )}
               </Button>
               <div className="text-xs text-muted-foreground self-center">
                 Waiting for customer payment.
@@ -236,9 +291,15 @@ export default function ProviderBookingDetailPage() {
           {booking.status === "paid" && (
             <Button
               onClick={() => handleAction("mark-completed")}
-              disabled={actionLoading === "mark-completed"}
+              disabled={isSubmitting}
             >
-              Mark Completed
+              {actionLoading === "mark-completed" ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Mark Completed
+                </>
+              ) : (
+                "Mark Completed"
+              )}
             </Button>
           )}
 
@@ -278,6 +339,21 @@ export default function ProviderBookingDetailPage() {
               placeholder="Eg. I’m unavailable at that time, or this job is outside my usual scope."
             />
           </div>
+
+          {pendingAction === "decline" ? (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground" htmlFor="booking-message">
+                Message to customer (optional)
+              </label>
+              <Textarea
+                id="booking-message"
+                rows={3}
+                value={messageToCustomer}
+                onChange={(e) => setMessageToCustomer(e.target.value)}
+                placeholder="Optional additional context"
+              />
+            </div>
+          ) : null}
           <DialogFooter className="mt-4 flex justify-end gap-2">
             <Button
               variant="outline"
@@ -287,16 +363,21 @@ export default function ProviderBookingDetailPage() {
                   setPendingAction(null);
                 }
               }}
+              disabled={isSubmitting}
             >
               Cancel
             </Button>
             <Button
               disabled={
-                !pendingAction || !reason.trim() || actionLoading === pendingAction
+                !pendingAction || !reason.trim() || isSubmitting
               }
               onClick={async () => {
                 if (!pendingAction || !reason.trim()) return;
-                await handleAction(pendingAction, reason.trim());
+                await handleAction(
+                  pendingAction,
+                  reason.trim(),
+                  pendingAction === "decline" ? (messageToCustomer.trim() || null) : null,
+                );
                 setReasonDialogOpen(false);
                 setPendingAction(null);
                 setReason("");

@@ -49,6 +49,10 @@ type LoadedBooking = {
     providerId: string;
     scheduledDate: Date | null;
     priceAtBooking: number;
+    providerQuotedPrice: number | null;
+    providerMessage: string | null;
+    providerDeclineReason: string | null;
+    providerCancelReason: string | null;
     paymentIntentId: string | null;
     createdAt: Date;
     updatedAt: Date;
@@ -245,6 +249,10 @@ async function loadBooking(
       providerId: true,
       scheduledDate: true,
       priceAtBooking: true,
+      providerQuotedPrice: true,
+      providerMessage: true,
+      providerDeclineReason: true,
+      providerCancelReason: true,
       paymentIntentId: true,
       createdAt: true,
       updatedAt: true,
@@ -432,6 +440,9 @@ export default async function BookingDetailPage({
       ? "text-destructive"
       : "text-muted-foreground";
 
+  const providerReason = booking.providerDeclineReason || booking.providerCancelReason;
+  const showProviderNote = Boolean(providerReason || booking.providerMessage);
+
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10">
       <header className="flex flex-col gap-4">
@@ -448,6 +459,11 @@ export default async function BookingDetailPage({
             <span>{formatPrice(booking.priceAtBooking)}</span>
           </div>
         </div>
+        {booking.providerQuotedPrice != null && (
+          <p className="text-sm text-muted-foreground">
+            Quote accepted at {formatPrice(booking.providerQuotedPrice)}
+          </p>
+        )}
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{service.title}</h1>
           <p className="text-muted-foreground">Booking {booking.id}</p>
@@ -565,6 +581,25 @@ export default async function BookingDetailPage({
 
       {viewerIsProvider && pendingReschedule && (
         <RescheduleResponseCard bookingId={booking.id} reschedule={pendingReschedule} />
+      )}
+
+      {showProviderNote && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Provider message</CardTitle>
+            <CardDescription>Notes from the provider about your booking.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {providerReason && (
+              <p>
+                <span className="font-semibold">Reason:</span> {providerReason}
+              </p>
+            )}
+            {booking.providerMessage && (
+              <p className="whitespace-pre-wrap text-muted-foreground">{booking.providerMessage}</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       <Separator />

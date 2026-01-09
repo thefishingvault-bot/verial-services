@@ -28,7 +28,31 @@ export async function PATCH(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { bookingId, action, reason, finalPriceInCents } = await req.json();
+    const body = (await req.json().catch(() => null)) as
+      | {
+          bookingId?: string;
+          action?: ProviderAction;
+          reason?: string;
+          declineReason?: string;
+          cancelReason?: string;
+          providerMessage?: string;
+          finalPriceInCents?: number;
+        }
+      | null;
+
+    const bookingId = typeof body?.bookingId === "string" ? body.bookingId : null;
+    const action = body?.action;
+    const finalPriceInCents = body?.finalPriceInCents;
+
+    const legacyReason = typeof body?.reason === "string" ? body.reason.trim() : "";
+    const declineReasonRaw = typeof body?.declineReason === "string" ? body.declineReason.trim() : "";
+    const cancelReasonRaw = typeof body?.cancelReason === "string" ? body.cancelReason.trim() : "";
+    const providerMessageRaw = typeof body?.providerMessage === "string" ? body.providerMessage.trim() : "";
+
+    const declineReason = declineReasonRaw || (action === "decline" ? legacyReason : "");
+    const cancelReason = cancelReasonRaw || (action === "cancel" ? legacyReason : "");
+    const providerMessage = providerMessageRaw || null;
+
     if (!bookingId || !action) {
       return new NextResponse("Missing bookingId or action", { status: 400 });
     }
@@ -39,8 +63,11 @@ export async function PATCH(req: Request) {
 
     const targetStatus = ACTION_TO_STATUS[action as ProviderAction];
 
-    if ((action === "decline" || action === "cancel") && !reason) {
-      return new NextResponse("A reason is required to decline or cancel", { status: 400 });
+    if (action === "decline" && !declineReason) {
+      return new NextResponse("A reason is required to decline", { status: 400 });
+    }
+    if (action === "cancel" && !cancelReason) {
+      return new NextResponse("A reason is required to cancel", { status: 400 });
     }
 
     // Get the provider record for this user
@@ -87,6 +114,7 @@ export async function PATCH(req: Request) {
 
     if (action === "accept") {
       let amountInCents = booking.priceAtBooking;
+      const isQuoteFlow = !amountInCents;
 
       // Quote flow: customer requested without a price. Provider must set final price on accept.
       if (!amountInCents) {
@@ -210,6 +238,8 @@ export async function PATCH(req: Request) {
         .set({
           status: targetStatus,
           priceAtBooking: amountInCents,
+          providerQuotedPrice: isQuoteFlow ? amountInCents : null,
+          providerMessage,
           paymentIntentId,
           providerDeclineReason: null,
           providerCancelReason: null,
@@ -235,7 +265,7 @@ export async function PATCH(req: Request) {
       await notifyCustomer({
         bookingId,
         status: targetStatus,
-        reason,
+        reason: providerMessage ?? undefined,
         serviceTitle: booking.service?.title,
       });
 
@@ -247,8 +277,11 @@ export async function PATCH(req: Request) {
       .update(bookings)
       .set({
         status: targetStatus,
-        providerDeclineReason: action === "decline" ? reason ?? null : null,
-        providerCancelReason: action === "cancel" ? reason ?? null : null,
+        ...(action === "decline"
+          ? { providerDeclineReason: declineReason || null, providerCancelReason: null, providerMessage }
+          : action === "cancel"
+            ? { providerDeclineReason: null, providerCancelReason: cancelReason || null }
+            : { providerDeclineReason: null, providerCancelReason: null }),
         updatedAt: new Date(),
       })
       .where(
@@ -271,7 +304,7 @@ export async function PATCH(req: Request) {
     await notifyCustomer({
       bookingId,
       status: targetStatus,
-      reason,
+      reason: action === "decline" ? declineReason : action === "cancel" ? cancelReason : undefined,
       serviceTitle: booking.service?.title,
     });
 
