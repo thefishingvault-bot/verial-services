@@ -197,10 +197,9 @@ export default function CustomerBookingsPage() {
 
     // Deterministic fallback: if we know which booking was just paid, confirm with Stripe server-side.
     if (stripeReturnBookingId) {
-      void fetch('/api/stripe/confirm-booking-payment', {
+      void fetch(`/api/bookings/${encodeURIComponent(stripeReturnBookingId)}/sync-payment`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookingId: stripeReturnBookingId }),
+        cache: 'no-store',
       }).catch(() => {
         // ignore
       });

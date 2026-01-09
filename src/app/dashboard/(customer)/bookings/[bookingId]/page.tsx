@@ -18,6 +18,7 @@ import { CancelBookingButton } from "@/components/bookings/cancel-booking-button
 import { RequestRescheduleButton } from "@/components/bookings/request-reschedule-button";
 import { RescheduleResponseCard } from "@/components/bookings/reschedule-response-card";
 import { CustomerRescheduleResponseCard } from "@/components/bookings/customer-reschedule-response-card";
+import { PaymentSyncClient } from "./payment-sync-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -417,7 +418,7 @@ export default async function BookingDetailPage({
   const pendingReschedule = reschedules.find((reschedule) => reschedule.status === "pending") || null;
   const pendingRequestedByProvider = !!pendingReschedule && pendingReschedule.requesterId !== booking.userId;
   const showReviewCta = booking.status === "completed" && !review && !viewerIsProvider;
-  const canCancel = ["pending", "accepted", "paid"].includes(booking.status);
+  const showCancel = ["pending", "accepted"].includes(booking.status);
   const canRequestReschedule = viewerIsCustomer && ["accepted", "paid"].includes(booking.status) && !pendingReschedule;
   const showReceipt = ["paid", "refunded", "completed"].includes(booking.status);
   const showInvoice = showReceipt && provider.chargesGst;
@@ -448,6 +449,12 @@ export default async function BookingDetailPage({
 
   const providerReason = booking.providerDeclineReason || booking.providerCancelReason;
   const showProviderNote = Boolean(providerReason || booking.providerMessage);
+
+  const shouldSyncPayment =
+    viewerIsCustomer &&
+    booking.status !== "paid" &&
+    booking.paymentIntentId != null &&
+    paymentIntent?.status === "succeeded";
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 px-4 py-10">
@@ -541,13 +548,15 @@ export default async function BookingDetailPage({
         </div>
       </div>
 
+      {shouldSyncPayment && <PaymentSyncClient bookingId={booking.id} shouldSync={shouldSyncPayment} />}
+
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">Actions</CardTitle>
           <CardDescription>Manage this booking</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
-          <CancelBookingButton bookingId={booking.id} disabled={!canCancel} />
+          {showCancel && <CancelBookingButton bookingId={booking.id} disabled={!showCancel} />}
           {viewerIsCustomer && (
             <Link href={`/dashboard/messages/${booking.id}`}>
               <Button variant="secondary">
