@@ -549,6 +549,13 @@ export default async function BookingDetailPage({
         <CardContent className="flex flex-wrap gap-3">
           <CancelBookingButton bookingId={booking.id} disabled={!canCancel} />
           {viewerIsCustomer && (
+            <Link href={`/dashboard/messages/${booking.id}`}>
+              <Button variant="secondary">
+                <MessageCircle className="mr-2 h-4 w-4" /> Message provider
+              </Button>
+            </Link>
+          )}
+          {viewerIsCustomer && (
             <RequestRescheduleButton bookingId={booking.id} disabled={!canRequestReschedule} />
           )}
           {pendingReschedule && (
