@@ -4,8 +4,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@clerk/nextjs";
 import { Bell, Package } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -46,6 +45,7 @@ function getNotificationTarget(notification: Notification) {
 export function NotificationBell() {
   const { isSignedIn } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isOpen, setIsOpen] = useState(false);
@@ -112,11 +112,13 @@ export function NotificationBell() {
     });
   };
 
-  const handleNotificationClick = (notification: Notification) => {
+  const handleNotificationClick = (notification: Notification, target: string) => {
     setIsOpen(false);
     if (!notification.isRead) {
       void markAsRead([notification.id]);
     }
+
+    router.push(target);
   };
 
   const handleMarkAllRead = async () => {
@@ -182,10 +184,10 @@ export function NotificationBell() {
           )}
           {!isLoading &&
             notifications.map((notif) => (
-              <Link
+              <button
                 key={notif.id}
-                href={getNotificationTarget(notif)}
-                onClick={() => handleNotificationClick(notif)}
+                type="button"
+                onClick={() => handleNotificationClick(notif, getNotificationTarget(notif))}
                 className={cn(
                   "flex cursor-pointer flex-col gap-1 border-b p-4 text-sm last:border-0 transition-colors",
                   notif.isRead
@@ -216,7 +218,7 @@ export function NotificationBell() {
                     ? formatDistanceToNow(new Date(notif.createdAt), { addSuffix: true })
                     : ""}
                 </p>
-              </Link>
+              </button>
             ))}
         </div>
         <div className="border-t bg-muted/40 px-4 py-2 text-right">
@@ -224,7 +226,10 @@ export function NotificationBell() {
             variant="link"
             size="sm"
             className="px-0 text-xs"
-            onClick={() => (window.location.href = viewAllHref)}
+            onClick={() => {
+              setIsOpen(false);
+              router.push(viewAllHref);
+            }}
           >
             View all notifications
           </Button>
