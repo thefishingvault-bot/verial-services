@@ -6,6 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET(
   req: Request,
@@ -53,6 +54,10 @@ export async function GET(
       bookingId: booking.id,
       amount: booking.priceAtBooking,
       providerStripeId: booking.provider.stripeConnectId,
+    }, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
     });
 
   } catch (error) {

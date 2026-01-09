@@ -20,9 +20,13 @@ export async function POST(req: Request) {
   const body = await req.text();
   const headersList = await headers();
   const signature = (headersList.get("stripe-signature") ?? headersList.get("Stripe-Signature")) as string;
-  const webhookSecret = process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? process.env.STRIPE_WEBHOOK_SECRET;
 
-  if (!webhookSecret) {
+  const webhookSecrets: Array<{ name: string; value: string }> = [
+    { name: "STRIPE_WEBHOOK_SECRET", value: process.env.STRIPE_WEBHOOK_SECRET ?? "" },
+    { name: "STRIPE_BILLING_WEBHOOK_SECRET", value: process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? "" },
+  ].filter((s) => !!s.value);
+
+  if (webhookSecrets.length === 0) {
     console.error("[API_STRIPE_WEBHOOK] Missing Stripe webhook secret");
     return new NextResponse("Webhook secret not configured", { status: 500 });
   }
@@ -33,9 +37,26 @@ export async function POST(req: Request) {
   }
 
   let event: Stripe.Event;
+  let verifiedWith: string | null = null;
 
   try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
+    let lastError: unknown = null;
+    for (const secret of webhookSecrets) {
+      try {
+        event = stripe.webhooks.constructEvent(body, signature, secret.value);
+        verifiedWith = secret.name;
+        lastError = null;
+        break;
+      } catch (error: unknown) {
+        lastError = error;
+      }
+    }
+
+    if (!verifiedWith) {
+      const message = lastError instanceof Error ? lastError.message : "Unknown error";
+      console.warn(`[API_STRIPE_WEBHOOK] Webhook signature verification failed: ${message}`);
+      return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.warn(`[API_STRIPE_WEBHOOK] Webhook signature verification failed: ${message}`);
@@ -47,8 +68,10 @@ export async function POST(req: Request) {
     ok: true,
     type: event.type,
     eventId: event.id,
+    account: (event as unknown as { account?: string | null }).account ?? null,
     livemode: (event as unknown as { livemode?: boolean }).livemode ?? null,
     mode,
+    verifiedWith,
   });
 
   const resolveProviderIdFromCustomer = async (customerId: string | null): Promise<string | null> => {
@@ -520,12 +543,23 @@ export async function POST(req: Request) {
 
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
-      const { bookingId, userId } = paymentIntent.metadata;
 
-      if (!bookingId || !userId) {
-        console.error(`[API_STRIPE_WEBHOOK] Missing metadata (bookingId or userId) on PaymentIntent ${paymentIntent.id}`);
-        // Return 200 to Stripe so it doesn't retry, but log the error
-        return new NextResponse("Metadata missing", { status: 200 }); 
+      const bookingIdFromMeta = (paymentIntent.metadata as Record<string, string | undefined> | undefined)?.bookingId;
+
+      // Resolve booking id by metadata first; fall back to lookup by stored paymentIntentId.
+      let bookingId = typeof bookingIdFromMeta === "string" && bookingIdFromMeta.trim() ? bookingIdFromMeta : null;
+      if (!bookingId) {
+        const byPi = await db.query.bookings.findFirst({
+          where: eq(bookings.paymentIntentId, paymentIntent.id),
+          columns: { id: true },
+        });
+        bookingId = byPi?.id ?? null;
+      }
+
+      if (!bookingId) {
+        console.error(`[API_STRIPE_WEBHOOK] Missing booking linkage for PaymentIntent ${paymentIntent.id}`);
+        // Return 200 so Stripe doesn't retry forever; without linkage we can't update.
+        return new NextResponse("Metadata missing", { status: 200 });
       }
 
       console.log(`[API_STRIPE_WEBHOOK] Payment succeeded for Booking: ${bookingId}. Updating database...`);
@@ -536,9 +570,11 @@ export async function POST(req: Request) {
           columns: {
             id: true,
             status: true,
+            userId: true,
             priceAtBooking: true,
             providerId: true,
             serviceId: true,
+            paymentIntentId: true,
           },
           with: {
             provider: { columns: { chargesGst: true } },
@@ -551,15 +587,29 @@ export async function POST(req: Request) {
           return new NextResponse("Booking not found", { status: 200 });
         }
 
-        assertTransition(existing.status as BookingStatus, "paid");
+        const current = existing.status as BookingStatus;
+        const alreadyPaid = ["paid", "completed", "refunded", "disputed"].includes(current);
 
-        await db
-          .update(bookings)
-          .set({
-            status: "paid",
-            paymentIntentId: paymentIntent.id,
-          })
-          .where(eq(bookings.id, bookingId));
+        if (!alreadyPaid) {
+          assertTransition(current, "paid");
+          await db
+            .update(bookings)
+            .set({
+              status: "paid",
+              paymentIntentId: paymentIntent.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, bookingId));
+        } else if (existing.paymentIntentId !== paymentIntent.id) {
+          // Idempotency / recovery: ensure booking is linked to the PI we received.
+          await db
+            .update(bookings)
+            .set({
+              paymentIntentId: paymentIntent.id,
+              updatedAt: new Date(),
+            })
+            .where(eq(bookings.id, bookingId));
+        }
 
         // Compute earnings deterministically using stored price and GST settings
         const chargesGst = existing.service?.chargesGst ?? existing.provider?.chargesGst ?? true;
@@ -582,33 +632,36 @@ export async function POST(req: Request) {
           ? (piWithCharges.charges.data[0].balance_transaction as string)
           : undefined;
 
-        await db
-          .insert(providerEarnings)
-          .values({
-            id: `earn_${bookingId}`,
-            bookingId,
-            providerId: existing.providerId,
-            serviceId: existing.serviceId,
-            grossAmount: breakdown.grossAmount,
-            platformFeeAmount: breakdown.platformFeeAmount,
-            gstAmount: breakdown.gstAmount,
-            netAmount: breakdown.netAmount,
-            status: "awaiting_payout",
-            stripeBalanceTransactionId: balanceTxId,
-            paidAt: new Date(paymentIntent.created * 1000),
-          })
-          .onConflictDoUpdate({
-            target: providerEarnings.bookingId,
-            set: {
+        // Do not overwrite refunded earnings back to awaiting_payout.
+        if (current !== "refunded") {
+          await db
+            .insert(providerEarnings)
+            .values({
+              id: `earn_${bookingId}`,
+              bookingId,
+              providerId: existing.providerId,
+              serviceId: existing.serviceId,
+              grossAmount: breakdown.grossAmount,
               platformFeeAmount: breakdown.platformFeeAmount,
               gstAmount: breakdown.gstAmount,
               netAmount: breakdown.netAmount,
               status: "awaiting_payout",
               stripeBalanceTransactionId: balanceTxId,
               paidAt: new Date(paymentIntent.created * 1000),
-              updatedAt: new Date(),
-            },
-          });
+            })
+            .onConflictDoUpdate({
+              target: providerEarnings.bookingId,
+              set: {
+                platformFeeAmount: breakdown.platformFeeAmount,
+                gstAmount: breakdown.gstAmount,
+                netAmount: breakdown.netAmount,
+                status: "awaiting_payout",
+                stripeBalanceTransactionId: balanceTxId,
+                paidAt: new Date(paymentIntent.created * 1000),
+                updatedAt: new Date(),
+              },
+            });
+        }
 
         console.log(`[API_STRIPE_WEBHOOK] Booking ${bookingId} successfully marked as 'paid' and earnings recorded.`);
 

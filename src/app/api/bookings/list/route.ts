@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { eq, desc } from "drizzle-orm";
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
@@ -37,7 +38,11 @@ export async function GET() {
       orderBy: [desc(bookings.createdAt)],
     });
 
-    return NextResponse.json(userBookings);
+    return NextResponse.json(userBookings, {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    });
 
   } catch (error) {
     console.error("[API_USER_BOOKINGS_LIST]", error);

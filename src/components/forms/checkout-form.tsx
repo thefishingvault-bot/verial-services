@@ -35,7 +35,7 @@ export function CheckoutForm() {
 
     if (result.paymentIntent?.status === 'succeeded') {
       setTimeout(() => {
-        window.location.href = '/dashboard/bookings';
+        window.location.href = '/dashboard/bookings?success=1';
       }, 1200);
     }
   }, [stripe]);
@@ -64,7 +64,7 @@ export function CheckoutForm() {
     const result = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/dashboard/bookings`,
+        return_url: `${window.location.origin}/dashboard/bookings?success=1`,
       },
       redirect: "if_required",
     });

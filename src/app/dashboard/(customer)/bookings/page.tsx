@@ -144,10 +144,11 @@ export default function CustomerBookingsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [stripeReturnSignal, setStripeReturnSignal] = useState<string | null>(null);
 
   const fetchBookings = useCallback(() => {
     setIsLoading(true);
-    fetch('/api/bookings/list')
+    fetch('/api/bookings/list', { cache: 'no-store' })
       .then((res) => {
         if (!res.ok) throw new Error('Failed to fetch your bookings.');
         return res.json();
@@ -169,6 +170,38 @@ export default function CustomerBookingsPage() {
 
     return () => clearTimeout(timeoutId);
   }, [fetchBookings]);
+
+  useEffect(() => {
+    // Client-only: read Stripe redirect params from current URL.
+    const params = new URLSearchParams(window.location.search);
+
+    const signal =
+      (params.get('success') === '1' && 'success=1') ||
+      (params.get('redirect_status') === 'succeeded' && 'redirect_status=succeeded') ||
+      (params.get('payment_intent') ? 'payment_intent' : null) ||
+      (params.get('payment_intent_client_secret') ? 'payment_intent_client_secret' : null);
+
+    if (signal) setStripeReturnSignal(signal);
+  }, []);
+
+  useEffect(() => {
+    if (!stripeReturnSignal) return;
+
+    // Ensure we refresh server data (if any) and re-fetch the list.
+    router.refresh();
+    fetchBookings();
+
+    // Webhooks can lag slightly; poll briefly to pick up the paid status.
+    const startedAt = Date.now();
+    const interval = window.setInterval(() => {
+      void fetchBookings();
+      if (Date.now() - startedAt >= 8000) {
+        window.clearInterval(interval);
+      }
+    }, 1200);
+
+    return () => window.clearInterval(interval);
+  }, [stripeReturnSignal, fetchBookings, router]);
 
   const handlePayNow = (booking: CustomerBooking) => {
     router.push(`/checkout/${booking.id}`);
