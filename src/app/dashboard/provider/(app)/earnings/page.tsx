@@ -63,9 +63,13 @@ async function loadEarnings(): Promise<EarningsSummaryResponse | null> {
       proto = "http";
     }
 
+    // IMPORTANT: For server-side requests to our own API, always prefer the current request/deployment host.
+    // NEXT_PUBLIC_APP_URL may point at production and cause staging to fetch the wrong origin (and lose auth).
     const baseUrl =
+      (host ? `${proto}://${host}` : null) ??
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ??
       process.env.NEXT_PUBLIC_APP_URL ??
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : host ? `${proto}://${host}` : "http://localhost:3000");
+      "http://localhost:3000";
 
     let cookieHeader = "";
     try {
