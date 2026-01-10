@@ -628,31 +628,35 @@ export default async function BookingDetailPage({
         </Card>
       )}
 
-      <Separator />
+      {(process.env.NODE_ENV !== "production" || process.env.SHOW_PAYMENT_DEBUG === "true") && (
+        <>
+          <Separator />
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Payment</CardTitle>
-          <CardDescription>Intent status and identifiers</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <div className="flex items-center justify-between text-xs uppercase tracking-tight text-foreground">
-            <span className="font-semibold">Status</span>
-            <span className={paymentTone}>{paymentStatusLabel}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <CreditCard className="h-4 w-4" />
-            <span>Payment intent: {booking.paymentIntentId ?? "Not created"}</span>
-          </div>
-          {paymentIntent && (
-            <div className="flex flex-col gap-1 pl-6">
-              <span>Status: {paymentIntent.status}</span>
-              <span>Amount: {formatPrice(paymentIntent.amount)}</span>
-              <span>Created: {new Date(paymentIntent.created * 1000).toLocaleString()}</span>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Payment</CardTitle>
+              <CardDescription>Intent status and identifiers</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-2 text-sm text-muted-foreground">
+              <div className="flex items-center justify-between text-xs uppercase tracking-tight text-foreground">
+                <span className="font-semibold">Status</span>
+                <span className={paymentTone}>{paymentStatusLabel}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <CreditCard className="h-4 w-4" />
+                <span>Payment intent: {booking.paymentIntentId ?? "Not created"}</span>
+              </div>
+              {paymentIntent && (
+                <div className="flex flex-col gap-1 pl-6">
+                  <span>Status: {paymentIntent.status}</span>
+                  <span>Amount: {formatPrice(paymentIntent.amount)}</span>
+                  <span>Created: {new Date(paymentIntent.created * 1000).toLocaleString()}</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </>
+      )}
     </div>
   );
 }
