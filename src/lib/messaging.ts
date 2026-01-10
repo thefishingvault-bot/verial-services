@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNull, ne, or, sql, lt, lte } from "drizzle-or
 import { isProviderCurrentlySuspended } from "@/lib/suspension";
 import type { SQL } from "drizzle-orm";
 
-import { bookings, messageThreads, messages, providers, services, users } from "@/db/schema";
+import { bookings, messageThreads, messages, providers, users } from "@/db/schema";
 import { db } from "@/lib/db";
 import { createNotification } from "@/lib/notifications";
 
@@ -166,6 +166,11 @@ export async function listUserThreads(userId: string) {
     }
   }
 
+  // Only show conversations once at least one message exists.
+  // This prevents “empty chats” from appearing just because a booking exists.
+  const bookingsWithMessages = userBookings.filter((b) => lastByBooking.has(b.id));
+  if (!bookingsWithMessages.length) return [] as const;
+
   const unreadRows = await db
     .select({ bookingId: messages.bookingId, count: sql<number>`cast(count(*) as int)` })
     .from(messages)
@@ -174,7 +179,7 @@ export async function listUserThreads(userId: string) {
   const unreadMap = new Map<string, number>();
   unreadRows.forEach((row) => unreadMap.set(row.bookingId, Number(row.count)));
 
-  return userBookings.map((booking) => {
+  return bookingsWithMessages.map((booking) => {
     const thread = threadMap.get(booking.id);
     const last = lastByBooking.get(booking.id);
     const counterpartUserId = booking.userId === userId ? booking.provider?.userId : booking.userId;

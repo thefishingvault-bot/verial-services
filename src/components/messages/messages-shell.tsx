@@ -484,7 +484,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 					) : threads.length === 0 ? (
 						<div className="flex h-full flex-col items-center justify-center gap-2 px-6 py-12 text-center text-sm text-muted-foreground">
 							<p className="font-medium text-foreground">No conversations yet</p>
-							<p className="text-xs text-muted-foreground">Book a provider to start messaging securely.</p>
+							<p className="text-xs text-muted-foreground">Send your first message to start a conversation.</p>
 						</div>
 					) : (
 						<ul className="divide-y">

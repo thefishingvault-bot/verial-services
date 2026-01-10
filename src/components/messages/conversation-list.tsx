@@ -71,7 +71,7 @@ export async function ConversationList({
       <div className="flex h-full flex-col items-center justify-center px-4 text-center text-xs text-muted-foreground">
         <p className="mb-1 font-medium text-foreground">No conversations yet</p>
         <p className="max-w-[220px] text-[11px] text-muted-foreground">
-          Once you book providers, your conversations will appear here.
+          Once you send your first message, your conversations will appear here.
         </p>
       </div>
     );
