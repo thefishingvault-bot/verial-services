@@ -185,7 +185,7 @@ export default async function ProviderDashboardPage() {
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md border bg-background px-3 py-2">
-                <p className="text-xs text-muted-foreground">Paid (pending payout)</p>
+                <p className="text-xs text-muted-foreground">Pending payout</p>
                 <p className="text-lg font-semibold">{formatPrice(metrics.paidPendingPayoutCents)}</p>
               </div>
               <div className="rounded-md border bg-background px-3 py-2">
