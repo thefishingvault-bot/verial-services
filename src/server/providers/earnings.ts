@@ -13,6 +13,13 @@ export type ProviderEarningsSummary = {
   paidOutNet: number;
 };
 
+export type ProviderMoneySummary = {
+  lifetimeEarnedNet: number;
+  last30DaysEarnedNet: number;
+  pendingNet: number;
+  paidOutNet: number;
+};
+
 export async function getProviderEarningsSummary(providerId: string): Promise<ProviderEarningsSummary> {
   const thirtyDaysAgo = subDays(new Date(), 30);
 
@@ -147,5 +154,17 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
     },
     pendingPayoutsNet,
     paidOutNet,
+  };
+}
+
+// Shared totals used by provider overview + earnings pages.
+// All values are in cents and represent *provider net*.
+export async function getProviderMoneySummary(providerId: string): Promise<ProviderMoneySummary> {
+  const summary = await getProviderEarningsSummary(providerId);
+  return {
+    lifetimeEarnedNet: summary.lifetime.net,
+    last30DaysEarnedNet: summary.last30.net,
+    pendingNet: summary.pendingPayoutsNet,
+    paidOutNet: summary.paidOutNet,
   };
 }

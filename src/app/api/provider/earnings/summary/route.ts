@@ -4,7 +4,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
 import { stripe } from "@/lib/stripe";
-import { getProviderEarningsSummary } from "@/server/providers/earnings";
+import { getProviderMoneySummary, getProviderEarningsSummary } from "@/server/providers/earnings";
 
 export const runtime = "nodejs";
 
@@ -67,6 +67,7 @@ export async function GET() {
       }
     }
 
+    const money = await getProviderMoneySummary(provider.id);
     const summary = await getProviderEarningsSummary(provider.id);
 
     const upcomingPayout = await db.query.providerPayouts.findFirst({
@@ -107,8 +108,8 @@ export async function GET() {
       },
       lifetime: summary.lifetime,
       last30: summary.last30,
-      pendingPayoutsNet: summary.pendingPayoutsNet,
-      completedPayoutsNet: summary.paidOutNet,
+      pendingPayoutsNet: money.pendingNet,
+      completedPayoutsNet: money.paidOutNet,
       upcomingPayout: upcomingPayout
         ? {
             id: upcomingPayout.id,

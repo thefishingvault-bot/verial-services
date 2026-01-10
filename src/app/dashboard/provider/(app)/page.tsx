@@ -6,7 +6,7 @@ import { formatPrice } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { bookings, providers } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
-import { getProviderEarningsSummary } from "@/server/providers/earnings";
+import { getProviderMoneySummary } from "@/server/providers/earnings";
 
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
@@ -35,7 +35,7 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [pendingBookingsRow, confirmedMonthRow, earningsSummary] = await Promise.all([
+  const [pendingBookingsRow, confirmedMonthRow, money] = await Promise.all([
     db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(bookings)
@@ -52,12 +52,12 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
         ),
       )
       .then((rows) => rows[0]),
-    getProviderEarningsSummary(provider.id),
+    getProviderMoneySummary(provider.id),
   ]);
 
-  const totalEarnedNetCents = Number(earningsSummary.lifetime.net ?? 0);
-  const paidOutNetCents = Number(earningsSummary.paidOutNet ?? 0);
-  const pendingTransferNetCents = Number(earningsSummary.pendingPayoutsNet ?? 0);
+  const totalEarnedNetCents = Number(money.lifetimeEarnedNet ?? 0);
+  const paidOutNetCents = Number(money.paidOutNet ?? 0);
+  const pendingTransferNetCents = Number(money.pendingNet ?? 0);
 
   return {
     newRequestsCount: Number(pendingBookingsRow?.count ?? 0),

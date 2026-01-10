@@ -44,10 +44,10 @@ vi.mock("@/lib/db", () => {
 });
 
 vi.mock("@/server/providers/earnings", () => ({
-  getProviderEarningsSummary: vi.fn().mockResolvedValue({
-    lifetime: { gross: 0, fee: 0, gst: 0, net: 25000 },
-    last30: { gross: 0, fee: 0, gst: 0, net: 25000 },
-    pendingPayoutsNet: 10000,
+  getProviderMoneySummary: vi.fn().mockResolvedValue({
+    lifetimeEarnedNet: 25000,
+    last30DaysEarnedNet: 25000,
+    pendingNet: 10000,
     paidOutNet: 15000,
   }),
 }));
