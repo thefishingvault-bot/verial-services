@@ -34,7 +34,7 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [pendingBookingsRow, confirmedMonthRow, completedTotalRow, paidOutRow] = await Promise.all([
+  const [pendingBookingsRow, confirmedMonthRow, completedTotalRow] = await Promise.all([
     db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(bookings)
@@ -57,8 +57,14 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
       .from(bookings)
       .where(and(eq(bookings.providerId, provider.id), inArray(bookings.status, ["paid", "completed"])))
       .then((rows) => rows[0]),
-    // Paid out: only bookings explicitly marked paid_out (do NOT infer from booking.status).
-    db
+  ]);
+
+  // Paid out: only bookings explicitly marked paid_out (do NOT infer from booking.status).
+  // NOTE: In environments where the migration hasn't run yet, the payout_status column won't exist.
+  // In that case we gracefully fall back to treating paidOut as 0 (so the dashboard still renders).
+  let paidOutRow: { cents: number } | undefined;
+  try {
+    paidOutRow = await db
       .select({ cents: sql<number>`coalesce(sum(${bookings.priceAtBooking}), 0)` })
       .from(bookings)
       .where(
@@ -68,8 +74,16 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
           eq(bookings.payoutStatus, "paid_out"),
         ),
       )
-      .then((rows) => rows[0]),
-  ]);
+      .then((rows) => rows[0]);
+  } catch (error) {
+    const maybeCode = (error as { code?: string; cause?: { code?: string } } | null)?.cause?.code ??
+      (error as { code?: string } | null)?.code;
+
+    if (maybeCode !== "42703") {
+      throw error;
+    }
+    paidOutRow = { cents: 0 };
+  }
 
   const completedBookingsTotalCents = Number(completedTotalRow?.cents ?? 0);
   const paidOutCents = Number(paidOutRow?.cents ?? 0);
