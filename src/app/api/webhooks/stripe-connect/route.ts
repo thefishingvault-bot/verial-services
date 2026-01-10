@@ -1,13 +1,117 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { providers } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { providerEarnings, providerPayouts, providers } from "@/db/schema";
+import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
 import { createNotification } from "@/lib/notifications";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
+
+function mapPayoutStatus(status: string) {
+  switch (status) {
+    case "paid":
+      return "paid" as const;
+    case "in_transit":
+      return "in_transit" as const;
+    case "pending":
+      return "pending" as const;
+    case "canceled":
+      return "canceled" as const;
+    case "failed":
+      return "failed" as const;
+    default:
+      return "pending" as const;
+  }
+}
+
+async function upsertProviderPayout(params: {
+  providerId: string;
+  payout: Stripe.Payout;
+  accountId: string;
+  eventId: string;
+}) {
+  const { providerId, payout, accountId, eventId } = params;
+
+  await db
+    .insert(providerPayouts)
+    .values({
+      id: payout.id,
+      providerId,
+      stripePayoutId: payout.id,
+      amount: payout.amount,
+      currency: payout.currency,
+      status: mapPayoutStatus(payout.status),
+      arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
+      estimatedArrival: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
+      failureCode: payout.failure_code || null,
+      failureMessage: payout.failure_message || null,
+      balanceTransactionId:
+        typeof payout.balance_transaction === "string" ? payout.balance_transaction : null,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: providerPayouts.id,
+      set: {
+        amount: payout.amount,
+        currency: payout.currency,
+        status: mapPayoutStatus(payout.status),
+        arrivalDate: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
+        estimatedArrival: payout.arrival_date ? new Date(payout.arrival_date * 1000) : null,
+        failureCode: payout.failure_code || null,
+        failureMessage: payout.failure_message || null,
+        balanceTransactionId:
+          typeof payout.balance_transaction === "string" ? payout.balance_transaction : null,
+        updatedAt: new Date(),
+      },
+    });
+
+  // Best-effort: link earnings rows to this payout via balance transactions.
+  // This keeps provider_earnings.status in sync but should not block webhook acknowledgement.
+  try {
+    const txIds: string[] = [];
+    let startingAfter: string | undefined = undefined;
+    let pages = 0;
+
+    while (pages < 3) {
+      pages += 1;
+      const txPage: Stripe.ApiList<Stripe.BalanceTransaction> = await stripe.balanceTransactions.list(
+        { payout: payout.id, limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) },
+        { stripeAccount: accountId },
+      );
+
+      for (const tx of txPage.data) txIds.push(tx.id);
+
+      if (!txPage.has_more || txPage.data.length === 0) break;
+      startingAfter = txPage.data[txPage.data.length - 1]?.id;
+    }
+
+    if (txIds.length > 0) {
+      await db
+        .update(providerEarnings)
+        .set({
+          payoutId: payout.id,
+          status: payout.status === "paid" ? "paid_out" : "awaiting_payout",
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(providerEarnings.providerId, providerId),
+            inArray(providerEarnings.stripeBalanceTransactionId, txIds),
+          ),
+        );
+    }
+  } catch (error) {
+    console.warn("[API_STRIPE_CONNECT_WEBHOOK] Failed to link earnings to payout", {
+      providerId,
+      payoutId: payout.id,
+      accountId,
+      eventId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 function providerIdFromAccountMetadata(account: Stripe.Account): string | null {
   const value = (account.metadata as Record<string, string | undefined> | undefined)?.providerId;
@@ -194,7 +298,8 @@ export async function POST(req: Request) {
 
     case "person.updated": {
       const person = event.data.object as Stripe.Person;
-      const accountId = typeof person.account === "string" ? person.account : person.account?.id;
+      const accountRef = (person as unknown as { account?: string | Stripe.Account | null }).account;
+      const accountId = typeof accountRef === "string" ? accountRef : accountRef?.id;
       console.info("[API_STRIPE_CONNECT_WEBHOOK] person.updated", { accountId, eventId: event.id });
       if (accountId) {
         const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
@@ -242,6 +347,55 @@ export async function POST(req: Request) {
             .where(eq(providers.id, provider.id));
         }
       }
+      break;
+    }
+
+    case "payout.created":
+    case "payout.updated":
+    case "payout.paid":
+    case "payout.failed":
+    case "payout.canceled": {
+      const payout = event.data.object as Stripe.Payout;
+      const accountId = typeof event.account === "string" ? event.account : null;
+
+      console.info("[API_STRIPE_CONNECT_WEBHOOK] payout event", {
+        type: event.type,
+        payoutId: payout.id,
+        status: payout.status,
+        accountId,
+        eventId: event.id,
+      });
+
+      if (!accountId) {
+        console.warn("[API_STRIPE_CONNECT_WEBHOOK] Missing event.account for payout", {
+          type: event.type,
+          payoutId: payout.id,
+          eventId: event.id,
+        });
+        break;
+      }
+
+      const provider = await db.query.providers.findFirst({
+        where: eq(providers.stripeConnectId, accountId),
+        columns: { id: true },
+      });
+
+      if (!provider) {
+        console.warn("[API_STRIPE_CONNECT_WEBHOOK] No provider found for payout account", {
+          accountId,
+          payoutId: payout.id,
+          eventId: event.id,
+        });
+        break;
+      }
+
+      await upsertProviderPayout({
+        providerId: provider.id,
+        payout,
+        accountId,
+        eventId: event.id,
+      });
+
       break;
     }
 

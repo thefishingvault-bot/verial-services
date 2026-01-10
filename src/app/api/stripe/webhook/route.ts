@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     return new NextResponse("Missing Stripe-Signature header", { status: 400 });
   }
 
-  let event: Stripe.Event;
+  let event: Stripe.Event | null = null;
   let verifiedWith: string | null = null;
 
   try {
@@ -63,6 +63,11 @@ export async function POST(req: Request) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.warn(`[API_STRIPE_WEBHOOK] Webhook signature verification failed: ${message}`);
     return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
+  }
+
+  if (!event) {
+    console.warn("[API_STRIPE_WEBHOOK] Webhook verified but event is missing");
+    return new NextResponse("Webhook Error: missing event", { status: 400 });
   }
 
   const mode = detectStripeMode();
@@ -489,7 +494,8 @@ export async function POST(req: Request) {
     case "invoice.payment_succeeded": {
       // These events can reflect status transitions; resync the linked subscription if present.
       const invoice = event.data.object as Stripe.Invoice;
-      const subscriptionId = typeof invoice.subscription === "string" ? invoice.subscription : invoice.subscription?.id;
+      const subscriptionRef = (invoice as unknown as { subscription?: string | Stripe.Subscription | null }).subscription;
+      const subscriptionId = typeof subscriptionRef === "string" ? subscriptionRef : subscriptionRef?.id;
       const customerId = typeof invoice.customer === "string" ? invoice.customer : invoice.customer?.id;
       if (!subscriptionId) break;
 
