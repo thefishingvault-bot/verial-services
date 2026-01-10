@@ -1,10 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
-import { subDays } from "date-fns";
 import { stripe } from "@/lib/stripe";
+import { getProviderEarningsSummary } from "@/server/providers/earnings";
 
 export const runtime = "nodejs";
 
@@ -67,59 +67,7 @@ export async function GET() {
       }
     }
 
-    const thirtyDaysAgo = subDays(new Date(), 30);
-
-    const [totals, last30, pendingNet, paidOutNet] = await Promise.all([
-      db
-        .select({
-          gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
-          fee: sql<number>`coalesce(sum(${providerEarnings.platformFeeAmount}), 0)`,
-          gst: sql<number>`coalesce(sum(${providerEarnings.gstAmount}), 0)`,
-          net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
-        })
-        .from(providerEarnings)
-        .where(eq(providerEarnings.providerId, provider.id))
-        .then((rows) => rows[0]),
-      db
-        .select({
-          gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
-          fee: sql<number>`coalesce(sum(${providerEarnings.platformFeeAmount}), 0)`,
-          gst: sql<number>`coalesce(sum(${providerEarnings.gstAmount}), 0)`,
-          net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
-        })
-        .from(providerEarnings)
-        .where(
-          and(
-            eq(providerEarnings.providerId, provider.id),
-            gte(providerEarnings.paidAt, thirtyDaysAgo),
-          ),
-        )
-        .then((rows) => rows[0]),
-      db
-        .select({
-          net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
-        })
-        .from(providerEarnings)
-        .where(
-          and(
-            eq(providerEarnings.providerId, provider.id),
-            eq(providerEarnings.status, "awaiting_payout"),
-          ),
-        )
-        .then((rows) => rows[0]),
-      db
-        .select({
-          net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
-        })
-        .from(providerEarnings)
-        .where(
-          and(
-            eq(providerEarnings.providerId, provider.id),
-            eq(providerEarnings.status, "paid_out"),
-          ),
-        )
-        .then((rows) => rows[0]),
-    ]);
+    const summary = await getProviderEarningsSummary(provider.id);
 
     const upcomingPayout = await db.query.providerPayouts.findFirst({
       where: and(
@@ -157,10 +105,10 @@ export async function GET() {
         chargesEnabled,
         payoutsEnabled,
       },
-      lifetime: totals,
-      last30,
-      pendingPayoutsNet: pendingNet?.net ?? 0,
-      completedPayoutsNet: paidOutNet?.net ?? 0,
+      lifetime: summary.lifetime,
+      last30: summary.last30,
+      pendingPayoutsNet: summary.pendingPayoutsNet,
+      completedPayoutsNet: summary.paidOutNet,
       upcomingPayout: upcomingPayout
         ? {
             id: upcomingPayout.id,

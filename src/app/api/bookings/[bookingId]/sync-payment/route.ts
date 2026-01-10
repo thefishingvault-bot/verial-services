@@ -4,8 +4,9 @@ import { and, eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
-import { bookings } from "@/db/schema";
+import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, type BookingStatus } from "@/lib/booking-state";
+import { calculateEarnings } from "@/lib/earnings";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,14 +22,22 @@ export async function POST(
     const { bookingId } = await params;
     if (!bookingId) return new NextResponse("Missing bookingId", { status: 400 });
 
-    const booking = await db.query.bookings.findFirst({
-      where: and(eq(bookings.id, bookingId), eq(bookings.userId, userId)),
-      columns: {
-        id: true,
-        status: true,
-        paymentIntentId: true,
-      },
-    });
+    const booking = await db
+      .select({
+        id: bookings.id,
+        status: bookings.status,
+        paymentIntentId: bookings.paymentIntentId,
+        providerId: bookings.providerId,
+        serviceId: bookings.serviceId,
+        priceAtBooking: bookings.priceAtBooking,
+        serviceChargesGst: services.chargesGst,
+        providerChargesGst: providers.chargesGst,
+      })
+      .from(bookings)
+      .leftJoin(services, eq(services.id, bookings.serviceId))
+      .leftJoin(providers, eq(providers.id, bookings.providerId))
+      .where(and(eq(bookings.id, bookingId), eq(bookings.userId, userId)))
+      .then((rows) => rows[0]);
 
     if (!booking) return new NextResponse("Booking not found", { status: 404 });
 
@@ -58,6 +67,48 @@ export async function POST(
       );
     }
 
+    // Best-effort: if the payment succeeded, ensure the provider earnings ledger row exists.
+    const ensureEarningsRecorded = async () => {
+      const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
+      const platformFeeBps = Number.parseInt(
+        pi.metadata?.platform_fee_bps || process.env.PLATFORM_FEE_BPS || "1000",
+        10,
+      );
+
+      const breakdown = calculateEarnings({
+        amountInCents: booking.priceAtBooking,
+        chargesGst,
+        platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
+      });
+
+      await db
+        .insert(providerEarnings)
+        .values({
+          id: `earn_${bookingId}`,
+          bookingId,
+          providerId: booking.providerId,
+          serviceId: booking.serviceId,
+          grossAmount: breakdown.grossAmount,
+          platformFeeAmount: breakdown.platformFeeAmount,
+          gstAmount: breakdown.gstAmount,
+          netAmount: breakdown.netAmount,
+          status: "awaiting_payout",
+          paidAt: new Date(pi.created * 1000),
+        })
+        .onConflictDoUpdate({
+          target: providerEarnings.bookingId,
+          set: {
+            grossAmount: breakdown.grossAmount,
+            platformFeeAmount: breakdown.platformFeeAmount,
+            gstAmount: breakdown.gstAmount,
+            netAmount: breakdown.netAmount,
+            status: "awaiting_payout",
+            paidAt: new Date(pi.created * 1000),
+            updatedAt: new Date(),
+          },
+        });
+    };
+
     if (alreadyPaid) {
       if (booking.paymentIntentId !== pi.id) {
         const rows = await db
@@ -67,6 +118,15 @@ export async function POST(
           .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
 
         console.info("[API_BOOKING_SYNC_PAYMENT] Linked", { bookingId, rows });
+      }
+
+      try {
+        await ensureEarningsRecorded();
+      } catch (earningsError) {
+        console.warn("[API_BOOKING_SYNC_PAYMENT] Failed to ensure earnings recorded", {
+          bookingId,
+          error: earningsError instanceof Error ? earningsError.message : String(earningsError),
+        });
       }
 
       return NextResponse.json(
@@ -84,6 +144,15 @@ export async function POST(
       .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
 
     console.info("[API_BOOKING_SYNC_PAYMENT] Updated", { bookingId, rows });
+
+    try {
+      await ensureEarningsRecorded();
+    } catch (earningsError) {
+      console.warn("[API_BOOKING_SYNC_PAYMENT] Failed to ensure earnings recorded", {
+        bookingId,
+        error: earningsError instanceof Error ? earningsError.message : String(earningsError),
+      });
+    }
 
     return NextResponse.json(
       { ok: true, updated: rows.length > 0, rows },
