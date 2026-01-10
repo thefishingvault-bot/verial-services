@@ -148,7 +148,7 @@ function buildTimeline(
     const firstCharge = (paymentIntent as PaymentIntentWithCharges | null)?.charges?.data?.[0];
     events.push({
       type: "paid",
-      label: "Payment captured",
+      label: "Payment successful",
       timestamp: paymentIntent?.status === "succeeded" && firstCharge?.created
         ? new Date(firstCharge.created * 1000)
         : booking.updatedAt ?? booking.createdAt,
