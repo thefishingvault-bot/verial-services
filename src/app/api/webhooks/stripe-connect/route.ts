@@ -309,10 +309,29 @@ async function updateProviderFromAccount(params: {
 export async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature") ?? req.headers.get("Stripe-Signature");
-  const webhookSecret = process.env.STRIPE_CONNECT_WEBHOOK_SECRET; // Use the *CONNECT* secret
 
-  if (!webhookSecret) {
-    console.error("[API_STRIPE_CONNECT_WEBHOOK] Missing Stripe Connect webhook secret");
+  const webhookSecrets: Array<{ name: string; value: string }> = [
+    // ✅ Connect/Provider payout webhook secret (new)
+    {
+      name: "PROVIDER_PAYOUT_STRIPE_WEBHOOK_SECRET",
+      value: process.env.PROVIDER_PAYOUT_STRIPE_WEBHOOK_SECRET ?? "",
+    },
+
+    // Existing ones
+    { name: "STRIPE_CONNECT_WEBHOOK_SECRET", value: process.env.STRIPE_CONNECT_WEBHOOK_SECRET ?? "" },
+    { name: "STRIPE_WEBHOOK_SECRET", value: process.env.STRIPE_WEBHOOK_SECRET ?? "" },
+    { name: "STRIPE_BILLING_WEBHOOK_SECRET", value: process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? "" },
+  ].filter((s) => !!s.value);
+
+  if (webhookSecrets.length === 0) {
+    console.error("[API_STRIPE_CONNECT_WEBHOOK] No Stripe webhook secrets configured", {
+      expected: [
+        "PROVIDER_PAYOUT_STRIPE_WEBHOOK_SECRET",
+        "STRIPE_CONNECT_WEBHOOK_SECRET",
+        "STRIPE_WEBHOOK_SECRET",
+        "STRIPE_BILLING_WEBHOOK_SECRET",
+      ],
+    });
     return new NextResponse("Webhook secret not configured", { status: 500 });
   }
 
@@ -320,15 +339,32 @@ export async function POST(req: Request) {
     return new NextResponse("Missing Stripe-Signature header", { status: 400 });
   }
 
-  let event: Stripe.Event;
+  let event: Stripe.Event | null = null;
+  let verifiedWith: string | null = null;
+  let lastError: unknown = null;
 
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Unknown error';
+  for (const secret of webhookSecrets) {
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, secret.value);
+      verifiedWith = secret.name;
+      break;
+    } catch (error: unknown) {
+      lastError = error;
+    }
+  }
+
+  if (!event) {
+    const message = lastError instanceof Error ? lastError.message : "Unknown error";
     console.warn(`[API_STRIPE_CONNECT_WEBHOOK] Webhook signature verification failed: ${message}`);
     return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
   }
+
+  console.info("[API_STRIPE_CONNECT_WEBHOOK] Webhook verified", {
+    verifiedWith,
+    eventId: event.id,
+    type: event.type,
+    account: typeof event.account === "string" ? event.account : null,
+  });
 
   // Handle the event
   switch (event.type as string) {
