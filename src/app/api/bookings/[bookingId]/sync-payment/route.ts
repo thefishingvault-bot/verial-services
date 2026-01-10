@@ -7,17 +7,26 @@ import { stripe } from "@/lib/stripe";
 import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, type BookingStatus } from "@/lib/booking-state";
 import { calculateEarnings } from "@/lib/earnings";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function POST(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ bookingId: string }> },
 ) {
   try {
     const { userId } = await auth();
     if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+    const body = (await req.json().catch(() => null)) as
+      | {
+          sessionId?: string;
+        }
+      | null;
+
+    const sessionId = typeof body?.sessionId === "string" ? body.sessionId : null;
 
     const { bookingId } = await params;
     if (!bookingId) return new NextResponse("Missing bookingId", { status: 400 });
@@ -32,6 +41,7 @@ export async function POST(
         priceAtBooking: bookings.priceAtBooking,
         serviceChargesGst: services.chargesGst,
         providerChargesGst: providers.chargesGst,
+        providerPlan: providers.plan,
       })
       .from(bookings)
       .leftJoin(services, eq(services.id, bookings.serviceId))
@@ -42,16 +52,52 @@ export async function POST(
     if (!booking) return new NextResponse("Booking not found", { status: 404 });
 
     const current = booking.status as BookingStatus;
-    const alreadyPaid = ["paid", "completed", "refunded", "disputed"].includes(current);
+    const alreadyPaid = ["paid", "completed_by_provider", "completed", "refunded", "disputed"].includes(current);
 
-    if (!booking.paymentIntentId) {
+    const resolvePaymentIntentId = async (): Promise<string | null> => {
+      if (booking.paymentIntentId) return booking.paymentIntentId;
+
+      // Preferred: if we have a Checkout Session id, resolve the PI from it.
+      if (sessionId) {
+        try {
+          const session = await stripe.checkout.sessions.retrieve(sessionId);
+          const piId =
+            typeof session.payment_intent === "string"
+              ? session.payment_intent
+              : session.payment_intent?.id ?? null;
+          if (piId) return piId;
+        } catch {
+          // Fall through.
+        }
+      }
+
+      // Fallback: attempt to locate the PaymentIntent via metadata.bookingId.
+      // This covers cases where we didn't persist the PI id before redirect.
+      try {
+        const escapedBookingId = bookingId.replace(/'/g, "\\'");
+        const results = await stripe.paymentIntents.search({
+          query: `metadata['bookingId']:'${escapedBookingId}' AND status:'succeeded'`,
+          limit: 1,
+        });
+
+        const found = results.data?.[0];
+        if (found?.id) return found.id;
+      } catch {
+        // Stripe search may not be enabled; ignore.
+      }
+
+      return null;
+    };
+
+    const resolvedPiId = await resolvePaymentIntentId();
+    if (!resolvedPiId) {
       return NextResponse.json(
         { ok: true, updated: false, reason: "missing_payment_intent" },
         { headers: { "Cache-Control": "no-store" } },
       );
     }
 
-    const pi = await stripe.paymentIntents.retrieve(booking.paymentIntentId);
+    const pi = await stripe.paymentIntents.retrieve(resolvedPiId);
 
     console.info("[API_BOOKING_SYNC_PAYMENT] Checked", {
       bookingId,
@@ -70,10 +116,7 @@ export async function POST(
     // Best-effort: if the payment succeeded, ensure the provider earnings ledger row exists.
     const ensureEarningsRecorded = async () => {
       const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
-      const platformFeeBps = Number.parseInt(
-        pi.metadata?.platform_fee_bps || process.env.PLATFORM_FEE_BPS || "1000",
-        10,
-      );
+      const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));
 
       const breakdown = calculateEarnings({
         amountInCents: booking.priceAtBooking,
@@ -92,7 +135,8 @@ export async function POST(
           platformFeeAmount: breakdown.platformFeeAmount,
           gstAmount: breakdown.gstAmount,
           netAmount: breakdown.netAmount,
-          status: "awaiting_payout",
+          status: "held",
+          stripePaymentIntentId: pi.id,
           paidAt: new Date(pi.created * 1000),
         })
         .onConflictDoUpdate({
@@ -102,7 +146,8 @@ export async function POST(
             platformFeeAmount: breakdown.platformFeeAmount,
             gstAmount: breakdown.gstAmount,
             netAmount: breakdown.netAmount,
-            status: "awaiting_payout",
+            status: "held",
+            stripePaymentIntentId: pi.id,
             paidAt: new Date(pi.created * 1000),
             updatedAt: new Date(),
           },

@@ -89,7 +89,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         },
       },
     ],
-    success_url: `${siteUrl}/dashboard/bookings?success=1&bookingId=${encodeURIComponent(booking.id)}`,
+    success_url: `${siteUrl}/dashboard/bookings?success=1&bookingId=${encodeURIComponent(booking.id)}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/dashboard/bookings/${encodeURIComponent(booking.id)}`,
     payment_intent_data: {
       metadata: {

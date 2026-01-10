@@ -153,6 +153,7 @@ export default function CustomerBookingsPage() {
   const router = useRouter();
   const [stripeReturnSignal, setStripeReturnSignal] = useState<string | null>(null);
   const [stripeReturnBookingId, setStripeReturnBookingId] = useState<string | null>(null);
+  const [stripeReturnSessionId, setStripeReturnSessionId] = useState<string | null>(null);
 
   const fetchBookings = useCallback(() => {
     setIsLoading(true);
@@ -193,6 +194,9 @@ export default function CustomerBookingsPage() {
 
     const bookingId = params.get('bookingId');
     if (bookingId) setStripeReturnBookingId(bookingId);
+
+    const sessionId = params.get('session_id');
+    if (sessionId) setStripeReturnSessionId(sessionId);
   }, []);
 
   useEffect(() => {
@@ -206,6 +210,8 @@ export default function CustomerBookingsPage() {
     if (stripeReturnBookingId) {
       void fetch(`/api/bookings/${encodeURIComponent(stripeReturnBookingId)}/sync-payment`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: stripeReturnSessionId }),
         cache: 'no-store',
       }).catch(() => {
         // ignore
@@ -222,7 +228,7 @@ export default function CustomerBookingsPage() {
     }, 1200);
 
     return () => window.clearInterval(interval);
-  }, [stripeReturnSignal, stripeReturnBookingId, fetchBookings, router]);
+  }, [stripeReturnSignal, stripeReturnBookingId, stripeReturnSessionId, fetchBookings, router]);
 
   const handlePayNow = async (booking: CustomerBooking) => {
     setIsLoading(true);

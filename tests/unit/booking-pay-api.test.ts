@@ -89,6 +89,9 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
     expect(stripeMocks.sessionsCreate).toHaveBeenCalledTimes(1);
 
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as { success_url?: string } | undefined;
+    expect(call?.success_url).toMatch(/session_id=\{CHECKOUT_SESSION_ID\}/);
+
     const json = await res.json();
     expect(json.url).toMatch(/^https:\/\//);
   });
