@@ -1,10 +1,10 @@
 import { subDays } from "date-fns";
-import { and, eq, gte, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { calculateEarnings } from "@/lib/earnings";
 import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
-import { bookings, providerEarnings, providers, services } from "@/db/schema";
+import { bookings, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
 
 export type ProviderEarningsSummary = {
   lifetime: { gross: number; fee: number; gst: number; net: number };
@@ -161,10 +161,28 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
 // All values are in cents and represent *provider net*.
 export async function getProviderMoneySummary(providerId: string): Promise<ProviderMoneySummary> {
   const summary = await getProviderEarningsSummary(providerId);
+
+  // Stripe-driven paid-out total (net): sum actual payouts that reached the provider's bank.
+  // Guardrail: if a provider has no payout events (not connected / no payouts yet), this is 0.
+  const paidOutRow = await db
+    .select({ cents: sql<number>`coalesce(sum(${providerPayouts.amount}), 0)` })
+    .from(providerPayouts)
+    .where(
+      and(
+        eq(providerPayouts.providerId, providerId),
+        inArray(providerPayouts.status, ["paid", "in_transit"]),
+      ),
+    )
+    .then((rows) => rows[0]);
+
+  const paidOutNet = Number(paidOutRow?.cents ?? 0);
+  const earnedNet = Number(summary.lifetime.net ?? 0);
+  const pendingNet = Math.max(0, earnedNet - paidOutNet);
+
   return {
-    lifetimeEarnedNet: summary.lifetime.net,
-    last30DaysEarnedNet: summary.last30.net,
-    pendingNet: summary.pendingPayoutsNet,
-    paidOutNet: summary.paidOutNet,
+    lifetimeEarnedNet: earnedNet,
+    last30DaysEarnedNet: Number(summary.last30.net ?? 0),
+    pendingNet,
+    paidOutNet,
   };
 }

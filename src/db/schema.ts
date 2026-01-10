@@ -270,6 +270,7 @@ export const bookings = pgTable("bookings", {
 export const providerPayouts = pgTable("provider_payouts", {
   id: varchar("id", { length: 255 }).primaryKey(), // e.g., ppayout_...
   providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
+  stripeAccountId: varchar("stripe_account_id", { length: 255 }).notNull(),
   stripePayoutId: varchar("stripe_payout_id", { length: 255 }).unique(),
 
   amount: integer("amount").notNull(), // cents
@@ -278,13 +279,24 @@ export const providerPayouts = pgTable("provider_payouts", {
   arrivalDate: timestamp("arrival_date"),
   estimatedArrival: timestamp("estimated_arrival"),
 
+  stripeCreatedAt: timestamp("stripe_created_at"),
+  raw: jsonb("raw"),
+
   failureCode: varchar("failure_code", { length: 255 }),
   failureMessage: text("failure_message"),
   balanceTransactionId: varchar("balance_transaction_id", { length: 255 }),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+},
+  (table) => ({
+    providerIdx: index("provider_payouts_provider_idx").on(table.providerId),
+    stripeAccountPayoutUnique: uniqueIndex("provider_payouts_stripe_account_payout_unique").on(
+      table.stripeAccountId,
+      table.stripePayoutId,
+    ),
+  }),
+);
 
 /**
  * Provider Earnings
