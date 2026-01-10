@@ -1,6 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { providerEarnings, providerPayouts, providers } from "@/db/schema";
+import { bookings, providerEarnings, providerPayouts, providers } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -8,6 +8,43 @@ import { createNotification } from "@/lib/notifications";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
+
+async function markBookingPaid(params: {
+  source: string;
+  bookingId: string;
+  paymentIntentId: string | null;
+  eventId: string;
+}) {
+  const { source, bookingId, paymentIntentId, eventId } = params;
+
+  if (!bookingId) return;
+  if (!paymentIntentId) {
+    console.info("[API_STRIPE_CONNECT_WEBHOOK] Payment event missing paymentIntentId", {
+      source,
+      bookingId,
+      eventId,
+    });
+    return;
+  }
+
+  const rows = await db
+    .update(bookings)
+    .set({
+      status: "paid",
+      paymentIntentId,
+      updatedAt: new Date(),
+    })
+    .where(and(eq(bookings.id, bookingId), eq(bookings.status, "accepted")))
+    .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
+
+  console.info("[API_STRIPE_CONNECT_WEBHOOK] Booking marked paid", {
+    source,
+    bookingId,
+    paymentIntentId,
+    eventId,
+    updated: rows.length > 0,
+  });
+}
 
 function mapPayoutStatus(status: string) {
   switch (status) {
@@ -368,6 +405,55 @@ export async function POST(req: Request) {
 
   // Handle the event
   switch (event.type as string) {
+    case "checkout.session.completed": {
+      const session = event.data.object as Stripe.Checkout.Session;
+
+      const bookingId = (session.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+      const paymentIntentId =
+        typeof session.payment_intent === "string"
+          ? session.payment_intent
+          : session.payment_intent?.id ?? null;
+
+      console.info("[API_STRIPE_CONNECT_WEBHOOK] checkout.session.completed", {
+        eventId: event.id,
+        bookingId,
+        paymentIntentId,
+        mode: session.mode,
+      });
+
+      if (!bookingId) break;
+
+      // Best-effort: do not throw if bookingId/paymentIntentId missing.
+      await markBookingPaid({
+        source: event.type,
+        bookingId,
+        paymentIntentId,
+        eventId: event.id,
+      });
+      break;
+    }
+
+    case "payment_intent.succeeded": {
+      const pi = event.data.object as Stripe.PaymentIntent;
+      const bookingId = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+
+      console.info("[API_STRIPE_CONNECT_WEBHOOK] payment_intent.succeeded", {
+        eventId: event.id,
+        bookingId,
+        paymentIntentId: pi.id,
+      });
+
+      if (!bookingId) break;
+
+      await markBookingPaid({
+        source: event.type,
+        bookingId,
+        paymentIntentId: pi.id,
+        eventId: event.id,
+      });
+      break;
+    }
+
     case "account.updated": {
       const account = event.data.object as Stripe.Account;
       console.info("[API_STRIPE_CONNECT_WEBHOOK] account.updated", { accountId: account.id, eventId: event.id });
