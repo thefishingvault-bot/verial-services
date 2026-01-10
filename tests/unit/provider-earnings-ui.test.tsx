@@ -58,7 +58,7 @@ describe("ProviderEarningsPage", () => {
     render(<ToastProvider>{await ProviderEarningsPage()}</ToastProvider>);
 
     await waitFor(() => {
-      expect(screen.getByText(/Lifetime earnings/i)).toBeInTheDocument();
+      expect(screen.getByText(/Lifetime earned \(net\)/i)).toBeInTheDocument();
     });
 
     expect(screen.getByText(/Recent earnings/i)).toBeInTheDocument();
