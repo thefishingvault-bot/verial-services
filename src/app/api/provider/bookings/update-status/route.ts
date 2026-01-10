@@ -6,7 +6,6 @@ import { eq, and, or, gte, lte, inArray, ne } from "drizzle-orm";
 import { sendEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
-import { stripe } from "@/lib/stripe";
 import { getDay } from "date-fns";
 import { isProviderCurrentlySuspended } from "@/lib/suspension";
 
@@ -18,7 +17,7 @@ const ACTION_TO_STATUS: Record<ProviderAction, BookingStatus> = {
   accept: "accepted",
   decline: "declined",
   cancel: "canceled_provider",
-  "mark-completed": "completed",
+  "mark-completed": "completed_by_provider",
 };
 
 export async function PATCH(req: Request) {
@@ -109,8 +108,7 @@ export async function PATCH(req: Request) {
       return new NextResponse(message, { status: 400 });
     }
 
-    // If accepting, re-check availability/time-off and overlap, then create PaymentIntent
-    let clientSecret: string | undefined;
+    // If accepting, re-check availability/time-off and overlap.
 
     if (action === "accept") {
       let amountInCents = booking.priceAtBooking;
@@ -175,61 +173,9 @@ export async function PATCH(req: Request) {
         }
       }
 
-      // PaymentIntent creation/idempotency
+      // Require a connected account so we can transfer after completion confirmation.
       if (!provider.stripeConnectId) {
         return new NextResponse("Provider payments are not set up.", { status: 400 });
-      }
-
-      const platformFeeBps = parseInt(process.env.PLATFORM_FEE_BPS || "1000", 10);
-      const applicationFeeAmount = Math.ceil(
-        amountInCents * (platformFeeBps / 10000),
-      );
-
-      const existingPiId = booking.paymentIntentId;
-      const idempotencyKey = `pi_accept_${booking.id}`;
-      const metadata = {
-        bookingId: booking.id,
-        userId: booking.userId,
-        providerId: provider.id,
-      } satisfies Record<string, string>;
-
-      let paymentIntentId = existingPiId;
-
-      if (existingPiId) {
-        const pi = await stripe.paymentIntents.retrieve(existingPiId);
-        if (pi.amount !== amountInCents && pi.status !== 'succeeded') {
-          // Amount changed; create a new PI.
-          paymentIntentId = null;
-        } else if (pi.status === "requires_payment_method" || pi.status === "requires_confirmation" || pi.status === "requires_action") {
-          clientSecret = pi.client_secret || undefined;
-        } else if (pi.status === "succeeded") {
-          // Already paid, allow transition to paid via webhook
-          clientSecret = pi.client_secret || undefined;
-        } else {
-          // If canceled or otherwise unusable, create a new PI
-          paymentIntentId = null;
-        }
-      }
-
-      if (!paymentIntentId) {
-        const pi = await stripe.paymentIntents.create(
-          {
-            amount: amountInCents,
-            currency: "nzd",
-            automatic_payment_methods: { enabled: true },
-            application_fee_amount: applicationFeeAmount,
-            transfer_data: { destination: provider.stripeConnectId },
-            metadata,
-            description: booking.service?.title
-              ? `Booking ${booking.id} for ${booking.service.title}`
-              : `Booking ${booking.id}`,
-            receipt_email: undefined,
-          },
-          { idempotencyKey },
-        );
-
-        paymentIntentId = pi.id;
-        clientSecret = pi.client_secret || undefined;
       }
 
       // Persist status and paymentIntentId together for accept
@@ -240,7 +186,8 @@ export async function PATCH(req: Request) {
           priceAtBooking: amountInCents,
           providerQuotedPrice: isQuoteFlow ? amountInCents : null,
           providerMessage,
-          paymentIntentId,
+          // Payment is created by the customer after accept (platform charge held until completion).
+          paymentIntentId: booking.paymentIntentId ?? null,
           providerDeclineReason: null,
           providerCancelReason: null,
           updatedAt: new Date(),
@@ -269,7 +216,7 @@ export async function PATCH(req: Request) {
         serviceTitle: booking.service?.title,
       });
 
-      return NextResponse.json({ booking: updated, clientSecret });
+      return NextResponse.json({ booking: updated });
     }
 
     // Update the booking after validation (non-accept actions)

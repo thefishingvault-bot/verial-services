@@ -162,7 +162,8 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "accepted",            // Provider has accepted
   "declined",            // Provider has declined
   "paid",                // Customer has paid (via Stripe)
-  "completed",           // Provider has marked complete
+  "completed_by_provider",// Provider marked complete; waiting on customer confirmation
+  "completed",           // Customer confirmed completion
   "canceled_customer",   // Customer canceled
   "canceled_provider",   // Provider canceled
   "disputed",            // Customer disputed after payment
@@ -171,7 +172,9 @@ export const bookingStatusEnum = pgEnum("booking_status", [
 
 export const earningStatusEnum = pgEnum("earning_status", [
   "pending",           // Booking not yet paid
-  "awaiting_payout",   // Paid and waiting for payout
+  "held",              // Paid to platform; funds held until completion confirmation
+  "transferred",       // Transfer created to provider connected account
+  "awaiting_payout",   // Legacy: paid and waiting for payout
   "paid_out",          // Included in a payout
   "refunded"           // Refunded after payout
 ]);
@@ -315,8 +318,12 @@ export const providerEarnings = pgTable("provider_earnings", {
   currency: varchar("currency", { length: 10 }).default("nzd").notNull(),
 
   status: earningStatusEnum("status").default("pending").notNull(),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
   stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", { length: 255 }),
+  stripeTransferId: varchar("stripe_transfer_id", { length: 255 }),
   payoutId: varchar("payout_id", { length: 255 }).references(() => providerPayouts.id, { onDelete: "set null" }),
+
+  transferredAt: timestamp("transferred_at"),
 
   paidAt: timestamp("paid_at"), // when booking was paid
   createdAt: timestamp("created_at").defaultNow().notNull(),

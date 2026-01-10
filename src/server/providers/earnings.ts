@@ -4,7 +4,7 @@ import { and, eq, gte, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { calculateEarnings } from "@/lib/earnings";
 import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
-import { bookings, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
+import { bookings, earningStatusEnum, providerEarnings, providerPayouts, providers, services } from "@/db/schema";
 
 export type ProviderEarningsSummary = {
   lifetime: { gross: number; fee: number; gst: number; net: number };
@@ -23,8 +23,15 @@ export type ProviderMoneySummary = {
 export async function getProviderEarningsSummary(providerId: string): Promise<ProviderEarningsSummary> {
   const thirtyDaysAgo = subDays(new Date(), 30);
 
-  const [paidOutTotals, last30PaidOutTotals, pendingFromEarningsRow, last30PendingFromEarningsRow, missingBookings] = await Promise.all([
-    // Paid out totals (lifetime): actual transfers made to the provider.
+  const earnedStatuses: Array<(typeof earningStatusEnum.enumValues)[number]> = [
+    "held",
+    "transferred",
+    "awaiting_payout",
+    "paid_out",
+  ];
+
+  const [earnedTotals, last30EarnedTotals, paidOutRow, missingBookings] = await Promise.all([
+    // Earned totals (lifetime): include held + transferred (and legacy statuses).
     db
       .select({
         gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
@@ -33,10 +40,10 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
         net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
       })
       .from(providerEarnings)
-      .where(and(eq(providerEarnings.providerId, providerId), eq(providerEarnings.status, "paid_out")))
+      .where(and(eq(providerEarnings.providerId, providerId), inArray(providerEarnings.status, earnedStatuses)))
       .then((rows) => rows[0]),
 
-    // Paid out in the last 30 days: use updatedAt as a proxy for the paid_out transition.
+    // Earned totals (last 30 days): use paidAt where available, otherwise createdAt.
     db
       .select({
         gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
@@ -48,42 +55,25 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .where(
         and(
           eq(providerEarnings.providerId, providerId),
-          eq(providerEarnings.status, "paid_out"),
-          gte(providerEarnings.updatedAt, thirtyDaysAgo),
+          inArray(providerEarnings.status, earnedStatuses),
+          gte(sql<Date>`coalesce(${providerEarnings.paidAt}, ${providerEarnings.createdAt})`, thirtyDaysAgo),
         ),
       )
       .then((rows) => rows[0]),
 
-    // Pending transfer (lifetime): completed bookings that are earned but not paid out.
+    // Stripe-driven paid-out total (net): sum actual payouts that reached the provider's bank.
     db
-      .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
-      .from(providerEarnings)
-      .leftJoin(bookings, eq(bookings.id, providerEarnings.bookingId))
+      .select({ cents: sql<number>`coalesce(sum(${providerPayouts.amount}), 0)` })
+      .from(providerPayouts)
       .where(
         and(
-          eq(providerEarnings.providerId, providerId),
-          eq(providerEarnings.status, "awaiting_payout"),
-          eq(bookings.status, "completed"),
+          eq(providerPayouts.providerId, providerId),
+          inArray(providerPayouts.status, ["paid", "in_transit"]),
         ),
       )
       .then((rows) => rows[0]),
 
-    // Pending transfer (last 30 days): best-effort filter by booking.updatedAt (no explicit completedAt).
-    db
-      .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
-      .from(providerEarnings)
-      .leftJoin(bookings, eq(bookings.id, providerEarnings.bookingId))
-      .where(
-        and(
-          eq(providerEarnings.providerId, providerId),
-          eq(providerEarnings.status, "awaiting_payout"),
-          eq(bookings.status, "completed"),
-          gte(bookings.updatedAt, thirtyDaysAgo),
-        ),
-      )
-      .then((rows) => rows[0]),
-
-    // Fallback for completed bookings without earnings rows (webhook/reconciliation gaps).
+    // Fallback for paid bookings without earnings rows (webhook/reconciliation gaps).
     db
       .select({
         bookingId: bookings.id,
@@ -101,7 +91,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .where(
         and(
           eq(bookings.providerId, providerId),
-          eq(bookings.status, "completed"),
+          inArray(bookings.status, ["paid", "completed_by_provider", "completed"]),
           isNotNull(bookings.paymentIntentId),
           isNull(providerEarnings.id),
         ),
@@ -109,11 +99,8 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .then((rows) => rows),
   ]);
 
-  const pendingFromEarnings = Number(pendingFromEarningsRow?.net ?? 0);
-  const last30PendingFromEarnings = Number(last30PendingFromEarningsRow?.net ?? 0);
-
-  let pendingFromMissingBookings = 0;
-  let last30PendingFromMissingBookings = 0;
+  let earnedFromMissingBookings = 0;
+  let last30EarnedFromMissingBookings = 0;
   for (const row of missingBookings) {
     const plan = normalizeProviderPlan(row.providerPlan);
     const platformFeeBps = getPlatformFeeBpsForPlan(plan);
@@ -125,31 +112,31 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       platformFeeBps,
     });
 
-    pendingFromMissingBookings += breakdown.netAmount;
+    earnedFromMissingBookings += breakdown.netAmount;
     if (row.bookingUpdatedAt && row.bookingUpdatedAt >= thirtyDaysAgo) {
-      last30PendingFromMissingBookings += breakdown.netAmount;
+      last30EarnedFromMissingBookings += breakdown.netAmount;
     }
   }
 
-  const paidOutNet = Number(paidOutTotals?.net ?? 0);
-  const pendingPayoutsNet = pendingFromEarnings + pendingFromMissingBookings;
-  const last30PendingNet = last30PendingFromEarnings + last30PendingFromMissingBookings;
+  const paidOutNet = Number(paidOutRow?.cents ?? 0);
 
-  // Total earned (net) = pending transfer + paid out.
-  const earnedNet = pendingPayoutsNet + paidOutNet;
-  const earnedLast30Net = last30PendingNet + Number(last30PaidOutTotals?.net ?? 0);
+  const earnedNet = Number(earnedTotals?.net ?? 0) + earnedFromMissingBookings;
+  const earnedLast30Net = Number(last30EarnedTotals?.net ?? 0) + last30EarnedFromMissingBookings;
+
+  // Pending to bank payout (net) = earned - paid out.
+  const pendingPayoutsNet = Math.max(0, earnedNet - paidOutNet);
 
   return {
     lifetime: {
-      gross: 0,
-      fee: 0,
-      gst: 0,
+      gross: Number(earnedTotals?.gross ?? 0),
+      fee: Number(earnedTotals?.fee ?? 0),
+      gst: Number(earnedTotals?.gst ?? 0),
       net: earnedNet,
     },
     last30: {
-      gross: 0,
-      fee: 0,
-      gst: 0,
+      gross: Number(last30EarnedTotals?.gross ?? 0),
+      fee: Number(last30EarnedTotals?.fee ?? 0),
+      gst: Number(last30EarnedTotals?.gst ?? 0),
       net: earnedLast30Net,
     },
     pendingPayoutsNet,
@@ -162,20 +149,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
 export async function getProviderMoneySummary(providerId: string): Promise<ProviderMoneySummary> {
   const summary = await getProviderEarningsSummary(providerId);
 
-  // Stripe-driven paid-out total (net): sum actual payouts that reached the provider's bank.
-  // Guardrail: if a provider has no payout events (not connected / no payouts yet), this is 0.
-  const paidOutRow = await db
-    .select({ cents: sql<number>`coalesce(sum(${providerPayouts.amount}), 0)` })
-    .from(providerPayouts)
-    .where(
-      and(
-        eq(providerPayouts.providerId, providerId),
-        inArray(providerPayouts.status, ["paid", "in_transit"]),
-      ),
-    )
-    .then((rows) => rows[0]);
-
-  const paidOutNet = Number(paidOutRow?.cents ?? 0);
+  const paidOutNet = Number(summary.paidOutNet ?? 0);
   const earnedNet = Number(summary.lifetime.net ?? 0);
   const pendingNet = Math.max(0, earnedNet - paidOutNet);
 

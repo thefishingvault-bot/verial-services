@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         eq(bookings.providerId, providerId),
         gte(bookings.scheduledDate, dayStartUtc),
         lte(bookings.scheduledDate, dayEndUtc),
-        inArray(bookings.status, ["accepted", "paid", "completed"]),
+        inArray(bookings.status, ["accepted", "paid", "completed_by_provider", "completed"]),
       ),
       columns: { scheduledDate: true },
     });

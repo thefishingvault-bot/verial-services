@@ -45,6 +45,7 @@ type ProviderBookingDetail = {
       | "accepted"
       | "declined"
       | "paid"
+      | "completed_by_provider"
       | "completed"
       | "canceled_customer"
       | "canceled_provider"
@@ -422,6 +423,12 @@ export function ProviderBookingDetailClient({ bookingId }: { bookingId: string }
                 "Mark Completed"
               )}
             </Button>
+          )}
+
+          {booking.status === "completed_by_provider" && (
+            <div className="text-xs text-muted-foreground self-center">
+              Waiting for customer confirmation&mdash;funds will be released after they confirm.
+            </div>
           )}
 
           {booking.status === "disputed" && <p className="text-xs text-muted-foreground">This booking is under dispute.</p>}

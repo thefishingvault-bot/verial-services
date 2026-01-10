@@ -20,32 +20,22 @@ vi.mock("@/lib/db", () => {
       select: vi.fn(() => {
         selectCall += 1;
 
-        // 1) paidOutTotals
+        // 1) earnedTotals
         if (selectCall === 1) {
           return makeBuilder([{ gross: 0, fee: 0, gst: 0, net: 0 }]);
         }
 
-        // 2) last30PaidOutTotals
+        // 2) last30EarnedTotals
         if (selectCall === 2) {
           return makeBuilder([{ gross: 0, fee: 0, gst: 0, net: 0 }]);
         }
 
-        // 3) pendingFromEarningsRow
+        // 3) paidOutRow (provider payouts)
         if (selectCall === 3) {
-          return makeBuilder([{ net: 0 }]);
-        }
-
-        // 4) last30PendingFromEarningsRow
-        if (selectCall === 4) {
-          return makeBuilder([{ net: 0 }]);
-        }
-
-        // 6) getProviderMoneySummary: sum provider payouts
-        if (selectCall === 6) {
           return makeBuilder([{ cents: payoutSumCents }]);
         }
 
-        // 5) missingBookings
+        // 4) missingBookings
         return makeBuilder([
           {
             bookingId: "bk_1",
@@ -70,7 +60,7 @@ beforeEach(() => {
 });
 
 describe("getProviderEarningsSummary", () => {
-  it("treats completed unpaid-out bookings as pending when earnings rows are missing", async () => {
+  it("treats paid bookings without earnings rows as earned and pending", async () => {
     const summary = await getProviderEarningsSummary("prov_1");
 
     expect(summary.lifetime.net).toBe(5000);

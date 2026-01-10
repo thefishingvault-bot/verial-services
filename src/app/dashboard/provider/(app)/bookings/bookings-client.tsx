@@ -32,6 +32,7 @@ type ProviderBookingStatus =
   | "accepted"
   | "declined"
   | "paid"
+  | "completed_by_provider"
   | "completed"
   | "canceled_customer"
   | "canceled_provider"
@@ -139,7 +140,7 @@ export function ProviderBookingsClient() {
 
   const { requests, upcoming, history } = useMemo(() => {
     const pending = bookings.filter((b) => b.status === "pending");
-    const active = bookings.filter((b) => ["accepted", "paid"].includes(b.status));
+    const active = bookings.filter((b) => ["accepted", "paid", "completed_by_provider"].includes(b.status));
     const past = bookings.filter((b) =>
       [
         "completed",
@@ -455,6 +456,12 @@ function BookingRow(props: {
                 ) : null}
                 Mark completed
               </Button>
+            )}
+
+            {booking.status === "completed_by_provider" && (
+              <span className="self-center text-[11px] text-muted-foreground">
+                Waiting for customer confirmation&mdash;funds will be released after they confirm.
+              </span>
             )}
           </div>
 

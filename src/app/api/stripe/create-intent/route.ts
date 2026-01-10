@@ -4,7 +4,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bookings, providers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
-import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 import { normalizeStatus } from "@/lib/booking-state";
 
 // This route is for creating a Payment Intent for a *platform* charge.
@@ -59,24 +58,16 @@ export async function POST(req: Request) {
       return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
     }
 
-    // Platform fee can be reduced/removed for subscribed providers
-    const feeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(provider?.plan));
-    const applicationFeeAmount = Math.ceil(amount * (feeBps / 10000));
-
-    // Create the Payment Intent
+    // Create the Payment Intent (platform charge only; transfer happens later).
     const paymentIntent = await stripe.paymentIntents.create({
       amount: amount,
       currency: "nzd", // NZD as per spec
       automatic_payment_methods: { enabled: true },
-      application_fee_amount: applicationFeeAmount,
-      transfer_data: {
-        destination: provider.stripeConnectId, // Destination charge to the provider
-      },
+      transfer_group: booking.id,
       metadata: {
         bookingId: booking.id,
         userId,
         providerId: booking.providerId,
-        platform_fee_bps: feeBps.toString(),
       },
     });
 

@@ -10,7 +10,13 @@ import { createNotification, createNotificationOnce } from "@/lib/notifications"
 import { sendEmail } from "@/lib/email";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
-import { isStripeSubscribedStatus, resolvePlanFromStripeDetails, type ProviderPlan } from "@/lib/provider-subscription";
+import {
+  getPlatformFeeBpsForPlan,
+  isStripeSubscribedStatus,
+  normalizeProviderPlan,
+  resolvePlanFromStripeDetails,
+  type ProviderPlan,
+} from "@/lib/provider-subscription";
 import { retrieveStripePriceSafe, detectStripeMode } from "@/lib/stripe";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
@@ -595,7 +601,7 @@ export async function POST(req: Request) {
             paymentIntentId: true,
           },
           with: {
-            provider: { columns: { chargesGst: true } },
+            provider: { columns: { chargesGst: true, plan: true } },
             service: { columns: { chargesGst: true } },
           },
         });
@@ -643,12 +649,9 @@ export async function POST(req: Request) {
           });
         }
 
-        // Compute earnings deterministically using stored price and GST settings
+        // Compute earnings deterministically using stored price and GST settings.
         const chargesGst = existing.service?.chargesGst ?? existing.provider?.chargesGst ?? true;
-        const platformFeeBps = Number.parseInt(
-          paymentIntent.metadata?.platform_fee_bps || process.env.PLATFORM_FEE_BPS || "1000",
-          10,
-        );
+        const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(existing.provider?.plan));
 
         const breakdown = calculateEarnings({
           amountInCents: existing.priceAtBooking,
@@ -656,15 +659,21 @@ export async function POST(req: Request) {
           platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
         });
 
-        const piWithCharges = paymentIntent as Stripe.PaymentIntent & {
-          charges?: { data?: Array<{ balance_transaction?: string | Stripe.BalanceTransaction }> };
-        };
+        let balanceTxId: string | undefined = undefined;
+        try {
+          const piWithCharges = (await stripe.paymentIntents.retrieve(paymentIntent.id, {
+            expand: ["charges.data.balance_transaction"],
+          })) as Stripe.PaymentIntent & {
+            charges?: { data?: Array<{ balance_transaction?: string | Stripe.BalanceTransaction | null }> };
+          };
 
-        const balanceTxId = typeof piWithCharges.charges?.data?.[0]?.balance_transaction === "string"
-          ? (piWithCharges.charges.data[0].balance_transaction as string)
-          : undefined;
+          const raw = piWithCharges.charges?.data?.[0]?.balance_transaction ?? null;
+          balanceTxId = typeof raw === "string" ? raw : raw?.id ?? undefined;
+        } catch {
+          balanceTxId = undefined;
+        }
 
-        // Do not overwrite refunded earnings back to awaiting_payout.
+        // Do not overwrite refunded bookings back to held.
         if (current !== "refunded") {
           await db
             .insert(providerEarnings)
@@ -677,7 +686,8 @@ export async function POST(req: Request) {
               platformFeeAmount: breakdown.platformFeeAmount,
               gstAmount: breakdown.gstAmount,
               netAmount: breakdown.netAmount,
-              status: "awaiting_payout",
+              status: "held",
+              stripePaymentIntentId: paymentIntent.id,
               stripeBalanceTransactionId: balanceTxId,
               paidAt: new Date(paymentIntent.created * 1000),
             })
@@ -687,7 +697,8 @@ export async function POST(req: Request) {
                 platformFeeAmount: breakdown.platformFeeAmount,
                 gstAmount: breakdown.gstAmount,
                 netAmount: breakdown.netAmount,
-                status: "awaiting_payout",
+                status: "held",
+                stripePaymentIntentId: paymentIntent.id,
                 stripeBalanceTransactionId: balanceTxId,
                 paidAt: new Date(paymentIntent.created * 1000),
                 updatedAt: new Date(),
@@ -709,7 +720,7 @@ export async function POST(req: Request) {
               payload: {
                 type: "payment",
                 title: "Booking paid",
-                body: `${booking.service?.title ?? "A booking"} has been paid. Earnings are now awaiting payout.`,
+                body: `${booking.service?.title ?? "A booking"} has been paid. Funds are held until the customer confirms completion.`,
                 actionUrl: `/dashboard/provider/bookings/${bookingId}`,
                 bookingId,
                 providerId: booking.providerId,

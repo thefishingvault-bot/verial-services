@@ -19,6 +19,7 @@ import { RequestRescheduleButton } from "@/components/bookings/request-reschedul
 import { RescheduleResponseCard } from "@/components/bookings/reschedule-response-card";
 import { CustomerRescheduleResponseCard } from "@/components/bookings/customer-reschedule-response-card";
 import { PaymentSyncClient } from "./payment-sync-client";
+import { PaymentActionsClient } from "./payment-actions-client";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -557,6 +558,7 @@ export default async function BookingDetailPage({
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           {showCancel && <CancelBookingButton bookingId={booking.id} disabled={!showCancel} />}
+          <PaymentActionsClient bookingId={booking.id} status={booking.status} viewerIsCustomer={viewerIsCustomer} />
           {viewerIsCustomer && (
             <Link href={`/dashboard/messages/${booking.id}`}>
               <Button variant="secondary">

@@ -3,6 +3,7 @@ export type BookingStatus =
   | "accepted"
   | "declined"
   | "paid"
+  | "completed_by_provider"
   | "completed"
   | "canceled_customer"
   | "canceled_provider"
@@ -20,6 +21,8 @@ export const getBookingStatusLabel = (status: BookingStatus | string): string =>
       return "Accepted";
     case "paid":
       return "Paid";
+    case "completed_by_provider":
+      return "Awaiting confirmation";
     case "completed":
       return "Completed";
     case "refunded":
@@ -42,6 +45,8 @@ export const getBookingStatusVariant = (status: BookingStatus | string): StatusB
     case "paid":
     case "completed":
       return "default";
+    case "completed_by_provider":
+      return "secondary";
     case "accepted":
       return "secondary";
     case "pending":

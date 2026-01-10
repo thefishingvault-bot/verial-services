@@ -15,6 +15,7 @@ type CustomerBookingStatus =
   | 'accepted'
   | 'declined'
   | 'paid'
+  | 'completed_by_provider'
   | 'completed'
   | 'canceled_customer'
   | 'canceled_provider'
@@ -76,6 +77,8 @@ const getStatusLabel = (status: CustomerBooking['status']) => {
       return 'Paid';
     case 'completed':
       return 'Completed';
+    case 'completed_by_provider':
+      return 'Awaiting confirmation';
     case 'declined':
       return 'Declined';
     case 'canceled_customer':
@@ -98,6 +101,8 @@ const getNextStep = (status: CustomerBooking['status']) => {
       return 'Next: Pay to confirm your booking.';
     case 'paid':
       return 'Next: Your booking is confirmed — the provider will complete the service.';
+    case 'completed_by_provider':
+      return 'Next: Confirm completion to release the provider payout.';
     case 'completed':
       return 'Completed — you can leave a review or book again.';
     case 'declined':
@@ -123,6 +128,8 @@ const getStatusBadgeVariant = (
     case 'paid':
     case 'completed':
       return 'default';
+    case 'completed_by_provider':
+      return 'secondary';
     case 'accepted':
       return 'secondary';
     case 'pending':
@@ -217,8 +224,45 @@ export default function CustomerBookingsPage() {
     return () => window.clearInterval(interval);
   }, [stripeReturnSignal, stripeReturnBookingId, fetchBookings, router]);
 
-  const handlePayNow = (booking: CustomerBooking) => {
-    router.push(`/checkout/${booking.id}`);
+  const handlePayNow = async (booking: CustomerBooking) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/bookings/${encodeURIComponent(booking.id)}/pay`, {
+        method: 'POST',
+        cache: 'no-store',
+      });
+
+      if (!res.ok) throw new Error(await res.text());
+
+      const data = (await res.json()) as { url?: string };
+      if (!data.url) throw new Error('Missing Stripe Checkout URL.');
+
+      window.location.href = data.url;
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to start checkout.');
+      setIsLoading(false);
+    }
+  };
+
+  const handleConfirmCompletion = async (bookingId: string) => {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch(`/api/bookings/${encodeURIComponent(bookingId)}/confirm-completion`, {
+        method: 'POST',
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error(await res.text());
+
+      router.refresh();
+      fetchBookings();
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to confirm completion.');
+      setIsLoading(false);
+    }
   };
 
   const handleCancel = async (bookingId: string) => {
@@ -374,6 +418,11 @@ export default function CustomerBookingsPage() {
                     Paid
                   </Button>
                 )}
+                {booking.status === 'completed_by_provider' && (
+                  <Button onClick={() => handleConfirmCompletion(booking.id)} className="w-full sm:w-auto">
+                    Confirm completion
+                  </Button>
+                )}
                 {booking.status === 'completed' && !booking.review && (
                   <ReviewForm
                     bookingId={booking.id}
@@ -391,7 +440,7 @@ export default function CustomerBookingsPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    onClick={() => handlePayNow(booking)}
+                    onClick={() => router.push(`/s/${booking.service.slug}`)}
                     className="w-full sm:w-auto"
                   >
                     Book again
