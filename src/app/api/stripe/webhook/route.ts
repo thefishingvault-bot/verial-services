@@ -32,6 +32,8 @@ export async function POST(req: Request) {
     { name: "STRIPE_BILLING_WEBHOOK_SECRET", value: process.env.STRIPE_BILLING_WEBHOOK_SECRET ?? "" },
     // Safety: some environments accidentally set the booking webhook to the connect secret.
     { name: "STRIPE_CONNECT_WEBHOOK_SECRET", value: process.env.STRIPE_CONNECT_WEBHOOK_SECRET ?? "" },
+    // Safety: some environments reuse the provider payout (Connect v2) secret for booking webhooks.
+    { name: "PROVIDER_PAYOUT_STRIPE_WEBHOOK_SECRET", value: process.env.PROVIDER_PAYOUT_STRIPE_WEBHOOK_SECRET ?? "" },
   ].filter((s) => !!s.value);
 
   if (webhookSecrets.length === 0) {
