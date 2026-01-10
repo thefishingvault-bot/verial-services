@@ -169,6 +169,11 @@ export const bookingStatusEnum = pgEnum("booking_status", [
   "refunded"             // Platform processed refund
 ]);
 
+export const bookingPayoutStatusEnum = pgEnum("booking_payout_status", [
+  "unpaid",     // Not paid out to provider yet
+  "paid_out"    // Paid out to provider
+]);
+
 export const earningStatusEnum = pgEnum("earning_status", [
   "pending",           // Booking not yet paid
   "awaiting_payout",   // Paid and waiting for payout
@@ -245,6 +250,10 @@ export const bookings = pgTable("bookings", {
 
   // Stripe Payment Intent ID
   paymentIntentId: varchar("payment_intent_id", { length: 255 }).unique(),
+
+  // Minimal internal payout tracking (DB-first; do NOT infer paid-out from booking.status)
+  payoutStatus: bookingPayoutStatusEnum("payout_status").default("unpaid").notNull(),
+  paidOutAt: timestamp("paid_out_at"),
 
   // Provider-provided reasons for certain status transitions
   providerDeclineReason: text("provider_decline_reason"),

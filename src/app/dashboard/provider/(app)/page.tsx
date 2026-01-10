@@ -10,8 +10,9 @@ import { and, eq, gte, inArray, sql } from "drizzle-orm";
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
   confirmedThisMonthCount: number;
-  payoutsPendingCents: number;
-  payoutsCompletedCents: number;
+  completedBookingsTotalCents: number;
+  paidOutCents: number;
+  paidPendingPayoutCents: number;
 };
 
 async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
@@ -24,15 +25,16 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
     return {
       newRequestsCount: 0,
       confirmedThisMonthCount: 0,
-      payoutsPendingCents: 0,
-      payoutsCompletedCents: 0,
+      completedBookingsTotalCents: 0,
+      paidOutCents: 0,
+      paidPendingPayoutCents: 0,
     };
   }
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [pendingBookingsRow, confirmedMonthRow, payoutsPendingRow, payoutsCompletedRow] = await Promise.all([
+  const [pendingBookingsRow, confirmedMonthRow, completedTotalRow, paidOutRow] = await Promise.all([
     db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(bookings)
@@ -49,25 +51,36 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
         ),
       )
       .then((rows) => rows[0]),
-    // DB-only MVP: treat "paid" as earnings pending payout.
+    // Completed bookings total: sum paid+completed bookings (gross booking amount), regardless of payout status.
     db
       .select({ cents: sql<number>`coalesce(sum(${bookings.priceAtBooking}), 0)` })
       .from(bookings)
-      .where(and(eq(bookings.providerId, provider.id), eq(bookings.status, "paid")))
+      .where(and(eq(bookings.providerId, provider.id), inArray(bookings.status, ["paid", "completed"])))
       .then((rows) => rows[0]),
-    // DB-only MVP: treat "completed" as the completed bucket until real transfers are tracked.
+    // Paid out: only bookings explicitly marked paid_out (do NOT infer from booking.status).
     db
       .select({ cents: sql<number>`coalesce(sum(${bookings.priceAtBooking}), 0)` })
       .from(bookings)
-      .where(and(eq(bookings.providerId, provider.id), eq(bookings.status, "completed")))
+      .where(
+        and(
+          eq(bookings.providerId, provider.id),
+          inArray(bookings.status, ["paid", "completed"]),
+          eq(bookings.payoutStatus, "paid_out"),
+        ),
+      )
       .then((rows) => rows[0]),
   ]);
+
+  const completedBookingsTotalCents = Number(completedTotalRow?.cents ?? 0);
+  const paidOutCents = Number(paidOutRow?.cents ?? 0);
+  const paidPendingPayoutCents = Math.max(0, completedBookingsTotalCents - paidOutCents);
 
   return {
     newRequestsCount: Number(pendingBookingsRow?.count ?? 0),
     confirmedThisMonthCount: Number(confirmedMonthRow?.count ?? 0),
-    payoutsPendingCents: Number(payoutsPendingRow?.cents ?? 0),
-    payoutsCompletedCents: Number(payoutsCompletedRow?.cents ?? 0),
+    completedBookingsTotalCents,
+    paidOutCents,
+    paidPendingPayoutCents,
   };
 }
 
@@ -87,16 +100,6 @@ export default async function ProviderDashboardPage() {
       value: String(metrics.confirmedThisMonthCount),
       hint: "Confirmed this month",
     },
-    {
-      label: "Payouts pending",
-      value: formatPrice(metrics.payoutsPendingCents),
-      hint: "Paid bookings, not paid out yet",
-    },
-    {
-      label: "Completed bookings",
-      value: formatPrice(metrics.payoutsCompletedCents),
-      hint: "Completed bookings total",
-    },
   ];
 
   return (
@@ -108,7 +111,7 @@ export default async function ProviderDashboardPage() {
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-2">
         {cards.map((item) => (
           <Card key={item.label}>
             <CardHeader className="space-y-1 pb-2">
@@ -162,22 +165,22 @@ export default async function ProviderDashboardPage() {
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div>
-                <p className="text-sm font-semibold">{formatPrice(metrics.payoutsCompletedCents)}</p>
+                <p className="text-sm font-semibold">{formatPrice(metrics.completedBookingsTotalCents)}</p>
                 <p className="text-xs text-muted-foreground">Completed bookings total</p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">Paid (pending payout)</p>
-                <p className="text-lg font-semibold">{formatPrice(metrics.payoutsPendingCents)}</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.paidPendingPayoutCents)}</p>
               </div>
               <div className="rounded-md border bg-background px-3 py-2">
-                <p className="text-xs text-muted-foreground">Completed</p>
-                <p className="text-lg font-semibold">{formatPrice(metrics.payoutsCompletedCents)}</p>
+                <p className="text-xs text-muted-foreground">Paid out</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.paidOutCents)}</p>
               </div>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              Pending = paid bookings not yet paid out. Completed = completed bookings (transfer tracking coming soon).
+              Paid out is only counted once a booking is marked paid out (transfer tracking).
             </div>
           </CardContent>
         </Card>
