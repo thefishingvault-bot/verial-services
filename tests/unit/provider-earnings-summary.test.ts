@@ -34,12 +34,18 @@ vi.mock("@/lib/db", () => {
           return makeBuilder([{ net: 0 }]);
         }
 
-        // 4) missingBookings
+        // 4) last30PendingFromEarningsRow
+        if (call === 4) {
+          return makeBuilder([{ net: 0 }]);
+        }
+
+        // 5) missingBookings
         return makeBuilder([
           {
             bookingId: "bk_1",
             priceAtBooking: 5000,
             paymentIntentId: "pi_1",
+            bookingUpdatedAt: new Date(),
             serviceChargesGst: false,
             providerChargesGst: false,
             providerPlan: "pro",
@@ -56,8 +62,8 @@ describe("getProviderEarningsSummary", () => {
   it("treats completed unpaid-out bookings as pending when earnings rows are missing", async () => {
     const summary = await getProviderEarningsSummary("prov_1");
 
-    expect(summary.lifetime.net).toBe(0);
-    expect(summary.last30.net).toBe(0);
+    expect(summary.lifetime.net).toBe(5000);
+    expect(summary.last30.net).toBe(5000);
     expect(summary.paidOutNet).toBe(0);
     expect(summary.pendingPayoutsNet).toBe(5000);
   });

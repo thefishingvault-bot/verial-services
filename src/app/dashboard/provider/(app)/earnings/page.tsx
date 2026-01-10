@@ -110,7 +110,7 @@ export default async function ProviderEarningsPage() {
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold tracking-tight">Earnings</h1>
         <p className="text-sm text-muted-foreground">
-          Track what you&apos;ve earned, what&apos;s on the way, and recent payouts.
+          See what you&apos;ve earned (net), what&apos;s pending, and what&apos;s been paid out.
         </p>
       </div>
 
@@ -121,6 +121,11 @@ export default async function ProviderEarningsPage() {
         pendingNet={pendingNet}
         completedNet={completedNet}
       />
+
+      <p className="text-xs text-muted-foreground">
+        Earned (net) updates when a job is completed and payment is confirmed. Paid out updates when
+        a transfer is made.
+      </p>
 
       <Card>
         <CardHeader>

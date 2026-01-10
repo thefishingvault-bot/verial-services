@@ -21,24 +21,24 @@ export function EarningsSummaryCards({
 }: EarningsSummaryCardsProps) {
   const items = [
     {
-      label: "Lifetime earnings",
+      label: "Lifetime earned (net)",
       value: lifetimeNet,
-      hint: "Net after fees and GST",
+      hint: "Net after platform fees (and GST if applicable)",
     },
     {
-      label: "Last 30 days",
+      label: "Earned (last 30 days)",
       value: last30Net,
-      hint: "Recent net earnings",
+      hint: "Net earned in the last 30 days.",
     },
     {
-      label: "Pending payouts",
+      label: "Pending transfer",
       value: pendingNet,
-      hint: "Awaiting transfer",
+      hint: "Earned, not paid out yet.",
     },
     {
-      label: "Completed payouts",
+      label: "Paid out",
       value: completedNet,
-      hint: "Already paid out",
+      hint: "Transferred to your bank.",
     },
   ];
 

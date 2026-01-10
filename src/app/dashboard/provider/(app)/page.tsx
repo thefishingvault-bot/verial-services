@@ -6,13 +6,14 @@ import { formatPrice } from "@/lib/utils";
 import { db } from "@/lib/db";
 import { bookings, providers } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
+import { getProviderEarningsSummary } from "@/server/providers/earnings";
 
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
   confirmedThisMonthCount: number;
-  completedBookingsTotalCents: number;
-  paidOutCents: number;
-  paidPendingPayoutCents: number;
+  totalEarnedNetCents: number;
+  pendingTransferNetCents: number;
+  paidOutNetCents: number;
 };
 
 async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
@@ -25,16 +26,16 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
     return {
       newRequestsCount: 0,
       confirmedThisMonthCount: 0,
-      completedBookingsTotalCents: 0,
-      paidOutCents: 0,
-      paidPendingPayoutCents: 0,
+      totalEarnedNetCents: 0,
+      pendingTransferNetCents: 0,
+      paidOutNetCents: 0,
     };
   }
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [pendingBookingsRow, confirmedMonthRow, completedTotalRow] = await Promise.all([
+  const [pendingBookingsRow, confirmedMonthRow, earningsSummary] = await Promise.all([
     db
       .select({ count: sql<number>`cast(count(*) as int)` })
       .from(bookings)
@@ -51,50 +52,19 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
         ),
       )
       .then((rows) => rows[0]),
-    // Completed bookings total: sum paid+completed bookings (gross booking amount), regardless of payout status.
-    db
-      .select({ cents: sql<number>`coalesce(sum(${bookings.priceAtBooking}), 0)` })
-      .from(bookings)
-      .where(and(eq(bookings.providerId, provider.id), inArray(bookings.status, ["paid", "completed"])))
-      .then((rows) => rows[0]),
+    getProviderEarningsSummary(provider.id),
   ]);
 
-  // Paid out: only bookings explicitly marked paid_out (do NOT infer from booking.status).
-  // NOTE: In environments where the migration hasn't run yet, the payout_status column won't exist.
-  // In that case we gracefully fall back to treating paidOut as 0 (so the dashboard still renders).
-  let paidOutRow: { cents: number } | undefined;
-  try {
-    paidOutRow = await db
-      .select({ cents: sql<number>`coalesce(sum(${bookings.priceAtBooking}), 0)` })
-      .from(bookings)
-      .where(
-        and(
-          eq(bookings.providerId, provider.id),
-          inArray(bookings.status, ["paid", "completed"]),
-          eq(bookings.payoutStatus, "paid_out"),
-        ),
-      )
-      .then((rows) => rows[0]);
-  } catch (error) {
-    const maybeCode = (error as { code?: string; cause?: { code?: string } } | null)?.cause?.code ??
-      (error as { code?: string } | null)?.code;
-
-    if (maybeCode !== "42703") {
-      throw error;
-    }
-    paidOutRow = { cents: 0 };
-  }
-
-  const completedBookingsTotalCents = Number(completedTotalRow?.cents ?? 0);
-  const paidOutCents = Number(paidOutRow?.cents ?? 0);
-  const paidPendingPayoutCents = Math.max(0, completedBookingsTotalCents - paidOutCents);
+  const totalEarnedNetCents = Number(earningsSummary.lifetime.net ?? 0);
+  const paidOutNetCents = Number(earningsSummary.paidOutNet ?? 0);
+  const pendingTransferNetCents = Number(earningsSummary.pendingPayoutsNet ?? 0);
 
   return {
     newRequestsCount: Number(pendingBookingsRow?.count ?? 0),
     confirmedThisMonthCount: Number(confirmedMonthRow?.count ?? 0),
-    completedBookingsTotalCents,
-    paidOutCents,
-    paidPendingPayoutCents,
+    totalEarnedNetCents,
+    pendingTransferNetCents,
+    paidOutNetCents,
   };
 }
 
@@ -171,30 +141,38 @@ export default async function ProviderDashboardPage() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
-            <CardTitle className="text-base">Earnings snapshot</CardTitle>
+            <CardTitle className="text-base">Earnings &amp; payouts</CardTitle>
             <Button asChild size="sm" variant="ghost">
-              <Link href="/dashboard/provider/earnings">Payouts</Link>
+              <Link href="/dashboard/provider/earnings">Net totals</Link>
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div>
-                <p className="text-sm font-semibold">{formatPrice(metrics.completedBookingsTotalCents)}</p>
-                <p className="text-xs text-muted-foreground">Completed bookings total</p>
+                <p className="text-sm font-semibold">{formatPrice(metrics.totalEarnedNetCents)}</p>
+                <p className="text-xs text-muted-foreground">Total earned (net)</p>
+                <p className="text-xs text-muted-foreground">
+                  Includes pending + paid out. Updates when a job is completed and paid.
+                </p>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md border bg-background px-3 py-2">
-                <p className="text-xs text-muted-foreground">Pending payout</p>
-                <p className="text-lg font-semibold">{formatPrice(metrics.paidPendingPayoutCents)}</p>
+                <p className="text-xs text-muted-foreground">Pending transfer</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.pendingTransferNetCents)}</p>
+                <p className="text-xs text-muted-foreground">Earned, not paid out yet.</p>
               </div>
               <div className="rounded-md border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">Paid out</p>
-                <p className="text-lg font-semibold">{formatPrice(metrics.paidOutCents)}</p>
+                <p className="text-lg font-semibold">{formatPrice(metrics.paidOutNetCents)}</p>
+                <p className="text-xs text-muted-foreground">Transferred to your bank.</p>
               </div>
             </div>
             <div className="rounded-md border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-              Paid out is only counted once a booking is marked paid out (transfer tracking).
+              <p>Total earned = Pending transfer + Paid out.</p>
+              <p>
+                Upcoming jobs don&apos;t count until payment is received and the job is marked completed.
+              </p>
             </div>
           </CardContent>
         </Card>

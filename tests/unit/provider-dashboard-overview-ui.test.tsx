@@ -19,9 +19,7 @@ vi.mock("@/lib/db", () => {
           ? { count: 1 }
           : call === 2
             ? { count: 1 }
-            : call === 3
-              ? { net: 10000 }
-              : { net: 25000 };
+            : { count: 0 };
 
       const where = vi.fn(() => ({
         then: (fn: (rows: unknown[]) => unknown) => Promise.resolve(fn([row])),
@@ -44,6 +42,15 @@ vi.mock("@/lib/db", () => {
     },
   };
 });
+
+vi.mock("@/server/providers/earnings", () => ({
+  getProviderEarningsSummary: vi.fn().mockResolvedValue({
+    lifetime: { gross: 0, fee: 0, gst: 0, net: 25000 },
+    last30: { gross: 0, fee: 0, gst: 0, net: 25000 },
+    pendingPayoutsNet: 10000,
+    paidOutNet: 15000,
+  }),
+}));
 
 describe("ProviderDashboardPage", () => {
   beforeEach(() => {

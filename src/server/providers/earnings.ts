@@ -16,8 +16,8 @@ export type ProviderEarningsSummary = {
 export async function getProviderEarningsSummary(providerId: string): Promise<ProviderEarningsSummary> {
   const thirtyDaysAgo = subDays(new Date(), 30);
 
-  const [paidOutTotals, last30PaidOutTotals, pendingFromEarningsRow, missingBookings] = await Promise.all([
-    // Lifetime earnings = actually paid out.
+  const [paidOutTotals, last30PaidOutTotals, pendingFromEarningsRow, last30PendingFromEarningsRow, missingBookings] = await Promise.all([
+    // Paid out totals (lifetime): actual transfers made to the provider.
     db
       .select({
         gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
@@ -29,8 +29,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .where(and(eq(providerEarnings.providerId, providerId), eq(providerEarnings.status, "paid_out")))
       .then((rows) => rows[0]),
 
-    // Last 30 days = paid out in the last 30 days.
-    // We use the earning row's updatedAt as the best available timestamp for the status transition.
+    // Paid out in the last 30 days: use updatedAt as a proxy for the paid_out transition.
     db
       .select({
         gross: sql<number>`coalesce(sum(${providerEarnings.grossAmount}), 0)`,
@@ -48,8 +47,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       )
       .then((rows) => rows[0]),
 
-    // Pending payouts = completed bookings that are eligible and have not been paid out yet.
-    // Prefer the ledger (provider_earnings) when present.
+    // Pending transfer (lifetime): completed bookings that are earned but not paid out.
     db
       .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
       .from(providerEarnings)
@@ -63,13 +61,28 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       )
       .then((rows) => rows[0]),
 
-    // Fallback: completed + paid bookings that don't have an earnings row (webhook/reconciliation gaps).
-    // Compute net deterministically using our fee/GST logic.
+    // Pending transfer (last 30 days): best-effort filter by booking.updatedAt (no explicit completedAt).
+    db
+      .select({ net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)` })
+      .from(providerEarnings)
+      .leftJoin(bookings, eq(bookings.id, providerEarnings.bookingId))
+      .where(
+        and(
+          eq(providerEarnings.providerId, providerId),
+          eq(providerEarnings.status, "awaiting_payout"),
+          eq(bookings.status, "completed"),
+          gte(bookings.updatedAt, thirtyDaysAgo),
+        ),
+      )
+      .then((rows) => rows[0]),
+
+    // Fallback for completed bookings without earnings rows (webhook/reconciliation gaps).
     db
       .select({
         bookingId: bookings.id,
         priceAtBooking: bookings.priceAtBooking,
         paymentIntentId: bookings.paymentIntentId,
+        bookingUpdatedAt: bookings.updatedAt,
         serviceChargesGst: services.chargesGst,
         providerChargesGst: providers.chargesGst,
         providerPlan: providers.plan,
@@ -90,8 +103,10 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
   ]);
 
   const pendingFromEarnings = Number(pendingFromEarningsRow?.net ?? 0);
+  const last30PendingFromEarnings = Number(last30PendingFromEarningsRow?.net ?? 0);
 
   let pendingFromMissingBookings = 0;
+  let last30PendingFromMissingBookings = 0;
   for (const row of missingBookings) {
     const plan = normalizeProviderPlan(row.providerPlan);
     const platformFeeBps = getPlatformFeeBpsForPlan(plan);
@@ -104,24 +119,33 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
     });
 
     pendingFromMissingBookings += breakdown.netAmount;
+    if (row.bookingUpdatedAt && row.bookingUpdatedAt >= thirtyDaysAgo) {
+      last30PendingFromMissingBookings += breakdown.netAmount;
+    }
   }
 
   const paidOutNet = Number(paidOutTotals?.net ?? 0);
+  const pendingPayoutsNet = pendingFromEarnings + pendingFromMissingBookings;
+  const last30PendingNet = last30PendingFromEarnings + last30PendingFromMissingBookings;
+
+  // Total earned (net) = pending transfer + paid out.
+  const earnedNet = pendingPayoutsNet + paidOutNet;
+  const earnedLast30Net = last30PendingNet + Number(last30PaidOutTotals?.net ?? 0);
 
   return {
     lifetime: {
-      gross: Number(paidOutTotals?.gross ?? 0),
-      fee: Number(paidOutTotals?.fee ?? 0),
-      gst: Number(paidOutTotals?.gst ?? 0),
-      net: paidOutNet,
+      gross: 0,
+      fee: 0,
+      gst: 0,
+      net: earnedNet,
     },
     last30: {
-      gross: Number(last30PaidOutTotals?.gross ?? 0),
-      fee: Number(last30PaidOutTotals?.fee ?? 0),
-      gst: Number(last30PaidOutTotals?.gst ?? 0),
-      net: Number(last30PaidOutTotals?.net ?? 0),
+      gross: 0,
+      fee: 0,
+      gst: 0,
+      net: earnedLast30Net,
     },
-    pendingPayoutsNet: pendingFromEarnings + pendingFromMissingBookings,
+    pendingPayoutsNet,
     paidOutNet,
   };
 }
