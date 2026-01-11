@@ -30,8 +30,7 @@ import { Loader2 } from 'lucide-react';
 interface ReviewFormProps {
   bookingId: string;
   serviceTitle: string;
-  providerId: string;
-  onReviewSubmit: () => void;
+  onReviewSubmit?: (bookingId: string) => void;
 }
 
 const formSchema = z.object({
@@ -41,7 +40,7 @@ const formSchema = z.object({
 
 type FormValues = z.infer<typeof formSchema>;
 
-export function ReviewForm({ bookingId, serviceTitle, providerId, onReviewSubmit }: ReviewFormProps) {
+export function ReviewForm({ bookingId, serviceTitle, onReviewSubmit }: ReviewFormProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -62,13 +61,17 @@ export function ReviewForm({ bookingId, serviceTitle, providerId, onReviewSubmit
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           bookingId,
-          providerId, // Currently not required by the API but kept for future flexibility
           rating: values.rating,
           comment: values.comment,
         }),
       });
 
       if (!res.ok) {
+        const contentType = res.headers.get('content-type') ?? '';
+        if (contentType.includes('application/json')) {
+          const payload = (await res.json().catch(() => null)) as { error?: string } | null;
+          if (payload?.error) throw new Error(payload.error);
+        }
         const message = await res.text();
         throw new Error(message || 'Failed to submit review');
       }
@@ -80,7 +83,7 @@ export function ReviewForm({ bookingId, serviceTitle, providerId, onReviewSubmit
 
       form.reset({ rating: 0, comment: '' });
       setIsOpen(false);
-      onReviewSubmit(); // Refresh the bookings list
+      onReviewSubmit?.(bookingId);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong while submitting your review.';
       toast({

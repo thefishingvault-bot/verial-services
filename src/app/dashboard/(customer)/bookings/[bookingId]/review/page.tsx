@@ -26,7 +26,7 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
   if (!booking) redirect("/dashboard/bookings");
 
   const existingReview = await db.query.reviews.findFirst({
-    where: (r, { eq }) => eq(r.bookingId, booking.id),
+    where: (r, { and, eq }) => and(eq(r.bookingId, booking.id), eq(r.userId, userId)),
     columns: { id: true },
   });
 
@@ -45,7 +45,7 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
     );
   }
 
-  if (booking.status !== "completed") {
+  if (booking.status !== "completed" && booking.status !== "completed_by_provider") {
     return (
       <div className="container mx-auto max-w-2xl py-8">
         <Card>
@@ -73,7 +73,6 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
           <ReviewForm
             bookingId={booking.id}
             serviceTitle={booking.service?.title ?? "Service"}
-            providerId={booking.providerId}
             onReviewSubmit={() => redirect("/dashboard/bookings")}
           />
         </CardContent>

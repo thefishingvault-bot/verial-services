@@ -369,7 +369,7 @@ export const reviews = pgTable("reviews", {
   id: varchar("id", { length: 255 }).primaryKey(), // e.g., rev_...
   userId: varchar("user_id", { length: 255 }).notNull().references(() => users.id, { onDelete: "cascade" }), // The customer who wrote it
   providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }), // The provider being reviewed
-  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }).unique(), // A booking can only have one review
+  bookingId: varchar("booking_id", { length: 255 }).notNull().references(() => bookings.id, { onDelete: "cascade" }),
 
   serviceId: varchar("service_id", { length: 255 }).references(() => services.id, { onDelete: "set null" }), // Optional denorm to the service
 
@@ -384,7 +384,9 @@ export const reviews = pgTable("reviews", {
   hiddenAt: timestamp("hidden_at"),
 
   createdAt: timestamp("created_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  bookingUserUnique: uniqueIndex("reviews_booking_user_unique").on(table.bookingId, table.userId),
+}));
 
 /**
  * Notifications Table

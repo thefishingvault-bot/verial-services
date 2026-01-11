@@ -1,8 +1,8 @@
 import { db } from "@/lib/db";
-import { bookings } from "@/db/schema";
+import { bookings, reviews } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,7 +38,26 @@ export async function GET() {
       orderBy: [desc(bookings.createdAt)],
     });
 
-    return NextResponse.json(userBookings, {
+    const bookingIds = userBookings.map((b) => b.id);
+    const reviewRows = bookingIds.length
+      ? await db
+          .select({ bookingId: reviews.bookingId, id: reviews.id })
+          .from(reviews)
+          .where(and(eq(reviews.userId, userId), inArray(reviews.bookingId, bookingIds)))
+      : [];
+
+    const reviewByBookingId = new Map(reviewRows.map((r) => [r.bookingId, r.id] as const));
+
+    const enriched = userBookings.map((b) => {
+      const reviewId = reviewByBookingId.get(b.id) ?? null;
+      return {
+        ...b,
+        hasReview: Boolean(reviewId),
+        review: reviewId ? { id: reviewId } : null,
+      };
+    });
+
+    return NextResponse.json(enriched, {
       headers: {
         "Cache-Control": "no-store",
       },

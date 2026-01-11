@@ -42,6 +42,7 @@ interface CustomerBooking {
     baseRegion: string | null;
     serviceRadiusKm: number | null;
   };
+  hasReview?: boolean;
   review: { id: string } | null;
 }
 
@@ -463,15 +464,26 @@ export default function CustomerBookingsPage() {
                     Confirm completion
                   </Button>
                 )}
-                {booking.status === 'completed' && !booking.review && (
+                {booking.status === 'completed' && !(booking.hasReview ?? Boolean(booking.review)) && (
                   <ReviewForm
                     bookingId={booking.id}
                     serviceTitle={booking.service.title}
-                    providerId={booking.provider.id}
-                    onReviewSubmit={fetchBookings}
+                    onReviewSubmit={(reviewedBookingId) => {
+                      setBookings((prev) =>
+                        prev.map((item) =>
+                          item.id === reviewedBookingId
+                            ? {
+                                ...item,
+                                hasReview: true,
+                              }
+                            : item,
+                        ),
+                      );
+                      void fetchBookings({ showLoader: false });
+                    }}
                   />
                 )}
-                {booking.status === 'completed' && booking.review && (
+                {booking.status === 'completed' && (booking.hasReview ?? Boolean(booking.review)) && (
                   <Button variant="outline" disabled className="w-full sm:w-auto">
                     Review submitted
                   </Button>

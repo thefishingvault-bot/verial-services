@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       columns: { id: true },
     });
     if (existing) {
-      return new NextResponse("A review already exists for this booking.", { status: 409 });
+      return NextResponse.json({ error: "Review already submitted" }, { status: 409 });
     }
 
     // 3. Create the review
@@ -128,8 +128,8 @@ export async function POST(req: Request) {
     // Check for unique constraint violation on 'bookingId'
     if (typeof error === 'object' && error !== null) {
       const pgError = error as { code?: string; constraint?: string };
-      if (pgError.code === "23505" && pgError.constraint?.includes("reviews_booking_id_unique")) {
-        return new NextResponse("A review already exists for this booking.", { status: 409 });
+      if (pgError.code === "23505" && pgError.constraint?.includes("reviews_booking_user_unique")) {
+        return NextResponse.json({ error: "Review already submitted" }, { status: 409 });
       }
     }
     console.error("[API_REVIEW_CREATE]", error);
