@@ -18,7 +18,8 @@
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",
     "test:unit": "pnpm exec vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "payouts:retry": "node scripts/retry-booking-payouts.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.927.0",

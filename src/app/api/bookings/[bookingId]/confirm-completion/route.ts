@@ -11,6 +11,67 @@ import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-
 
 export const runtime = "nodejs";
 
+function isBalanceInsufficientStripeError(error: unknown): boolean {
+  const err = error as
+    | {
+        code?: unknown;
+        message?: unknown;
+        raw?: { message?: unknown; code?: unknown };
+      }
+    | undefined;
+
+  const code = typeof err?.code === "string" ? err.code : typeof err?.raw?.code === "string" ? err.raw.code : null;
+  if (code === "balance_insufficient") return true;
+
+  const message =
+    typeof err?.message === "string"
+      ? err.message
+      : typeof err?.raw?.message === "string"
+        ? err.raw.message
+        : null;
+  if (!message) return false;
+  return message.toLowerCase().includes("insufficient available funds");
+}
+
+function getStripeErrorMeta(error: unknown): {
+  stripeErrorCode: string | null;
+  stripeErrorType: string | null;
+  stripeRequestId: string | null;
+  stripeStatusCode: number | null;
+  message: string;
+} {
+  const err = error as
+    | {
+        code?: unknown;
+        type?: unknown;
+        requestId?: unknown;
+        statusCode?: unknown;
+        message?: unknown;
+        raw?: { code?: unknown; type?: unknown; requestId?: unknown; statusCode?: unknown; message?: unknown };
+      }
+    | undefined;
+
+  const stripeErrorCode =
+    typeof err?.code === "string" ? err.code : typeof err?.raw?.code === "string" ? err.raw.code : null;
+  const stripeErrorType =
+    typeof err?.type === "string" ? err.type : typeof err?.raw?.type === "string" ? err.raw.type : null;
+  const stripeRequestId =
+    typeof err?.requestId === "string"
+      ? err.requestId
+      : typeof err?.raw?.requestId === "string"
+        ? err.raw.requestId
+        : null;
+  const stripeStatusCode =
+    typeof err?.statusCode === "number"
+      ? err.statusCode
+      : typeof err?.raw?.statusCode === "number"
+        ? err.raw.statusCode
+        : null;
+  const message = typeof err?.message === "string" ? err.message : String(error);
+
+  return { stripeErrorCode, stripeErrorType, stripeRequestId, stripeStatusCode, message };
+}
+
 export async function POST(req: Request, { params }: { params: Promise<{ bookingId: string }> }) {
   try {
     const { userId } = await auth();
@@ -166,46 +227,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       return new NextResponse("Cannot confirm completion yet: invalid provider payout amount.", { status: 409 });
     }
 
-  // Legacy compatibility:
-  // - awaiting_payout / paid_out: funds are already on (or have left) the connected account; do NOT create a new transfer.
-    if (effectiveEarning.status === "awaiting_payout" || effectiveEarning.status === "paid_out") {
-      const [updatedBooking] = await db
-        .update(bookings)
-        .set({ status: "completed", updatedAt: new Date() })
-        .where(eq(bookings.id, booking.id))
-        .returning({ id: bookings.id, status: bookings.status });
-
-      return NextResponse.json({ ok: true, booking: updatedBooking ?? { id: booking.id, status: "completed" } });
-    }
-
     if (effectiveEarning.status === "refunded") {
       return new NextResponse("Cannot confirm completion for a refunded booking.", { status: 409 });
     }
 
-  // Normal path: funds are held until customer confirmation.
-  // Accept "pending" here as a resilience measure (it can occur if an older flow created the row but didn't mark it held).
+    // 1) Always complete the booking first (customer action must succeed).
+    try {
+      assertTransition(booking.status, "completed");
+    } catch {
+      return new NextResponse(`Cannot confirm completion for status: ${booking.status}`, { status: 409 });
+    }
+
+    const [completedBooking] = await db
+      .update(bookings)
+      .set({ status: "completed", updatedAt: new Date() })
+      .where(eq(bookings.id, booking.id))
+      .returning({ id: bookings.id, status: bookings.status });
+
+    // 2) Idempotency / legacy: if we already transferred (or consider it paid), do not create another transfer.
+    if (effectiveEarning.stripeTransferId || effectiveEarning.status === "paid_out") {
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        payout: "paid_out",
+        transferId: effectiveEarning.stripeTransferId ?? null,
+      });
+    }
+
+    if (effectiveEarning.status === "awaiting_payout") {
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        payout: "queued",
+      });
+    }
+
+    // Normal path: funds are held until customer confirmation.
+    // Accept "pending" here as a resilience measure (it can occur if an older flow created the row but didn't mark it held).
     if (!["held", "pending", "transferred"].includes(effectiveEarning.status)) {
-      return new NextResponse(
-        `Cannot confirm completion yet: earnings are not transferable (status: ${effectiveEarning.status}).`,
-        { status: 409 },
-      );
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        payout: "queued",
+        reason: `earning_status_${effectiveEarning.status}`,
+      });
     }
 
-  // Idempotency: if transfer already exists, do not create another.
-    if (effectiveEarning.stripeTransferId) {
-      const [updatedBooking] = await db
-        .update(bookings)
-        .set({ status: "completed", updatedAt: new Date() })
-        .where(eq(bookings.id, booking.id))
-        .returning({ id: bookings.id, status: bookings.status });
+    // 3) Ensure earnings are queued for payout.
+    await db
+      .update(providerEarnings)
+      .set({ status: "awaiting_payout", updatedAt: new Date() })
+      .where(eq(providerEarnings.id, effectiveEarning.id));
 
-      return NextResponse.json({ ok: true, booking: updatedBooking ?? { id: booking.id, status: "completed" } });
-    }
-
-  // Validate transition and then perform booking update + transfer.
-    assertTransition(booking.status, "completed");
-
-    let transferId: string;
+    // 4) Best-effort transfer attempt; do not block customer on Stripe balance availability.
     try {
       const transfer = await stripe.transfers.create(
         {
@@ -216,48 +290,59 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
           metadata: {
             bookingId: booking.id,
             providerId: provider.id,
+            earningsId: effectiveEarning.id,
           },
         },
-        { idempotencyKey: `booking_${booking.id}_confirm_completion_transfer` },
+        { idempotencyKey: `payout_${effectiveEarning.id}` },
       );
-      transferId = transfer.id;
+
+      await db
+        .update(providerEarnings)
+        .set({
+          status: "paid_out",
+          stripeTransferId: transfer.id,
+          transferredAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(providerEarnings.id, effectiveEarning.id));
 
       console.info("[API_BOOKING_CONFIRM_COMPLETION] Transfer created", {
         bookingId: booking.id,
-        transferId,
+        providerId: provider.id,
+        earningsId: effectiveEarning.id,
+        transferId: transfer.id,
       });
+
+      return NextResponse.json({ ok: true, booking: completedBooking, payout: "paid_out", transferId: transfer.id });
     } catch (error) {
+      const meta = getStripeErrorMeta(error);
+      const queuedReason = isBalanceInsufficientStripeError(error)
+        ? "balance_insufficient"
+        : meta.stripeErrorCode ?? "transfer_failed";
+
       console.error("[API_BOOKING_CONFIRM_COMPLETION] Transfer failed", {
         bookingId: booking.id,
         providerId: provider.id,
-        connectId: provider.stripeConnectId,
+        earningsId: effectiveEarning.id,
         amount: effectiveEarning.netAmount,
-        error: error instanceof Error ? error.message : String(error),
+        destination: provider.stripeConnectId,
+        queuedReason,
+        stripeErrorCode: meta.stripeErrorCode,
+        stripeErrorType: meta.stripeErrorType,
+        stripeRequestId: meta.stripeRequestId,
+        stripeStatusCode: meta.stripeStatusCode,
+        error: meta.message,
       });
 
-      return new NextResponse(
-        "Unable to release provider payout right now. Please try again shortly or contact support.",
-        { status: 502 },
-      );
+      // Booking is completed and payout is queued for retry.
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        bookingStatus: "completed",
+        payout: "queued",
+        reason: queuedReason,
+      });
     }
-
-    await db
-      .update(providerEarnings)
-      .set({
-        status: "awaiting_payout",
-        stripeTransferId: transferId,
-        transferredAt: new Date(),
-        updatedAt: new Date(),
-      })
-      .where(eq(providerEarnings.id, effectiveEarning.id));
-
-    const [updatedBooking] = await db
-      .update(bookings)
-      .set({ status: "completed", updatedAt: new Date() })
-      .where(eq(bookings.id, booking.id))
-      .returning({ id: bookings.id, status: bookings.status });
-
-    return NextResponse.json({ ok: true, booking: updatedBooking, transferId });
   } catch (error) {
     console.error("[API_BOOKING_CONFIRM_COMPLETION]", {
       error: error instanceof Error ? error.message : String(error),
