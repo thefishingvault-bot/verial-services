@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
@@ -154,27 +154,30 @@ export default function CustomerBookingsPage() {
   const [stripeReturnSignal, setStripeReturnSignal] = useState<string | null>(null);
   const [stripeReturnBookingId, setStripeReturnBookingId] = useState<string | null>(null);
   const [stripeReturnSessionId, setStripeReturnSessionId] = useState<string | null>(null);
+  const handledStripeReturn = useRef(false);
 
-  const fetchBookings = useCallback(() => {
-    setIsLoading(true);
-    fetch('/api/bookings/list', { cache: 'no-store' })
-      .then((res) => {
-        if (!res.ok) throw new Error('Failed to fetch your bookings.');
-        return res.json();
-      })
-      .then((data) => {
-        setBookings(data);
-        setIsLoading(false);
-      })
-      .catch((err) => {
-        setError((err as Error).message ?? 'Failed to fetch your bookings.');
-        setIsLoading(false);
-      });
+  const fetchBookings = useCallback(async (opts?: { showLoader?: boolean }) => {
+    const showLoader = opts?.showLoader ?? true;
+    if (showLoader) setIsLoading(true);
+    setError(null);
+
+    try {
+      const res = await fetch('/api/bookings/list', { cache: 'no-store' });
+      if (!res.ok) throw new Error('Failed to fetch your bookings.');
+      const data = (await res.json()) as CustomerBooking[];
+      setBookings(data);
+      return data;
+    } catch (err) {
+      setError((err as Error).message ?? 'Failed to fetch your bookings.');
+      return null;
+    } finally {
+      if (showLoader) setIsLoading(false);
+    }
   }, []);
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      fetchBookings();
+      void fetchBookings({ showLoader: true });
     }, 0);
 
     return () => clearTimeout(timeoutId);
@@ -201,10 +204,14 @@ export default function CustomerBookingsPage() {
 
   useEffect(() => {
     if (!stripeReturnSignal) return;
+    if (handledStripeReturn.current) return;
+    handledStripeReturn.current = true;
 
-    // Ensure we refresh server data (if any) and re-fetch the list.
-    router.refresh();
-    fetchBookings();
+    // Prevent the Stripe return handler from re-triggering later.
+    window.history.replaceState(null, '', '/dashboard/bookings');
+
+    // Silent refresh: don't show the big loader/spinner.
+    void fetchBookings({ showLoader: false });
 
     // Deterministic fallback: if we know which booking was just paid, confirm with Stripe server-side.
     if (stripeReturnBookingId) {
@@ -220,15 +227,20 @@ export default function CustomerBookingsPage() {
 
     // Webhooks can lag slightly; poll briefly to pick up the paid status.
     const startedAt = Date.now();
-    const interval = window.setInterval(() => {
-      void fetchBookings();
-      if (Date.now() - startedAt >= 8000) {
+    const interval = window.setInterval(async () => {
+      const latest = await fetchBookings({ showLoader: false });
+
+      const target = stripeReturnBookingId
+        ? latest?.find((booking) => booking.id === stripeReturnBookingId) ?? null
+        : null;
+
+      if (target?.status === 'paid' || Date.now() - startedAt >= 8000) {
         window.clearInterval(interval);
       }
     }, 1200);
 
     return () => window.clearInterval(interval);
-  }, [stripeReturnSignal, stripeReturnBookingId, stripeReturnSessionId, fetchBookings, router]);
+  }, [stripeReturnSignal, stripeReturnBookingId, stripeReturnSessionId, fetchBookings]);
 
   const handlePayNow = async (booking: CustomerBooking) => {
     setIsLoading(true);
