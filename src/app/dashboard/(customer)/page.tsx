@@ -350,7 +350,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="w-full space-y-8">
-      <header className="sticky top-16 z-10 rounded-lg border bg-background/90 px-4 py-3 backdrop-blur">
+      <header className="rounded-lg border bg-background px-4 py-3">
         <div className="flex flex-col gap-1">
           <p className="text-sm text-muted-foreground">Dashboard</p>
           <h1 className="text-3xl font-bold leading-tight">Welcome back, {data.user.name}</h1>
