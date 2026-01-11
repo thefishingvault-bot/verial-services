@@ -1,7 +1,7 @@
 import { db } from "@/lib/db";
 import { bookings, providerAvailabilities, providerTimeOffs } from "@/db/schema";
 import { NextResponse } from "next/server";
-import { eq, and, gte, lte, inArray } from "drizzle-orm";
+import { eq, and, gte, lte, inArray, sql } from "drizzle-orm";
 import { getDay, addMinutes, isBefore, format, addDays } from "date-fns";
 import { toZonedTime, fromZonedTime } from "date-fns-tz";
 
@@ -46,7 +46,7 @@ export async function POST(req: Request) {
         eq(bookings.providerId, providerId),
         gte(bookings.scheduledDate, dayStartUtc),
         lte(bookings.scheduledDate, dayEndUtc),
-        inArray(bookings.status, ["accepted", "paid", "completed_by_provider", "completed"]),
+        inArray(sql<string>`(${bookings.status})::text`, ["accepted", "paid", "completed_by_provider", "completed"]),
       ),
       columns: { scheduledDate: true },
     });

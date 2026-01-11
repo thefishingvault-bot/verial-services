@@ -23,12 +23,10 @@ export type ProviderMoneySummary = {
 export async function getProviderEarningsSummary(providerId: string): Promise<ProviderEarningsSummary> {
   const thirtyDaysAgo = subDays(new Date(), 30);
 
-  const earnedStatuses: Array<(typeof earningStatusEnum.enumValues)[number]> = [
-    "held",
-    "transferred",
-    "awaiting_payout",
-    "paid_out",
-  ];
+  // NOTE: Cast enum columns to text in queries to avoid runtime 500s when a database
+  // is behind on enum migrations (e.g., missing 'held' / 'completed_by_provider').
+  // This keeps the provider dashboard working while migrations catch up.
+  const earnedStatuses = ["held", "transferred", "awaiting_payout", "paid_out"];
 
   const [earnedTotals, last30EarnedTotals, paidOutRow, missingBookings] = await Promise.all([
     // Earned totals (lifetime): include held + transferred (and legacy statuses).
@@ -40,7 +38,12 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
         net: sql<number>`coalesce(sum(${providerEarnings.netAmount}), 0)`,
       })
       .from(providerEarnings)
-      .where(and(eq(providerEarnings.providerId, providerId), inArray(providerEarnings.status, earnedStatuses)))
+      .where(
+        and(
+          eq(providerEarnings.providerId, providerId),
+          inArray(sql<string>`(${providerEarnings.status})::text`, earnedStatuses),
+        ),
+      )
       .then((rows) => rows[0]),
 
     // Earned totals (last 30 days): use paidAt where available, otherwise createdAt.
@@ -55,7 +58,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .where(
         and(
           eq(providerEarnings.providerId, providerId),
-          inArray(providerEarnings.status, earnedStatuses),
+          inArray(sql<string>`(${providerEarnings.status})::text`, earnedStatuses),
           gte(sql<Date>`coalesce(${providerEarnings.paidAt}, ${providerEarnings.createdAt})`, thirtyDaysAgo),
         ),
       )
@@ -91,7 +94,7 @@ export async function getProviderEarningsSummary(providerId: string): Promise<Pr
       .where(
         and(
           eq(bookings.providerId, providerId),
-          inArray(bookings.status, ["paid", "completed_by_provider", "completed"]),
+          inArray(sql<string>`(${bookings.status})::text`, ["paid", "completed_by_provider", "completed"]),
           isNotNull(bookings.paymentIntentId),
           isNull(providerEarnings.id),
         ),
