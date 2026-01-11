@@ -1,5 +1,5 @@
 import { db } from '@/lib/db';
-import { services, providers, users, reviews, serviceFavorites } from '@/db/schema';
+import { services, providers, users, reviews, serviceFavorites, serviceCategoryEnum } from '@/db/schema';
 import { eq, and, or, like, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
@@ -60,7 +60,10 @@ export function parseServicesSearchParams(
   };
 
   const q = getSingle('q')?.trim() ?? '';
-  const category = getSingle('category')?.trim() || null;
+  const rawCategory = getSingle('category')?.trim();
+  const category = rawCategory && (serviceCategoryEnum.enumValues as readonly string[]).includes(rawCategory)
+    ? rawCategory
+    : null;
   const region = getSingle('region')?.trim() || null;
 
   const minPriceRaw = getSingle('minPrice');
@@ -139,6 +142,7 @@ export async function getServicesDataFromSearchParams(
   ), 0)`;
 
   const whereConditions = [eq(providers.status, 'approved')];
+  whereConditions.push(eq(services.isPublished, true));
 
   if (filters.q) {
     whereConditions.push(
@@ -151,20 +155,7 @@ export async function getServicesDataFromSearchParams(
   }
 
   if (filters.category) {
-    const allowedCategories = [
-      'cleaning',
-      'plumbing',
-      'gardening',
-      'it_support',
-      'accounting',
-      'detailing',
-      'other',
-    ] as const;
-    if ((allowedCategories as readonly string[]).includes(filters.category)) {
-      whereConditions.push(
-        eq(services.category, filters.category as (typeof allowedCategories)[number]),
-      );
-    }
+    whereConditions.push(eq(services.category, filters.category as (typeof serviceCategoryEnum.enumValues)[number]));
   }
 
   if (filters.region) {
@@ -172,10 +163,10 @@ export async function getServicesDataFromSearchParams(
   }
 
   if (filters.minPrice != null) {
-    whereConditions.push(gte(services.priceInCents, filters.minPrice * 100));
+    whereConditions.push(gte(services.priceInCents, Math.round(filters.minPrice * 100)));
   }
   if (filters.maxPrice != null) {
-    whereConditions.push(lte(services.priceInCents, filters.maxPrice * 100));
+    whereConditions.push(lte(services.priceInCents, Math.round(filters.maxPrice * 100)));
   }
 
   if (filters.rating != null) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -54,39 +54,74 @@ const ServicesSearchAndFilters = ({
   filters,
   onFiltersChange,
 }: ServicesSearchAndFiltersProps) => {
-  const debounceTimeout = useRef<NodeJS.Timeout | null>(null);
+  const searchDebounce = useRef<NodeJS.Timeout | null>(null);
+  const priceDebounce = useRef<NodeJS.Timeout | null>(null);
 
-  const searchQuery = filters.q || "";
+  const [searchInput, setSearchInput] = useState<string>(filters.q || "");
+  const [minPriceInput, setMinPriceInput] = useState<string>(
+    filters.minPrice != null ? String(filters.minPrice) : "",
+  );
+  const [maxPriceInput, setMaxPriceInput] = useState<string>(
+    filters.maxPrice != null ? String(filters.maxPrice) : "",
+  );
+  const [priceError, setPriceError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (searchDebounce.current) clearTimeout(searchDebounce.current);
+      if (priceDebounce.current) clearTimeout(priceDebounce.current);
+    };
+  }, []);
+
+  const searchQuery = searchInput;
   const selectedCategory = filters.category ?? "";
   const selectedRegion = filters.region ?? "";
   const priceRange: [number, number] = [
     filters.minPrice ?? 0,
     filters.maxPrice ?? 500,
   ];
-  const minPriceValue = filters.minPrice ?? "";
-  const maxPriceValue = filters.maxPrice ?? "";
   const minRating = filters.rating ?? 0;
   const sortBy = filters.sort || "relevance";
   const pageSize = filters.pageSize ?? 12;
 
-  const handleFiltersChange = (next: ServicesFilters, debounce = false) => {
+  const applyFilters = (next: Partial<ServicesFilters>) => {
     const normalized: ServicesFilters = {
       ...filters,
       ...next,
       page: next.page ?? 1,
       pageSize: next.pageSize ?? pageSize,
     };
-
-    if (debounce) {
-      if (debounceTimeout.current) {
-        clearTimeout(debounceTimeout.current);
-      }
-      debounceTimeout.current = setTimeout(() => {
-        onFiltersChange(normalized);
-      }, 300);
-      return;
-    }
     onFiltersChange(normalized);
+  };
+
+  const parseOptionalNonNegativeNumber = (raw: string): number | null | undefined => {
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) return null;
+    const n = Number(trimmed);
+    if (!Number.isFinite(n) || n < 0) return undefined;
+    return n;
+  };
+
+  const debouncedApplySearch = (nextQ: string) => {
+    if (searchDebounce.current) clearTimeout(searchDebounce.current);
+    searchDebounce.current = setTimeout(() => {
+      applyFilters({ q: nextQ, page: 1 });
+    }, 300);
+  };
+
+  const debouncedApplyPrice = (rawMin: string, rawMax: string) => {
+    if (priceDebounce.current) clearTimeout(priceDebounce.current);
+    priceDebounce.current = setTimeout(() => {
+      const minParsed = parseOptionalNonNegativeNumber(rawMin);
+      const maxParsed = parseOptionalNonNegativeNumber(rawMax);
+      if (minParsed === undefined || maxParsed === undefined) return;
+      if (minParsed != null && maxParsed != null && minParsed > maxParsed) {
+        setPriceError("Min price must be less than or equal to max price.");
+        return;
+      }
+      setPriceError(null);
+      applyFilters({ minPrice: minParsed, maxPrice: maxParsed, page: 1 });
+    }, 300);
   };
 
   const clearFilters = () => {
@@ -101,7 +136,11 @@ const ServicesSearchAndFilters = ({
       page: 1,
       pageSize,
     };
-    handleFiltersChange(cleared);
+    setSearchInput("");
+    setMinPriceInput("");
+    setMaxPriceInput("");
+    setPriceError(null);
+    onFiltersChange(cleared);
   };
 
   const activeFiltersCount = [
@@ -111,6 +150,12 @@ const ServicesSearchAndFilters = ({
     minRating > 0 ? minRating : "",
     priceRange[0] > 0 || priceRange[1] < 500 ? "price" : "",
   ].filter(Boolean).length;
+
+  const activePriceLabel = useMemo(() => {
+    const minLabel = filters.minPrice != null ? String(filters.minPrice) : "0";
+    const maxLabel = filters.maxPrice != null ? String(filters.maxPrice) : "500";
+    return `$${minLabel} - $${maxLabel}`;
+  }, [filters.maxPrice, filters.minPrice]);
 
   return (
     <div className="space-y-3">
@@ -126,16 +171,12 @@ const ServicesSearchAndFilters = ({
                 type="search"
                 placeholder="What service do you need? (e.g., 'window cleaning')"
                 className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                value={searchQuery}
-                onChange={(e) =>
-                  handleFiltersChange(
-                    {
-                      ...filters,
-                      q: e.target.value,
-                    },
-                    true,
-                  )
-                }
+                value={searchInput}
+                onChange={(e) => {
+                  const nextQ = e.target.value;
+                  setSearchInput(nextQ);
+                  debouncedApplySearch(nextQ);
+                }}
               />
             </div>
 
@@ -144,8 +185,7 @@ const ServicesSearchAndFilters = ({
               <Select
                 value={selectedCategory || "all"}
                 onValueChange={(value) => {
-                  handleFiltersChange({
-                    ...filters,
+                  applyFilters({
                     category: value === "all" ? null : value,
                     page: 1,
                   });
@@ -170,8 +210,7 @@ const ServicesSearchAndFilters = ({
               <Select
                 value={sortBy}
                 onValueChange={(value) =>
-                  handleFiltersChange({
-                    ...filters,
+                  applyFilters({
                     sort: value as ServicesFilters["sort"],
                     page: 1,
                   })
@@ -203,16 +242,12 @@ const ServicesSearchAndFilters = ({
                 type="search"
                 placeholder="What service do you need? (e.g., 'window cleaning')"
                 className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
-                value={searchQuery}
-                onChange={(e) =>
-                  handleFiltersChange(
-                    {
-                      ...filters,
-                      q: e.target.value,
-                    },
-                    true,
-                  )
-                }
+                value={searchInput}
+                onChange={(e) => {
+                  const nextQ = e.target.value;
+                  setSearchInput(nextQ);
+                  debouncedApplySearch(nextQ);
+                }}
               />
             </div>
 
@@ -220,8 +255,7 @@ const ServicesSearchAndFilters = ({
             <Select
               value={selectedCategory || "all"}
               onValueChange={(value) => {
-                handleFiltersChange({
-                  ...filters,
+                applyFilters({
                   category: value === "all" ? null : value,
                   page: 1,
                 });
@@ -229,7 +263,7 @@ const ServicesSearchAndFilters = ({
             >
               <SelectTrigger
                 aria-label="Filter by category"
-                className="h-10 min-w-[160px] rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
+                className="h-10 min-w-40 rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
               >
                 <SelectValue placeholder="All categories" />
               </SelectTrigger>
@@ -247,8 +281,7 @@ const ServicesSearchAndFilters = ({
             <Select
               value={sortBy}
               onValueChange={(value) =>
-                handleFiltersChange({
-                  ...filters,
+                applyFilters({
                   sort: value as ServicesFilters["sort"],
                   page: 1,
                 })
@@ -279,8 +312,7 @@ const ServicesSearchAndFilters = ({
           <Select
             value={selectedRegion || "all"}
             onValueChange={(value) =>
-              handleFiltersChange({
-                ...filters,
+              applyFilters({
                 region: value === "all" ? null : value,
                 page: 1,
               })
@@ -303,18 +335,26 @@ const ServicesSearchAndFilters = ({
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600">Min price (NZD)</span>
           <Input
-            type="number"
+            type="text"
             inputMode="decimal"
             min={0}
-            value={minPriceValue}
+            value={minPriceInput}
             onChange={(e) => {
               const next = e.target.value;
-              const parsed = next === "" ? null : Number(next);
-              handleFiltersChange({
-                ...filters,
-                minPrice: Number.isFinite(parsed) ? parsed : null,
-                page: 1,
-              });
+              setMinPriceInput(next);
+              setPriceError(null);
+              debouncedApplyPrice(next, maxPriceInput);
+            }}
+            onBlur={() => {
+              const minParsed = parseOptionalNonNegativeNumber(minPriceInput);
+              const maxParsed = parseOptionalNonNegativeNumber(maxPriceInput);
+              if (minParsed === undefined || maxParsed === undefined) return;
+              if (minParsed != null && maxParsed != null && minParsed > maxParsed) {
+                setPriceError("Min price must be less than or equal to max price.");
+                return;
+              }
+              setPriceError(null);
+              applyFilters({ minPrice: minParsed, maxPrice: maxParsed, page: 1 });
             }}
             placeholder="Any"
             className="h-10 text-sm"
@@ -324,31 +364,44 @@ const ServicesSearchAndFilters = ({
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600">Max price (NZD)</span>
           <Input
-            type="number"
+            type="text"
             inputMode="decimal"
             min={0}
-            value={maxPriceValue}
+            value={maxPriceInput}
             onChange={(e) => {
               const next = e.target.value;
-              const parsed = next === "" ? null : Number(next);
-              handleFiltersChange({
-                ...filters,
-                maxPrice: Number.isFinite(parsed) ? parsed : null,
-                page: 1,
-              });
+              setMaxPriceInput(next);
+              setPriceError(null);
+              debouncedApplyPrice(minPriceInput, next);
+            }}
+            onBlur={() => {
+              const minParsed = parseOptionalNonNegativeNumber(minPriceInput);
+              const maxParsed = parseOptionalNonNegativeNumber(maxPriceInput);
+              if (minParsed === undefined || maxParsed === undefined) return;
+              if (minParsed != null && maxParsed != null && minParsed > maxParsed) {
+                setPriceError("Min price must be less than or equal to max price.");
+                return;
+              }
+              setPriceError(null);
+              applyFilters({ minPrice: minParsed, maxPrice: maxParsed, page: 1 });
             }}
             placeholder="Any"
             className="h-10 text-sm"
           />
         </div>
 
+        {priceError && (
+          <div className="md:col-span-4">
+            <p className="text-xs text-destructive">{priceError}</p>
+          </div>
+        )}
+
         <div className="flex flex-col gap-1">
           <span className="text-xs font-medium text-slate-600">Minimum rating</span>
           <Select
             value={minRating ? String(minRating) : "all"}
             onValueChange={(value) =>
-              handleFiltersChange({
-                ...filters,
+              applyFilters({
                 rating: value === "all" ? null : Number(value),
                 page: 1,
               })
@@ -376,12 +429,10 @@ const ServicesSearchAndFilters = ({
               Search: {searchQuery}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() =>
-                  handleFiltersChange({
-                    ...filters,
-                    q: "",
-                  })
-                }
+                onClick={() => {
+                  setSearchInput("");
+                  applyFilters({ q: "", page: 1 });
+                }}
               />
             </Badge>
           )}
@@ -394,11 +445,7 @@ const ServicesSearchAndFilters = ({
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
-                  handleFiltersChange({
-                    ...filters,
-                    category: null,
-                    page: 1,
-                  })
+                  applyFilters({ category: null, page: 1 })
                 }
               />
             </Badge>
@@ -409,11 +456,7 @@ const ServicesSearchAndFilters = ({
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
-                  handleFiltersChange({
-                    ...filters,
-                    region: null,
-                    page: 1,
-                  })
+                  applyFilters({ region: null, page: 1 })
                 }
               />
             </Badge>
@@ -424,28 +467,22 @@ const ServicesSearchAndFilters = ({
               <X
                 className="h-3 w-3 cursor-pointer"
                 onClick={() =>
-                  handleFiltersChange({
-                    ...filters,
-                    rating: 0,
-                    page: 1,
-                  })
+                  applyFilters({ rating: null, page: 1 })
                 }
               />
             </Badge>
           )}
           {(priceRange[0] > 0 || priceRange[1] < 500) && (
             <Badge variant="secondary" className="flex items-center gap-1">
-              ${priceRange[0]} - ${priceRange[1]}
+              {activePriceLabel}
               <X
                 className="h-3 w-3 cursor-pointer"
-                onClick={() =>
-                  handleFiltersChange({
-                    ...filters,
-                    minPrice: null,
-                    maxPrice: null,
-                    page: 1,
-                  })
-                }
+                onClick={() => {
+                  setMinPriceInput("");
+                  setMaxPriceInput("");
+                  setPriceError(null);
+                  applyFilters({ minPrice: null, maxPrice: null, page: 1 });
+                }}
               />
             </Badge>
           )}

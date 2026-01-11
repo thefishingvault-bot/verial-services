@@ -22,12 +22,24 @@ interface LoadMoreButtonProps {
   searchParams: SearchParams;
   currentPage: number;
   hasMore: boolean;
+  onLoadMore?: () => void;
+  isLoading?: boolean;
 }
 
-export function LoadMoreButton({ searchParams, currentPage, hasMore }: LoadMoreButtonProps) {
+export function LoadMoreButton({
+  searchParams,
+  currentPage,
+  hasMore,
+  onLoadMore,
+  isLoading,
+}: LoadMoreButtonProps) {
   const router = useRouter();
 
   const handleLoadMore = () => {
+    if (onLoadMore) {
+      onLoadMore();
+      return;
+    }
     const newParams = new URLSearchParams();
     Object.entries(searchParams).forEach(([key, value]) => {
       if (value !== undefined) {
@@ -42,8 +54,13 @@ export function LoadMoreButton({ searchParams, currentPage, hasMore }: LoadMoreB
 
   return (
     <div className="text-center pt-6">
-      <Button variant="outline" size="lg" onClick={handleLoadMore}>
-        Load More Services
+      <Button
+        variant="outline"
+        size="lg"
+        onClick={handleLoadMore}
+        disabled={Boolean(isLoading)}
+      >
+        {isLoading ? "Loading…" : "Load More Services"}
       </Button>
     </div>
   );

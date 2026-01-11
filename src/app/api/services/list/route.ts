@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import {
   services,
   providers,
+  users,
   reviews,
   serviceCategoryEnum,
   serviceFavorites,
@@ -28,15 +29,20 @@ type ServiceSummary = {
     id: string;
     handle: string | null;
     businessName: string | null;
+    trustScore: number;
     isVerified: boolean;
-    trustLevel: "bronze" | "silver" | "gold" | "platinum" | null;
+    avatarUrl: string | null;
     region: string | null;
     suburb: string | null;
+  };
+  user: {
+    firstName: string | null;
+    lastName: string | null;
   };
   avgRating: number;
   reviewCount: number;
   favoriteCount: number;
-  isFavorited: boolean;
+  isFavorite: boolean;
 };
 
 // Public route; optional auth only to mark user favorites.
@@ -63,11 +69,13 @@ export async function GET(req: NextRequest) {
     const rawQuery = searchParams.get("q") ?? undefined;
     const rawMinPrice = searchParams.get("minPrice") ?? undefined;
     const rawMaxPrice = searchParams.get("maxPrice") ?? undefined;
+    const rawRating = searchParams.get("rating") ?? undefined;
     const sort = (searchParams.get("sort") ?? "relevance") as
       | "relevance"
       | "price_asc"
       | "price_desc"
-      | "rating_desc";
+      | "rating_desc"
+      | "newest";
 
     const page = Math.max(parseInt(searchParams.get("page") || "1", 10) || 1, 1);
     const pageSizeRaw = parseInt(searchParams.get("pageSize") || "12", 10) || 12;
@@ -86,15 +94,23 @@ export async function GET(req: NextRequest) {
     const suburbFilter = normalizeString(rawSuburb);
     const textQuery = rawQuery?.trim();
 
-    const parsePrice = (value: string | undefined) => {
+    const parsePriceToCents = (value: string | undefined) => {
       if (!value) return undefined;
       const n = Number(value);
       if (!Number.isFinite(n) || n < 0) return undefined;
-      return Math.floor(n);
+      return Math.round(n * 100);
     };
 
-    const minPrice = parsePrice(rawMinPrice);
-    const maxPrice = parsePrice(rawMaxPrice);
+    const minPriceCents = parsePriceToCents(rawMinPrice);
+    const maxPriceCents = parsePriceToCents(rawMaxPrice);
+
+    const parseRating = (value: string | undefined) => {
+      if (!value) return undefined;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n < 0 || n > 5) return undefined;
+      return n;
+    };
+    const rating = parseRating(rawRating);
 
     const conditions: (ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof sql> | undefined)[] = [
       eq(providers.status, "approved"),
@@ -103,8 +119,8 @@ export async function GET(req: NextRequest) {
       categoryFilter ? eq(services.category, categoryFilter as ServiceSummary["category"]) : undefined,
       regionFilter ? sql`LOWER(${services.region}) = ${regionFilter}` : undefined,
       suburbFilter ? sql`LOWER(${services.suburb}) = ${suburbFilter}` : undefined,
-      minPrice != null ? sql`${services.priceInCents} >= ${minPrice}` : undefined,
-      maxPrice != null ? sql`${services.priceInCents} <= ${maxPrice}` : undefined,
+      minPriceCents != null ? sql`${services.priceInCents} >= ${minPriceCents}` : undefined,
+      maxPriceCents != null ? sql`${services.priceInCents} <= ${maxPriceCents}` : undefined,
       textQuery
         ? sql`to_tsvector('simple', coalesce(${services.title}, '') || ' ' || coalesce(${services.description}, '')) @@ plainto_tsquery(${textQuery})`
         : undefined,
@@ -121,6 +137,10 @@ export async function GET(req: NextRequest) {
       WHERE r.service_id = ${services.id} AND r.is_hidden = false
     )`;
 
+    if (rating != null) {
+      conditions.push(sql`${avgRatingExpr} >= ${rating}`);
+    }
+
     let orderByClause;
     switch (sort) {
       case "price_asc":
@@ -131,6 +151,9 @@ export async function GET(req: NextRequest) {
         break;
       case "rating_desc":
         orderByClause = [desc(avgRatingExpr), desc(reviewCountExpr), desc(services.createdAt)];
+        break;
+      case "newest":
+        orderByClause = [desc(services.createdAt)];
         break;
       case "relevance":
       default:
@@ -155,8 +178,11 @@ export async function GET(req: NextRequest) {
         providerId: providers.id,
         providerHandle: providers.handle,
         providerName: providers.businessName,
+        providerTrustScore: providers.trustScore,
         providerVerified: providers.isVerified,
-        providerTrust: providers.trustLevel,
+        providerAvatarUrl: users.avatarUrl,
+        providerUserFirstName: users.firstName,
+        providerUserLastName: users.lastName,
         serviceRegion: services.region,
         serviceSuburb: services.suburb,
         avgRating: avgRatingExpr,
@@ -164,7 +190,7 @@ export async function GET(req: NextRequest) {
         favoriteCount: sql<number>`(
           SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
         )`,
-        isFavorited: userId
+        isFavorite: userId
           ? sql<boolean>`EXISTS (
               SELECT 1 FROM ${serviceFavorites} sf_user
               WHERE sf_user.service_id = ${services.id} AND sf_user.user_id = ${userId}
@@ -172,7 +198,8 @@ export async function GET(req: NextRequest) {
           : sql<boolean>`false`,
       })
       .from(services)
-      .leftJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(users, eq(providers.userId, users.id))
       .where(and(...conditions));
 
     const serviceResults = await baseQuery.orderBy(...orderByClause).limit(pageSize).offset(offset);
@@ -196,25 +223,39 @@ export async function GET(req: NextRequest) {
           id: s.providerId!,
           handle: s.providerHandle,
           businessName: s.providerName,
+          trustScore: Number(s.providerTrustScore ?? 0),
           isVerified: s.providerVerified ?? false,
-          trustLevel: (s.providerTrust ?? "bronze") as ServiceSummary["provider"]["trustLevel"],
+          avatarUrl: s.providerAvatarUrl,
           region: s.serviceRegion,
           suburb: s.serviceSuburb,
+        },
+        user: {
+          firstName: s.providerUserFirstName,
+          lastName: s.providerUserLastName,
         },
         avgRating,
         reviewCount,
         favoriteCount: Number(s.favoriteCount ?? 0),
-        isFavorited: Boolean(s.isFavorited),
+        isFavorite: Boolean(s.isFavorite),
       };
     });
 
-    const hasMore = items.length === pageSize;
+    const [{ count: totalCountRaw } = { count: 0 }] = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(services)
+      .innerJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(users, eq(providers.userId, users.id))
+      .where(and(...conditions));
+
+    const totalCount = Number(totalCountRaw ?? 0);
+    const hasMore = page * pageSize < totalCount;
 
     return NextResponse.json({
       services: items,
       page,
       pageSize,
       hasMore,
+      totalCount,
     });
 
   } catch (error) {
