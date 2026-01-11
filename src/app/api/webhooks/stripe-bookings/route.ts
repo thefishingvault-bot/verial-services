@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
 import { bookings } from "@/db/schema";
+import { assertTransition, normalizeStatus, type BookingStatus } from "@/lib/booking-state";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,60 @@ async function markBookingPaid(params: {
     return { updated: false };
   }
 
+  const existing = await db.query.bookings.findFirst({
+    where: eq(bookings.id, bookingId),
+    columns: { id: true, status: true, paymentIntentId: true },
+  });
+
+  if (!existing) {
+    console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Booking not found", {
+      source,
+      eventId,
+      bookingId,
+      paymentIntentId,
+    });
+    return { updated: false };
+  }
+
+  const current = normalizeStatus(existing.status) as BookingStatus;
+  const alreadyPaid = [
+    "paid",
+    "completed_by_provider",
+    "completed",
+    "refunded",
+    "disputed",
+  ].includes(current);
+
+  // Idempotency: if already paid/completed, only ensure PI linkage.
+  if (alreadyPaid) {
+    if (existing.paymentIntentId !== paymentIntentId) {
+      await db
+        .update(bookings)
+        .set({ paymentIntentId, updatedAt: new Date() })
+        .where(eq(bookings.id, bookingId));
+    }
+
+    console.log(
+      `[API_STRIPE_BOOKINGS_WEBHOOK] event=${source} bookingId=${bookingId} pi=${paymentIntentId} updated=false already=${current}`,
+    );
+    return { updated: false };
+  }
+
+  try {
+    assertTransition(existing.status, "paid");
+  } catch (error: unknown) {
+    console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Cannot transition booking to paid", {
+      source,
+      eventId,
+      bookingId,
+      current: existing.status,
+      normalized: current,
+      paymentIntentId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { updated: false };
+  }
+
   const rows = await db
     .update(bookings)
     .set({
@@ -48,18 +103,32 @@ async function markBookingPaid(params: {
       paymentIntentId,
       updatedAt: new Date(),
     })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.status, "accepted")))
+    .where(eq(bookings.id, bookingId))
     .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
 
-  console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Marked booking paid", {
-    source,
-    eventId,
-    bookingId,
-    paymentIntentId,
-    updated: rows.length > 0,
+  const updated = rows.length > 0;
+
+  console.log(
+    `[API_STRIPE_BOOKINGS_WEBHOOK] event=${source} bookingId=${bookingId} pi=${paymentIntentId} updated=${updated}`,
+  );
+
+  return { updated };
+}
+
+async function resolveBookingIdFromPaymentIntent(params: {
+  bookingIdFromMeta: string | null;
+  paymentIntentId: string;
+}): Promise<string | null> {
+  const { bookingIdFromMeta, paymentIntentId } = params;
+
+  if (bookingIdFromMeta && bookingIdFromMeta.trim()) return bookingIdFromMeta;
+
+  const byPi = await db.query.bookings.findFirst({
+    where: eq(bookings.paymentIntentId, paymentIntentId),
+    columns: { id: true },
   });
 
-  return { updated: rows.length > 0 };
+  return byPi?.id ?? null;
 }
 
 export async function POST(req: Request) {
@@ -78,31 +147,40 @@ export async function POST(req: Request) {
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_BOOKINGS_WEBHOOK_SECRET);
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : "Unknown error";
-    console.warn(`[API_STRIPE_BOOKINGS_WEBHOOK] Webhook signature verification failed: ${message}`);
-    return new NextResponse(`Webhook Error: ${message}`, { status: 400 });
-  }
+    try {
+      event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_BOOKINGS_WEBHOOK_SECRET);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown error";
+      console.warn(`[API_STRIPE_BOOKINGS_WEBHOOK] Webhook signature verification failed: ${message}`);
+      return new NextResponse("Invalid signature", { status: 400 });
+    }
 
-  console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Webhook verified", {
-    eventId: event.id,
-    type: event.type,
-    livemode: (event as unknown as { livemode?: boolean }).livemode ?? null,
-  });
+    console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Webhook verified", {
+      eventId: event.id,
+      type: event.type,
+      livemode: (event as unknown as { livemode?: boolean }).livemode ?? null,
+    });
 
-  try {
     switch (event.type) {
       case "checkout.session.completed":
       case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.mode !== "payment") break;
 
-        const bookingId = (session.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
         const paymentIntentId =
           typeof session.payment_intent === "string"
             ? session.payment_intent
             : session.payment_intent?.id ?? null;
+
+        const bookingIdFromMeta =
+          (session.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+
+        const bookingId = paymentIntentId
+          ? await resolveBookingIdFromPaymentIntent({
+              bookingIdFromMeta,
+              paymentIntentId,
+            })
+          : bookingIdFromMeta;
 
         console.info("[API_STRIPE_BOOKINGS_WEBHOOK] checkout.session.completed", {
           eventId: event.id,
@@ -112,11 +190,12 @@ export async function POST(req: Request) {
         });
 
         if (!bookingId) {
-          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+          console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Booking not found for PI", {
             eventId: event.id,
             type: event.type,
+            paymentIntentId,
           });
-          break;
+          return new NextResponse(null, { status: 200 });
         }
 
         await markBookingPaid({
@@ -156,7 +235,12 @@ export async function POST(req: Request) {
 
       case "payment_intent.succeeded": {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const bookingId = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+
+        const bookingIdFromMeta = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+        const bookingId = await resolveBookingIdFromPaymentIntent({
+          bookingIdFromMeta,
+          paymentIntentId: pi.id,
+        });
 
         console.info("[API_STRIPE_BOOKINGS_WEBHOOK] payment_intent.succeeded", {
           eventId: event.id,
@@ -165,12 +249,12 @@ export async function POST(req: Request) {
         });
 
         if (!bookingId) {
-          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+          console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Booking not found for PI", {
             eventId: event.id,
             type: event.type,
             paymentIntentId: pi.id,
           });
-          break;
+          return new NextResponse(null, { status: 200 });
         }
 
         await markBookingPaid({
@@ -185,7 +269,12 @@ export async function POST(req: Request) {
 
       case "payment_intent.payment_failed": {
         const pi = event.data.object as Stripe.PaymentIntent;
-        const bookingId = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+
+        const bookingIdFromMeta = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+        const bookingId = await resolveBookingIdFromPaymentIntent({
+          bookingIdFromMeta,
+          paymentIntentId: pi.id,
+        });
 
         console.info("[API_STRIPE_BOOKINGS_WEBHOOK] payment_intent.payment_failed", {
           eventId: event.id,
@@ -195,12 +284,32 @@ export async function POST(req: Request) {
         });
 
         if (!bookingId) {
-          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+          console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Booking not found for PI", {
             eventId: event.id,
             type: event.type,
             paymentIntentId: pi.id,
           });
+          return new NextResponse(null, { status: 200 });
         }
+
+        // Idempotency: ensure PI linkage even when payment fails (status remains accepted).
+        const existing = await db.query.bookings.findFirst({
+          where: eq(bookings.id, bookingId),
+          columns: { id: true, status: true, paymentIntentId: true },
+        });
+
+        let linked = false;
+        if (existing && existing.paymentIntentId !== pi.id) {
+          await db
+            .update(bookings)
+            .set({ paymentIntentId: pi.id, updatedAt: new Date() })
+            .where(eq(bookings.id, bookingId));
+          linked = true;
+        }
+
+        console.log(
+          `[API_STRIPE_BOOKINGS_WEBHOOK] event=${event.type} bookingId=${bookingId} pi=${pi.id} updated=${linked} (payment_failed)`,
+        );
 
         // Intentionally no DB change; booking remains accepted.
         break;
@@ -210,12 +319,11 @@ export async function POST(req: Request) {
         break;
     }
   } catch (error: unknown) {
-    // Always return 200 to acknowledge receipt; log failures so Stripe can still succeed without retries storming.
-    console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Handler error", {
-      type: event.type,
-      eventId: event.id,
+    // Always return 200 to acknowledge receipt; log failures so Stripe doesn't retry forever.
+    console.error("[API_STRIPE_BOOKINGS_WEBHOOK] Unexpected handler error", {
       error: error instanceof Error ? error.message : String(error),
     });
+    return new NextResponse(null, { status: 200 });
   }
 
   return new NextResponse(null, { status: 200 });
