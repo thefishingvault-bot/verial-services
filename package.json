@@ -13,6 +13,7 @@
     "drizzle:push": "drizzle-kit push",
     "drizzle:check-journal": "node scripts/check-drizzle-journal.mjs",
     "drizzle:studio": "drizzle-kit studio",
+    "backfill:quoted-price": "node scripts/backfill-quoted-price.mjs",
     "data:nz": "node scripts/generate-nz-regions.mjs",
     "test": "pnpm exec vitest run",
     "test:watch": "pnpm exec vitest",

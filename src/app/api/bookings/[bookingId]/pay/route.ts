@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { bookings, providers, services } from "@/db/schema";
 import { normalizeStatus } from "@/lib/booking-state";
+import { getFinalBookingAmountCents } from "@/lib/booking-price";
 
 export const runtime = "nodejs";
 
@@ -59,21 +60,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     columns: { title: true, pricingType: true },
   });
 
-  const pricingType = service?.pricingType ?? "fixed";
-  // Pricing rules:
-  // - fixed: always charge the snapshot priceAtBooking
-  // - from: charge providerQuotedPrice if set, otherwise charge priceAtBooking (the "from" amount)
-  // - quote: require providerQuotedPrice
-  const requiresQuote = pricingType === "quote";
-  const amount = pricingType === "from"
-    ? (booking.providerQuotedPrice ?? booking.priceAtBooking)
-    : (requiresQuote ? (booking.providerQuotedPrice ?? null) : booking.priceAtBooking);
+  const amount = getFinalBookingAmountCents({
+    providerQuotedPrice: booking.providerQuotedPrice,
+    priceAtBooking: booking.priceAtBooking,
+  });
 
-  if (requiresQuote && (!amount || amount < 100)) {
+  if (!amount) {
     return new NextResponse("Waiting for provider quote", { status: 400 });
   }
 
-  if (!amount || amount < 100) {
+  if (amount < 100) {
     return new NextResponse("Amount must be at least $1.00 NZD", { status: 400 });
   }
 

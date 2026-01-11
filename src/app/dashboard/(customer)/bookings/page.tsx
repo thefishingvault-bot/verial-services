@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from '@/components/ui/badge';
 import { Loader2, AlertTriangle, Package } from 'lucide-react';
 import { ReviewForm } from '@/components/reviews/review-form';
+import { getFinalBookingAmountCents } from '@/lib/booking-price';
 
 // Define a type for our joined booking data
 type CustomerBookingStatus =
@@ -426,16 +427,23 @@ export default function CustomerBookingsPage() {
                 )}
                 {booking.status === 'accepted' && (
                   <>
-                    {booking.service.pricingType === 'quote' &&
-                    (booking.providerQuotedPrice == null || booking.providerQuotedPrice < 100) ? (
-                      <Button variant="outline" disabled className="w-full sm:w-auto">
-                        Waiting for quote
-                      </Button>
-                    ) : (
-                      <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
-                        Pay now
-                      </Button>
-                    )}
+                    {(() => {
+                      const finalAmount = getFinalBookingAmountCents({
+                        providerQuotedPrice: booking.providerQuotedPrice ?? null,
+                        priceAtBooking: booking.priceAtBooking,
+                      });
+                      const hasFinalAmount = typeof finalAmount === 'number' && finalAmount > 0;
+
+                      return hasFinalAmount ? (
+                        <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
+                          Pay now
+                        </Button>
+                      ) : (
+                        <Button variant="outline" disabled className="w-full sm:w-auto">
+                          Waiting for quote
+                        </Button>
+                      );
+                    })()}
                     <Button
                       variant="outline"
                       onClick={() => handleCancel(booking.id)}

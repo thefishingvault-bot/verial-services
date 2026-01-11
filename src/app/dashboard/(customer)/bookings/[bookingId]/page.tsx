@@ -565,6 +565,7 @@ export default async function BookingDetailPage({
             viewerIsCustomer={viewerIsCustomer}
             pricingType={service.pricingType}
             providerQuotedPrice={booking.providerQuotedPrice}
+            priceAtBooking={booking.priceAtBooking}
           />
           {viewerIsCustomer && (
             <Link href={`/dashboard/messages/${booking.id}`}>

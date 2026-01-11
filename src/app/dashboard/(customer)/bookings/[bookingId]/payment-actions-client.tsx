@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { getFinalBookingAmountCents } from '@/lib/booking-price';
 
 export function PaymentActionsClient(props: {
   bookingId: string;
@@ -11,8 +12,9 @@ export function PaymentActionsClient(props: {
   viewerIsCustomer: boolean;
   pricingType: 'fixed' | 'from' | 'quote';
   providerQuotedPrice: number | null;
+  priceAtBooking: number;
 }) {
-  const { bookingId, status, viewerIsCustomer, pricingType, providerQuotedPrice } = props;
+  const { bookingId, status, viewerIsCustomer, providerQuotedPrice, priceAtBooking } = props;
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -61,13 +63,16 @@ export function PaymentActionsClient(props: {
     }
   };
 
-  const requiresQuote = pricingType === 'quote';
-  const quoteReady = providerQuotedPrice != null && providerQuotedPrice >= 100;
+  const finalAmount = getFinalBookingAmountCents({
+    providerQuotedPrice,
+    priceAtBooking,
+  });
+  const hasFinalAmount = typeof finalAmount === 'number' && finalAmount > 0;
 
   return (
     <div className="flex flex-col gap-2">
       {status === 'accepted' && (
-        requiresQuote && !quoteReady ? (
+        !hasFinalAmount ? (
           <Button variant="outline" disabled>
             Waiting for provider quote
           </Button>
