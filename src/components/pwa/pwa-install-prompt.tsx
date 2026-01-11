@@ -19,6 +19,32 @@ type BeforeInstallPromptEvent = Event & {
 
 const STORAGE_KEY = "verial:pwa-install-prompt:seen:v1";
 
+function safeGet(key: string) {
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    try {
+      return window.sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  }
+}
+
+function safeSet(key: string, value: string) {
+  try {
+    window.localStorage.setItem(key, value);
+    return;
+  } catch {
+    // ignore
+  }
+  try {
+    window.sessionStorage.setItem(key, value);
+  } catch {
+    // ignore
+  }
+}
+
 function isMobileUA() {
   if (typeof navigator === "undefined") return false;
   // Prefer UA-CH when available
@@ -26,6 +52,19 @@ function isMobileUA() {
   const navAny = navigator as any;
   if (typeof navAny.userAgentData?.mobile === "boolean") return navAny.userAgentData.mobile;
   return /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+}
+
+function isMobileScreen() {
+  if (typeof window === "undefined") return false;
+  // Avoid desktop popups: require a small-ish viewport.
+  return window.matchMedia?.("(max-width: 820px)")?.matches ?? window.innerWidth <= 820;
+}
+
+function isTouchPrimary() {
+  if (typeof window === "undefined") return false;
+  const coarse = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+  const noHover = window.matchMedia?.("(hover: none)")?.matches ?? false;
+  return coarse || noHover;
 }
 
 function isStandalone() {
@@ -46,32 +85,40 @@ export function PwaInstallPrompt() {
   const [open, setOpen] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
 
-  const mobile = useMemo(() => isMobileUA(), []);
+  const mobile = useMemo(() => isMobileUA() && isMobileScreen() && isTouchPrimary(), []);
 
   useEffect(() => {
     if (!mobile) return;
     if (isStandalone()) return;
 
-    const seen = window.localStorage.getItem(STORAGE_KEY);
+    const seen = safeGet(STORAGE_KEY);
     if (seen === "1") return;
+
+    const onInstalled = () => {
+      safeSet(STORAGE_KEY, "1");
+      setOpen(false);
+      setDeferred(null);
+    };
 
     const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
       setDeferred(e as BeforeInstallPromptEvent);
       setOpen(true);
-      window.localStorage.setItem(STORAGE_KEY, "1");
+      safeSet(STORAGE_KEY, "1");
     };
 
     window.addEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+    window.addEventListener("appinstalled", onInstalled);
 
     // iOS Safari doesn't emit beforeinstallprompt; show a one-time prompt with instructions.
     if (isIOS()) {
       setOpen(true);
-      window.localStorage.setItem(STORAGE_KEY, "1");
+      safeSet(STORAGE_KEY, "1");
     }
 
     return () => {
       window.removeEventListener("beforeinstallprompt", onBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", onInstalled);
     };
   }, [mobile]);
 
@@ -82,6 +129,7 @@ export function PwaInstallPrompt() {
 
   async function handleInstall() {
     if (!deferred) {
+      safeSet(STORAGE_KEY, "1");
       setOpen(false);
       return;
     }
@@ -91,12 +139,20 @@ export function PwaInstallPrompt() {
       await deferred.userChoice;
     } finally {
       setDeferred(null);
+      safeSet(STORAGE_KEY, "1");
       setOpen(false);
     }
   }
 
   return (
-    <AlertDialog open={open} onOpenChange={setOpen}>
+    <AlertDialog
+      open={open}
+      onOpenChange={(next) => {
+        // Treat any close (esc/outside/cancel) as "don't show again".
+        if (!next) safeSet(STORAGE_KEY, "1");
+        setOpen(next);
+      }}
+    >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>Install Verial</AlertDialogTitle>
@@ -108,9 +164,16 @@ export function PwaInstallPrompt() {
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>Not now</AlertDialogCancel>
+          <AlertDialogCancel onClick={() => safeSet(STORAGE_KEY, "1")}>Not now</AlertDialogCancel>
           {showIOS ? (
-            <AlertDialogAction onClick={() => setOpen(false)}>Got it</AlertDialogAction>
+            <AlertDialogAction
+              onClick={() => {
+                safeSet(STORAGE_KEY, "1");
+                setOpen(false);
+              }}
+            >
+              Got it
+            </AlertDialogAction>
           ) : (
             <AlertDialogAction onClick={handleInstall} disabled={!deferred}>
               Install
