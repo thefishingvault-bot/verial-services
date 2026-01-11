@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { services, providers, users, reviews, serviceFavorites, serviceCategoryEnum } from '@/db/schema';
-import { eq, and, or, like, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
+import { eq, and, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
 
@@ -144,12 +144,14 @@ export async function getServicesDataFromSearchParams(
   const whereConditions = [eq(providers.status, 'approved')];
 
   if (filters.q) {
+    const q = `%${filters.q.toLowerCase()}%`;
     whereConditions.push(
-      or(
-        like(services.title, `%${filters.q}%`),
-        like(services.description, `%${filters.q}%`),
-        like(providers.businessName, `%${filters.q}%`),
-      )!,
+      sql`(
+        LOWER(${services.title}) LIKE ${q}
+        OR LOWER(COALESCE(${services.description}, '')) LIKE ${q}
+        OR LOWER(${providers.businessName}) LIKE ${q}
+        OR LOWER(${providers.handle}) LIKE ${q}
+      )`,
     );
   }
 

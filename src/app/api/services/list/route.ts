@@ -120,7 +120,12 @@ export async function GET(req: NextRequest) {
       minPriceCents != null ? sql`${services.priceInCents} >= ${minPriceCents}` : undefined,
       maxPriceCents != null ? sql`${services.priceInCents} <= ${maxPriceCents}` : undefined,
       textQuery
-        ? sql`to_tsvector('simple', coalesce(${services.title}, '') || ' ' || coalesce(${services.description}, '')) @@ plainto_tsquery(${textQuery})`
+        ? sql`(
+            LOWER(${services.title}) LIKE ${`%${textQuery.toLowerCase()}%`}
+            OR LOWER(COALESCE(${services.description}, '')) LIKE ${`%${textQuery.toLowerCase()}%`}
+            OR LOWER(${providers.businessName}) LIKE ${`%${textQuery.toLowerCase()}%`}
+            OR LOWER(${providers.handle}) LIKE ${`%${textQuery.toLowerCase()}%`}
+          )`
         : undefined,
     ].filter((c): c is Exclude<(typeof conditions)[number], undefined> => Boolean(c));
 
