@@ -23,7 +23,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const { bookingId, rating, comment, tipAmount } = parsed.data;
+    const { bookingId, rating, comment } = parsed.data;
 
     const { userId } = await auth();
     if (!userId) {
@@ -38,26 +38,28 @@ export async function POST(req: Request) {
       return new NextResponse("Review looks like spam", { status: 400 });
     }
 
-    // 1. Find the booking
+    // 1. Find the booking (do NOT trust client for providerId/serviceId)
     const booking = await db.query.bookings.findFirst({
-      where: and(
-        eq(bookings.id, bookingId),
-        eq(bookings.userId, userId) // Security: Only the user who booked can review
-      ),
+      where: eq(bookings.id, bookingId),
       columns: {
         id: true,
         status: true,
         providerId: true,
         serviceId: true,
+        userId: true,
       },
     });
 
     if (!booking) {
-      return new NextResponse("Booking not found or access denied", { status: 404 });
+      return new NextResponse("Booking not found", { status: 404 });
+    }
+
+    if (booking.userId !== userId) {
+      return new NextResponse("Forbidden", { status: 403 });
     }
 
     // 2. Check if booking is completed (non-negotiable rule)
-    if (booking.status !== "completed") {
+    if (booking.status !== "completed" && booking.status !== "completed_by_provider") {
       return new NextResponse(
         `You can only review a completed booking (status: ${booking.status}).`,
         { status: 400 }
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
 
     // 2b. Prevent duplicate reviews
     const existing = await db.query.reviews.findFirst({
-      where: eq(reviews.bookingId, booking.id),
+      where: and(eq(reviews.bookingId, booking.id), eq(reviews.userId, userId)),
       columns: { id: true },
     });
     if (existing) {
@@ -84,7 +86,6 @@ export async function POST(req: Request) {
         rating,
         comment: sanitizedComment || null,
         serviceId: booking.serviceId,
-        tipAmount: tipAmount ?? 0,
       })
       .returning();
 

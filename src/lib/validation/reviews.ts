@@ -1,19 +1,17 @@
 import { z } from "zod";
 
 export const ReviewCreateSchema = z.object({
-  bookingId: z.string().uuid(),
-  rating: z.number().int().min(1).max(5),
+  bookingId: z
+    .string()
+    .min(1)
+    .regex(/^bk_\d+_[a-z0-9]+$/i),
+  rating: z.coerce.number().int().min(1).max(5),
   comment: z
     .string()
     .trim()
     .max(2000)
     .optional()
     .transform((v) => v || ""),
-  tipAmount: z
-    .number()
-    .int()
-    .nonnegative()
-    .default(0),
 });
 
 export const ReviewsListQuerySchema = z.object({
