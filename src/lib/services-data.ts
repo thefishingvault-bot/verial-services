@@ -142,7 +142,6 @@ export async function getServicesDataFromSearchParams(
   ), 0)`;
 
   const whereConditions = [eq(providers.status, 'approved')];
-  whereConditions.push(eq(services.isPublished, true));
 
   if (filters.q) {
     whereConditions.push(

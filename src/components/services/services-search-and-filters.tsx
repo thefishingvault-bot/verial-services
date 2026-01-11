@@ -94,6 +94,20 @@ const ServicesSearchAndFilters = ({
     onFiltersChange(normalized);
   };
 
+  const sanitizeMoneyInput = (raw: string) => {
+    const cleaned = raw.replace(/[^0-9.]/g, "");
+    const firstDotIndex = cleaned.indexOf(".");
+    if (firstDotIndex === -1) return cleaned;
+
+    const beforeDot = cleaned.slice(0, firstDotIndex + 1);
+    const afterDot = cleaned
+      .slice(firstDotIndex + 1)
+      .replace(/\./g, "")
+      .slice(0, 2);
+
+    return `${beforeDot}${afterDot}`;
+  };
+
   const parseOptionalNonNegativeNumber = (raw: string): number | null | undefined => {
     const trimmed = raw.trim();
     if (trimmed.length === 0) return null;
@@ -340,7 +354,7 @@ const ServicesSearchAndFilters = ({
             min={0}
             value={minPriceInput}
             onChange={(e) => {
-              const next = e.target.value;
+              const next = sanitizeMoneyInput(e.target.value);
               setMinPriceInput(next);
               setPriceError(null);
               debouncedApplyPrice(next, maxPriceInput);
@@ -369,7 +383,7 @@ const ServicesSearchAndFilters = ({
             min={0}
             value={maxPriceInput}
             onChange={(e) => {
-              const next = e.target.value;
+              const next = sanitizeMoneyInput(e.target.value);
               setMaxPriceInput(next);
               setPriceError(null);
               debouncedApplyPrice(minPriceInput, next);

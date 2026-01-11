@@ -114,8 +114,6 @@ export async function GET(req: NextRequest) {
 
     const conditions: (ReturnType<typeof and> | ReturnType<typeof eq> | ReturnType<typeof sql> | undefined)[] = [
       eq(providers.status, "approved"),
-      // Only show published services in public search
-      eq(services.isPublished, true),
       categoryFilter ? eq(services.category, categoryFilter as ServiceSummary["category"]) : undefined,
       regionFilter ? sql`LOWER(${services.region}) = ${regionFilter}` : undefined,
       suburbFilter ? sql`LOWER(${services.suburb}) = ${suburbFilter}` : undefined,
