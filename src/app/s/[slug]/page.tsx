@@ -331,20 +331,20 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
                 {service.reviewCount} review{service.reviewCount === 1 ? "" : "s"}
               </span>
               <Separator orientation="vertical" className="h-5" />
-              <span className="flex items-center gap-2 text-slate-600">
+              <Badge variant="outline" className="gap-1">
                 <Icon className={`h-4 w-4 ${color}`} />
                 {trustTier} trust · {Math.round(trustScore)}/100
-              </span>
+              </Badge>
               {service.provider.isVerified && (
-                <span className="flex items-center gap-1 text-emerald-600">
-                  <CheckCircle className="h-4 w-4" />
+                <Badge variant="outline" className="gap-1">
+                  <CheckCircle className="h-4 w-4 text-emerald-600" />
                   Verified provider
-                </span>
+                </Badge>
               )}
               {showAdminBadge && (
-                <span className="flex items-center gap-1 text-blue-600 font-semibold">
-                  <CheckCircle className="h-4 w-4" /> Admin trusted
-                </span>
+                <Badge variant="outline" className="gap-1">
+                  <CheckCircle className="h-4 w-4 text-primary" /> Admin trusted
+                </Badge>
               )}
             </div>
           </div>
@@ -374,17 +374,17 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
               </div>
               <div className="flex flex-col items-start sm:items-end gap-2">
                 {service.provider.isVerified && (
-                  <Badge variant="secondary" className="gap-1">
-                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Verified Provider
+                  <Badge variant="outline" className="gap-1">
+                    <CheckCircle className="h-4 w-4 text-emerald-600" /> Verified provider
                   </Badge>
                 )}
-                <Badge variant="secondary" className={`gap-1 ${color}`}>
-                  <Icon className="h-4 w-4" />
-                  {trustTier} trust · {Math.round(trustScore)}
+                <Badge variant="outline" className="gap-1">
+                  <Icon className={`h-4 w-4 ${color}`} />
+                  {trustTier} trust · {Math.round(trustScore)}/100
                 </Badge>
                 {showAdminBadge && (
-                  <Badge variant="secondary" className="gap-1 text-blue-700">
-                    <CheckCircle className="h-4 w-4" /> Admin trusted
+                  <Badge variant="outline" className="gap-1">
+                    <CheckCircle className="h-4 w-4 text-primary" /> Admin trusted
                   </Badge>
                 )}
                 <ContactButton providerId={service.provider.id} serviceId={service.id} />
