@@ -426,7 +426,7 @@ export default function CustomerBookingsPage() {
                 )}
                 {booking.status === 'accepted' && (
                   <>
-                    {booking.service.pricingType !== 'fixed' &&
+                    {booking.service.pricingType === 'quote' &&
                     (booking.providerQuotedPrice == null || booking.providerQuotedPrice < 100) ? (
                       <Button variant="outline" disabled className="w-full sm:w-auto">
                         Waiting for quote

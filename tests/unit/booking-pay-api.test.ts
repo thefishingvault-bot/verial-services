@@ -97,7 +97,7 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(json.url).toMatch(/^https:\/\//);
   });
 
-  it("returns 400 for from/quote bookings when provider quote is missing", async () => {
+  it("returns 400 for quote bookings when provider quote is missing", async () => {
     dbMocks.findBooking.mockResolvedValue({
       id: "bk_1",
       status: "accepted",
@@ -108,7 +108,7 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     });
 
     dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
-    dbMocks.findService.mockResolvedValue({ title: "Lawn mowing", pricingType: "from" });
+    dbMocks.findService.mockResolvedValue({ title: "Custom job", pricingType: "quote" });
 
     const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
     const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
@@ -118,7 +118,7 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(stripeMocks.sessionsCreate).not.toHaveBeenCalled();
   });
 
-  it("charges providerQuotedPrice for from/quote bookings", async () => {
+  it("charges providerQuotedPrice for from bookings when present", async () => {
     dbMocks.findBooking.mockResolvedValue({
       id: "bk_1",
       status: "accepted",
@@ -140,5 +140,29 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
     expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7500);
+  });
+
+  it("charges priceAtBooking for from bookings when provider quote is missing", async () => {
+    dbMocks.findBooking.mockResolvedValue({
+      id: "bk_1",
+      status: "accepted",
+      priceAtBooking: 5000,
+      providerQuotedPrice: null,
+      providerId: "prov_1",
+      serviceId: "svc_1",
+    });
+
+    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findService.mockResolvedValue({ title: "Lawn mowing", pricingType: "from" });
+
+    stripeMocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/session_123" });
+
+    const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
+    const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
+
+    expect(res.status).toBe(200);
+
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(5000);
   });
 });

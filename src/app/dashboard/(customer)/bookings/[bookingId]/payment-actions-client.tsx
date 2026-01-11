@@ -61,7 +61,7 @@ export function PaymentActionsClient(props: {
     }
   };
 
-  const requiresQuote = pricingType === 'from' || pricingType === 'quote';
+  const requiresQuote = pricingType === 'quote';
   const quoteReady = providerQuotedPrice != null && providerQuotedPrice >= 100;
 
   return (

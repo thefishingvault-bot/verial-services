@@ -60,11 +60,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
   });
 
   const pricingType = service?.pricingType ?? "fixed";
-  const requiresQuote = pricingType === "from" || pricingType === "quote";
-
-  const amount = requiresQuote
-    ? booking.providerQuotedPrice ?? null
-    : booking.priceAtBooking;
+  // Pricing rules:
+  // - fixed: always charge the snapshot priceAtBooking
+  // - from: charge providerQuotedPrice if set, otherwise charge priceAtBooking (the "from" amount)
+  // - quote: require providerQuotedPrice
+  const requiresQuote = pricingType === "quote";
+  const amount = pricingType === "from"
+    ? (booking.providerQuotedPrice ?? booking.priceAtBooking)
+    : (requiresQuote ? (booking.providerQuotedPrice ?? null) : booking.priceAtBooking);
 
   if (requiresQuote && (!amount || amount < 100)) {
     return new NextResponse("Waiting for provider quote", { status: 400 });
