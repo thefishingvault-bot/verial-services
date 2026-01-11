@@ -74,12 +74,13 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
       id: "bk_1",
       status: "accepted",
       priceAtBooking: 5000,
+      providerQuotedPrice: null,
       providerId: "prov_1",
       serviceId: "svc_1",
     });
 
     dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
-    dbMocks.findService.mockResolvedValue({ title: "House clean" });
+    dbMocks.findService.mockResolvedValue({ title: "House clean", pricingType: "fixed" });
 
     stripeMocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/session_123" });
 
@@ -94,5 +95,50 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
 
     const json = await res.json();
     expect(json.url).toMatch(/^https:\/\//);
+  });
+
+  it("returns 400 for from/quote bookings when provider quote is missing", async () => {
+    dbMocks.findBooking.mockResolvedValue({
+      id: "bk_1",
+      status: "accepted",
+      priceAtBooking: 5000,
+      providerQuotedPrice: null,
+      providerId: "prov_1",
+      serviceId: "svc_1",
+    });
+
+    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findService.mockResolvedValue({ title: "Lawn mowing", pricingType: "from" });
+
+    const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
+    const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
+
+    expect(res.status).toBe(400);
+    expect(await res.text()).toMatch(/Waiting for provider quote/i);
+    expect(stripeMocks.sessionsCreate).not.toHaveBeenCalled();
+  });
+
+  it("charges providerQuotedPrice for from/quote bookings", async () => {
+    dbMocks.findBooking.mockResolvedValue({
+      id: "bk_1",
+      status: "accepted",
+      priceAtBooking: 5000,
+      providerQuotedPrice: 7500,
+      providerId: "prov_1",
+      serviceId: "svc_1",
+    });
+
+    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findService.mockResolvedValue({ title: "Lawn mowing", pricingType: "from" });
+
+    stripeMocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/session_123" });
+
+    const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
+    const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
+
+    expect(res.status).toBe(200);
+
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7500);
   });
 });
