@@ -164,6 +164,7 @@ async function upsertProviderEarningsHeld(params: {
       eventId,
       bookingId,
       paymentIntentId,
+      upserted: false,
     });
     return { upserted: false };
   }
@@ -180,6 +181,7 @@ async function upsertProviderEarningsHeld(params: {
       paymentIntentId,
       amountChargedInCents: amountChargedInCents ?? null,
       priceAtBooking: booking.priceAtBooking ?? null,
+      upserted: false,
     });
     return { upserted: false };
   }
@@ -229,6 +231,7 @@ async function upsertProviderEarningsHeld(params: {
     eventId,
     bookingId,
     paymentIntentId,
+    upserted: true,
   });
 
   return { upserted: true };
