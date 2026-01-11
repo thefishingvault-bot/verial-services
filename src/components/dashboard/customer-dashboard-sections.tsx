@@ -1,13 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import Image from "next/image";
+import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { format } from "date-fns";
-import { CalendarDays, Clock, FileText, Heart, Loader2, ShieldCheck, Star, Undo2 } from "lucide-react";
+import {
+  CalendarDays,
+  type LucideIcon,
+  Clock,
+  FileText,
+  Heart,
+  MessageSquare,
+  Search,
+  Star,
+  Calendar,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { FavoritesGrid } from "@/components/favorites/favorites-grid";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn, getTrustBadge } from "@/lib/utils";
 import { formatBookingPriceLabel, formatServicePriceLabel } from "@/lib/pricing";
 import type { BookingCardData, CustomerDashboardData, ReviewPrompt } from "@/lib/dashboard/customer-dashboard";
@@ -38,152 +53,171 @@ function StatusBadge({ status }: { status: BookingCardData["status"] }) {
   return <Badge variant={variant}>{label}</Badge>;
 }
 
-function BookingMeta({ booking }: { booking: BookingCardData }) {
-  const { Icon, color } = getTrustBadge(booking.providerTrustLevel);
+function StatPill({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-      <span className="flex items-center gap-1">
-        <Icon className={cn("h-4 w-4", color)} />
-        {booking.providerTrustLevel}
+    <div className="rounded-md border bg-background px-3 py-2">
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-sm font-semibold leading-none">{value}</p>
+    </div>
+  );
+}
+
+function SectionHeader({
+  title,
+  description,
+  actionHref,
+  actionLabel = "View all",
+}: {
+  title: string;
+  description?: string;
+  actionHref?: string;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-1">
+        <h2 className="text-base font-semibold leading-none">{title}</h2>
+        {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
+      </div>
+      {actionHref ? (
+        <Button asChild variant="ghost" size="sm" className="-mr-2 h-8">
+          <Link href={actionHref}>{actionLabel}</Link>
+        </Button>
+      ) : null}
+    </div>
+  );
+}
+
+function TrustLine({ trustLevel, isVerified }: { trustLevel: BookingCardData["providerTrustLevel"]; isVerified: boolean }) {
+  const { Icon, color } = getTrustBadge(trustLevel);
+  return (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="inline-flex items-center gap-1">
+        <Icon className={cn("h-3.5 w-3.5", color)} />
+        <span className="capitalize">{trustLevel}</span>
       </span>
-      {booking.providerVerified && <Badge variant="secondary">Verified</Badge>}
-      {booking.providerHandle && <span>@{booking.providerHandle}</span>}
+      {isVerified ? <Badge variant="secondary">Verified</Badge> : null}
     </div>
   );
 }
 
-function UpcomingBookings({ items }: { items: BookingCardData[] }) {
-  const [bookings, setBookings] = useState(items);
-  const [isPending, startTransition] = useTransition();
-
-  const handleCancel = (bookingId: string) => {
-    startTransition(async () => {
-      let previous: BookingCardData[] = [];
-      setBookings((prev) => {
-        previous = prev;
-        return prev.filter((b) => b.id !== bookingId);
-      });
-      const res = await fetch("/api/bookings/cancel", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bookingId }),
-      });
-      if (!res.ok) {
-        // rollback on failure
-        setBookings(previous);
-      }
-    });
-  };
-
-  if (bookings.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle>Upcoming bookings</CardTitle>
-          <CardDescription>You have no upcoming bookings.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
+function BookingRow({ booking, variant }: { booking: BookingCardData; variant: "upcoming" | "past" }) {
+  const dateLabel =
+    variant === "upcoming"
+      ? formatDateTime(booking.scheduledAt ?? booking.createdAt)
+      : booking.completedAt
+        ? formatDateTime(booking.completedAt)
+        : "Completed";
 
   return (
-    <div className="space-y-3">
-      {bookings.map((booking) => (
-        <Card key={booking.id} className="border shadow-sm">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-lg">{booking.serviceTitle}</CardTitle>
-              <CardDescription className="flex items-center gap-2">
-                <ShieldCheck className="h-4 w-4 text-emerald-600" />
-                {booking.providerName ?? "Provider"}
-              </CardDescription>
-              <BookingMeta booking={booking} />
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <CalendarDays className="h-4 w-4" />
-              <span>{formatDateTime(booking.scheduledAt ?? booking.createdAt)}</span>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-sm text-muted-foreground">
-              <StatusBadge status={booking.status} />
-              <span>{formatBookingPriceLabel(booking.priceInCents)}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link href={`/dashboard/bookings/${booking.id}`}>
-                <Button variant="outline" size="sm">View Booking</Button>
-              </Link>
-              {booking.canCancel && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  disabled={isPending}
-                  onClick={() => handleCancel(booking.id)}
-                >
-                  {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Undo2 className="h-4 w-4" />}
-                  <span className="ml-1">Cancel booking</span>
-                </Button>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-    </div>
-  );
-}
+    <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href={`/dashboard/bookings/${booking.id}`} className="font-medium hover:underline">
+            {booking.serviceTitle}
+          </Link>
+          <StatusBadge status={booking.status} />
+        </div>
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span className="inline-flex items-center gap-1">
+            {variant === "upcoming" ? <CalendarDays className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
+            {dateLabel}
+          </span>
+          <span className="font-medium text-foreground">{formatBookingPriceLabel(booking.priceInCents)}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs text-muted-foreground">{booking.providerName ?? "Provider"}</span>
+          <TrustLine trustLevel={booking.providerTrustLevel} isVerified={booking.providerVerified} />
+        </div>
+      </div>
 
-function PastBookings({ items }: { items: BookingCardData[] }) {
-  if (items.length === 0) {
-    return (
-      <Card className="border-dashed">
-        <CardHeader>
-          <CardTitle>Past bookings</CardTitle>
-          <CardDescription>No past bookings yet.</CardDescription>
-        </CardHeader>
-      </Card>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      {items.map((booking) => (
-        <Card key={booking.id} className="border shadow-sm">
-          <CardHeader className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <div className="space-y-1">
-              <CardTitle className="text-lg">{booking.serviceTitle}</CardTitle>
-              <CardDescription>{booking.providerName ?? "Provider"}</CardDescription>
-              <BookingMeta booking={booking} />
-            </div>
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Clock className="h-4 w-4" />
-              <span>{booking.completedAt ? formatDateTime(booking.completedAt) : "Completed"}</span>
-            </div>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <StatusBadge status={booking.status} />
-              <span>{formatBookingPriceLabel(booking.priceInCents)}</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {!booking.hasReview ? (
-                <Link href={`/dashboard/bookings/${booking.id}/review`}>
-                  <Button size="sm">Review Now</Button>
-                </Link>
-              ) : (
-                <Badge variant="secondary" className="flex items-center gap-1">
-                  <Star className="h-4 w-4" /> Reviewed
-                </Badge>
-              )}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        {variant === "past" ? (
+          <>
+            {!booking.hasReview ? (
+              <Button asChild size="sm">
+                <Link href={`/dashboard/bookings/${booking.id}/review`}>Review Now</Link>
+              </Button>
+            ) : (
+              <Badge variant="secondary" className="inline-flex items-center gap-1">
+                <Star className="h-3.5 w-3.5" /> Reviewed
+              </Badge>
+            )}
+            <Button asChild size="sm" variant="outline">
               <Link href={`/dashboard/bookings/${booking.id}/receipt`}>
-                <Button size="sm" variant="outline">
-                  <FileText className="mr-2 h-4 w-4" /> View Receipt
-                </Button>
+                <FileText className="mr-2 h-4 w-4" /> View Receipt
               </Link>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
+            </Button>
+          </>
+        ) : (
+          <Button asChild size="sm" variant="outline">
+            <Link href={`/dashboard/bookings/${booking.id}`}>View Booking</Link>
+          </Button>
+        )}
+      </div>
     </div>
+  );
+}
+
+function BookingsCard({ upcoming, past }: { upcoming: BookingCardData[]; past: BookingCardData[] }) {
+  const upcomingPreview = useMemo(() => upcoming.slice(0, 5), [upcoming]);
+  const pastPreview = useMemo(() => past.slice(0, 5), [past]);
+
+  return (
+    <Card>
+      <CardHeader className="space-y-4">
+        <SectionHeader
+          title="Bookings"
+          description="Upcoming and past bookings in one place."
+          actionHref="/dashboard/bookings"
+        />
+        <Tabs defaultValue="upcoming">
+          <TabsList className="w-full justify-start">
+            <TabsTrigger value="upcoming" className="flex-1 justify-center sm:flex-none">
+              Upcoming ({upcoming.length})
+            </TabsTrigger>
+            <TabsTrigger value="past" className="flex-1 justify-center sm:flex-none">
+              Past ({past.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="upcoming" className="mt-4">
+            {upcomingPreview.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4">
+                <p className="text-sm font-medium">No upcoming bookings</p>
+                <p className="text-sm text-muted-foreground">Browse services when you're ready.</p>
+                <div className="mt-3">
+                  <Button asChild size="sm">
+                    <Link href="/services">Browse Services</Link>
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {upcomingPreview.map((booking) => (
+                  <BookingRow key={booking.id} booking={booking} variant="upcoming" />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="past" className="mt-4">
+            {pastPreview.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4">
+                <p className="text-sm font-medium">No past bookings yet</p>
+                <p className="text-sm text-muted-foreground">Your completed bookings will show here.</p>
+              </div>
+            ) : (
+              <div className="divide-y rounded-md border">
+                {pastPreview.map((booking) => (
+                  <BookingRow key={booking.id} booking={booking} variant="past" />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+        </Tabs>
+      </CardHeader>
+    </Card>
   );
 }
 
@@ -192,25 +226,80 @@ function ReviewReminders({ items }: { items: ReviewPrompt[] }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Review reminders</CardTitle>
-        <CardDescription>Share feedback on recent bookings.</CardDescription>
+        <SectionHeader title="Review reminders" description="Share feedback on recent bookings." />
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-3">
-        {items.map((item) => (
-          <Card key={item.bookingId} className="border shadow-sm">
-            <CardHeader className="space-y-1">
-              <CardTitle className="text-base">{item.serviceTitle}</CardTitle>
-              <CardDescription>{item.providerName ?? "Provider"}</CardDescription>
-              <p className="text-sm text-muted-foreground">Completed {formatDateTime(item.completedAt ?? null)}</p>
-            </CardHeader>
-            <CardFooter>
-              <Link href={item.reviewUrl} className="w-full">
-                <Button className="w-full" size="sm">Write review</Button>
-              </Link>
-            </CardFooter>
-          </Card>
+      <CardContent className="space-y-3">
+        {items.map((item, index) => (
+          <div key={item.bookingId}>
+            {index > 0 ? <Separator className="my-3" /> : null}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">{item.serviceTitle}</p>
+                <p className="text-sm text-muted-foreground">
+                  {item.providerName ?? "Provider"}  Completed {formatDateTime(item.completedAt ?? null)}
+                </p>
+              </div>
+              <Button asChild size="sm">
+                <Link href={item.reviewUrl}>Write review</Link>
+              </Button>
+            </div>
+          </div>
         ))}
       </CardContent>
+    </Card>
+  );
+}
+
+function ServiceCardCompact({
+  title,
+  href,
+  imageUrl,
+  subtitle,
+  priceLabel,
+  badges,
+  footer,
+}: {
+  title: string;
+  href: string;
+  imageUrl: string | null;
+  subtitle?: string;
+  priceLabel?: string;
+  badges?: ReactNode;
+  footer?: ReactNode;
+}) {
+  return (
+    <Card className="w-[280px] overflow-hidden">
+      <div className="relative aspect-video max-h-[170px] w-full bg-muted">
+        {imageUrl ? (
+          <Image
+            src={imageUrl}
+            alt={title}
+            fill
+            sizes="280px"
+            className="object-cover"
+            loading="lazy"
+          />
+        ) : (
+          <Skeleton className="h-full w-full rounded-none" />
+        )}
+      </div>
+
+      <CardHeader className="space-y-2">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <CardTitle className="text-sm font-semibold leading-snug">
+              <Link href={href} className="line-clamp-2 hover:underline">
+                {title}
+              </Link>
+            </CardTitle>
+            {subtitle ? <CardDescription className="line-clamp-1">{subtitle}</CardDescription> : null}
+          </div>
+          {priceLabel ? <div className="shrink-0 text-sm font-semibold">{priceLabel}</div> : null}
+        </div>
+        {badges ? <div className="flex flex-wrap items-center gap-2">{badges}</div> : null}
+      </CardHeader>
+
+      {footer ? <CardFooter className="flex gap-2">{footer}</CardFooter> : null}
     </Card>
   );
 }
@@ -219,15 +308,23 @@ function FavoritesPreview({ items }: { items: CustomerDashboardData["favoritesPr
   if (items.length === 0) {
     return (
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between">
-          <div>
-            <CardTitle>Favorites</CardTitle>
-            <CardDescription>Services you love will appear here.</CardDescription>
-          </div>
-          <Link href="/dashboard/favorites" className="text-sm font-medium text-primary">View all</Link>
+        <CardHeader>
+          <SectionHeader
+            title="Favorites"
+            description="Save services to find them faster next time."
+            actionHref="/dashboard/favorites"
+          />
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No favorites yet.</p>
+          <div className="rounded-md border border-dashed p-4">
+            <p className="text-sm font-medium">No favorites yet</p>
+            <p className="text-sm text-muted-foreground">Tap the heart on any service to save it.</p>
+            <div className="mt-3">
+              <Button asChild size="sm">
+                <Link href="/services">Browse Services</Link>
+              </Button>
+            </div>
+          </div>
         </CardContent>
       </Card>
     );
@@ -235,64 +332,134 @@ function FavoritesPreview({ items }: { items: CustomerDashboardData["favoritesPr
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Favorites</CardTitle>
-          <CardDescription>Your top picks</CardDescription>
-        </div>
-        <Link href="/dashboard/favorites" className="text-sm font-medium text-primary">View all</Link>
+      <CardHeader>
+        <SectionHeader title="Favorites" description="Your saved services" actionHref="/dashboard/favorites" />
       </CardHeader>
       <CardContent>
-        <FavoritesGrid items={items} sort="recent" />
+        <ScrollArea className="w-full">
+          <div className="flex w-max gap-4 pb-4">
+            {items.map((fav) => {
+              const location = [fav.provider.suburb, fav.provider.region].filter(Boolean).join(", ");
+              const ratingLabel = fav.reviewCount > 0 ? `${fav.avgRating.toFixed(1)} (${fav.reviewCount})` : "No reviews";
+              const priceLabel = formatServicePriceLabel({ pricingType: fav.pricingType, priceInCents: fav.priceInCents });
+
+              return (
+                <ServiceCardCompact
+                  key={fav.id}
+                  title={fav.title}
+                  href={`/s/${fav.slug}`}
+                  imageUrl={fav.coverImageUrl}
+                  subtitle={location || undefined}
+                  priceLabel={priceLabel}
+                  badges={
+                    <>
+                      <Badge variant="secondary" className="inline-flex items-center gap-1">
+                        <Star className="h-3.5 w-3.5" /> {ratingLabel}
+                      </Badge>
+                      <Badge variant="outline" className="inline-flex items-center gap-1">
+                        <Heart className="h-3.5 w-3.5" /> Saved
+                      </Badge>
+                    </>
+                  }
+                  footer={
+                    <>
+                      <Button asChild size="sm" variant="outline" className="flex-1">
+                        <Link href={`/s/${fav.slug}`}>View Service</Link>
+                      </Button>
+                      <Button asChild size="sm" className="flex-1">
+                        <Link href={`/s/${fav.slug}#booking`}>Book Now</Link>
+                      </Button>
+                    </>
+                  }
+                />
+              );
+            })}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </CardContent>
     </Card>
   );
 }
 
 function Recommendations({ items }: { items: RecommendationCardData[] }) {
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <Card>
+        <CardHeader>
+          <SectionHeader title="Recommended for you" description="Based on your favorites and bookings" />
+        </CardHeader>
+        <CardContent>
+          <div className="rounded-md border border-dashed p-4">
+            <p className="text-sm font-medium">No recommendations yet</p>
+            <p className="text-sm text-muted-foreground">Browse services to help us tailor suggestions.</p>
+            <div className="mt-3">
+              <Button asChild size="sm">
+                <Link href="/services">Browse Services</Link>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
-        <div>
-          <CardTitle>Recommended for you</CardTitle>
-          <CardDescription>Based on your favorites and bookings</CardDescription>
-        </div>
+      <CardHeader>
+        <SectionHeader title="Recommended for you" description="Based on your favorites and bookings" />
       </CardHeader>
-      <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <CardContent className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {items.map((rec) => {
           const { Icon, color } = getTrustBadge(rec.provider.trustLevel);
+          const priceLabel = formatServicePriceLabel({ pricingType: rec.pricingType, priceInCents: rec.priceInCents });
           return (
-            <Card key={rec.serviceId} className="border shadow-sm">
-              <CardHeader className="space-y-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-base">
-                      <Link href={`/s/${rec.slug}`} className="hover:text-emerald-600">
+            <Card key={rec.serviceId} className="overflow-hidden">
+              <div className="relative aspect-video max-h-[170px] w-full bg-muted">
+                {rec.coverImageUrl ? (
+                  <Image
+                    src={rec.coverImageUrl}
+                    alt={rec.title}
+                    fill
+                    sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
+                    className="object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <Skeleton className="h-full w-full rounded-none" />
+                )}
+              </div>
+
+              <CardHeader className="space-y-2">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <CardTitle className="text-sm font-semibold leading-snug">
+                      <Link href={`/s/${rec.slug}`} className="line-clamp-2 hover:underline">
                         {rec.title}
                       </Link>
                     </CardTitle>
-                    <CardDescription>{rec.provider.name ?? "Provider"}</CardDescription>
+                    <CardDescription className="line-clamp-1">{rec.provider.name ?? "Provider"}</CardDescription>
                   </div>
-                  <Heart className="h-4 w-4 text-emerald-600" />
+                  <div className="shrink-0 text-sm font-semibold">{priceLabel}</div>
                 </div>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Icon className={cn("h-4 w-4", color)} />
-                  {rec.provider.trustLevel}
-                  {rec.provider.isVerified && <Badge variant="secondary">Verified</Badge>}
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="inline-flex items-center gap-1">
+                    <Icon className={cn("h-3.5 w-3.5", color)} />
+                    <span className="capitalize">{rec.provider.trustLevel}</span>
+                  </Badge>
+                  {rec.provider.isVerified ? <Badge variant="secondary">Verified</Badge> : null}
+                  {rec.reason ? <Badge variant="secondary">{rec.reason}</Badge> : null}
                 </div>
               </CardHeader>
-              <CardContent className="space-y-2 text-sm text-muted-foreground">
+
+              <CardContent className="text-sm text-muted-foreground">
                 <p className="line-clamp-2">{rec.description || "Trusted local service."}</p>
-                <div className="flex items-center justify-between text-sm font-semibold text-foreground">
-                  <span>{formatServicePriceLabel({ pricingType: rec.pricingType, priceInCents: rec.priceInCents })}</span>
-                  {rec.reason && <span className="text-xs text-muted-foreground">{rec.reason}</span>}
-                </div>
               </CardContent>
+
               <CardFooter>
-                <Link href={`/s/${rec.slug}`} className="w-full">
-                  <Button className="w-full" size="sm">View service</Button>
-                </Link>
+                <Button asChild size="sm" className="w-full">
+                  <Link href={`/s/${rec.slug}`}>View Service</Link>
+                </Button>
               </CardFooter>
             </Card>
           );
@@ -302,37 +469,167 @@ function Recommendations({ items }: { items: RecommendationCardData[] }) {
   );
 }
 
-export function CustomerDashboardSections({ data }: { data: CustomerDashboardData }) {
+function QuickActions({ unreadNotifications }: { unreadNotifications: number }) {
+  type ActionItem = {
+    href: string;
+    title: string;
+    description: string;
+    Icon: LucideIcon;
+    meta?: ReactNode;
+  };
+
+  const items: ActionItem[] = [
+    {
+      href: "/services",
+      title: "Browse Services",
+      description: "Find and book a local provider.",
+      Icon: Search,
+    },
+    {
+      href: "/dashboard/bookings",
+      title: "My Bookings",
+      description: "Upcoming and past bookings.",
+      Icon: Calendar,
+    },
+    {
+      href: "/dashboard/messages",
+      title: "Messages",
+      description: "Chat with providers.",
+      Icon: MessageSquare,
+      meta:
+        unreadNotifications > 0 ? (
+          <Badge variant="secondary" className="ml-auto">{unreadNotifications}</Badge>
+        ) : null,
+    },
+    {
+      href: "/dashboard/favorites",
+      title: "Favorites",
+      description: "Saved services.",
+      Icon: Heart,
+    },
+  ];
+
   return (
-    <div className="space-y-8">
-      <section className="space-y-4" aria-label="Bookings">
-        <div className="grid gap-6 lg:grid-cols-2">
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <CalendarDays className="h-4 w-4" /> Upcoming bookings
+    <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
+      {items.map(({ href, title, description, Icon, meta }) => (
+        <Link key={href} href={href} className="block h-full">
+          <Card className="h-full transition-colors hover:bg-muted/40">
+            <CardHeader className="space-y-2">
+              <div className="flex items-start gap-3">
+                <div className="mt-0.5 rounded-md border bg-background p-2">
+                  <Icon className="h-4 w-4 text-muted-foreground" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <CardTitle className="text-sm">{title}</CardTitle>
+                    {meta}
+                  </div>
+                  <CardDescription className="line-clamp-1">{description}</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+function Sidebar({ nextBooking }: { nextBooking: BookingCardData | null }) {
+  return (
+    <div className="space-y-6 lg:sticky lg:top-24">
+      <Card>
+        <CardHeader>
+          <SectionHeader title="Become a provider" description="List services and get paid." />
+        </CardHeader>
+        <CardFooter>
+          <Button asChild className="w-full">
+            <Link href="/dashboard/register-provider">Get started</Link>
+          </Button>
+        </CardFooter>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <SectionHeader title="Next booking" />
+        </CardHeader>
+        <CardContent>
+          {nextBooking ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">{nextBooking.serviceTitle}</p>
+              <p className="text-sm text-muted-foreground">{formatDateTime(nextBooking.scheduledAt ?? nextBooking.createdAt)}</p>
+              <div className="flex items-center justify-between">
+                <StatusBadge status={nextBooking.status} />
+                <span className="text-sm font-semibold">{formatBookingPriceLabel(nextBooking.priceInCents)}</span>
+              </div>
+              <div className="pt-2">
+                <Button asChild size="sm" className="w-full">
+                  <Link href={`/dashboard/bookings/${nextBooking.id}`}>View booking</Link>
+                </Button>
+              </div>
             </div>
-            <UpcomingBookings items={data.upcomingBookings} />
-          </div>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm font-semibold text-muted-foreground">
-              <Clock className="h-4 w-4" /> Past bookings
+          ) : (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">No upcoming bookings right now.</p>
+              <Button asChild size="sm" className="w-full">
+                <Link href="/services">Browse Services</Link>
+              </Button>
             </div>
-            <PastBookings items={data.pastBookings} />
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+export function CustomerDashboardSections({ data }: { data: CustomerDashboardData }) {
+  const nextBooking = data.upcomingBookings.length > 0 ? data.upcomingBookings[0] : null;
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader className="space-y-4">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm text-muted-foreground">Dashboard</p>
+              <h1 className="text-2xl font-semibold leading-tight md:text-3xl">Welcome back, {data.user.name}</h1>
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <StatPill label="Active" value={`${data.upcomingBookings.length}`} />
+              <StatPill label="Favorites" value={`${data.favorites.length}`} />
+              <StatPill label="Unread" value={`${data.unreadNotifications}`} />
+            </div>
           </div>
-        </div>
+        </CardHeader>
+      </Card>
+
+      <section aria-label="Quick actions">
+        <QuickActions unreadNotifications={data.unreadNotifications} />
       </section>
 
-      <section aria-label="Review reminders">
-        <ReviewReminders items={data.reviewsDue} />
-      </section>
+      <div className="grid gap-6 lg:grid-cols-12">
+        <main className="space-y-6 lg:col-span-8">
+          <section aria-label="Bookings">
+            <BookingsCard upcoming={data.upcomingBookings} past={data.pastBookings} />
+          </section>
 
-      <section aria-label="Favorites preview">
-        <FavoritesPreview items={data.favoritesPreview} />
-      </section>
+          <section aria-label="Review reminders">
+            <ReviewReminders items={data.reviewsDue} />
+          </section>
 
-      <section aria-label="Recommended services">
-        <Recommendations items={data.recommendations} />
-      </section>
+          <section aria-label="Favorites">
+            <FavoritesPreview items={data.favoritesPreview} />
+          </section>
+
+          <section aria-label="Recommended services">
+            <Recommendations items={data.recommendations} />
+          </section>
+        </main>
+
+        <aside className="lg:col-span-4">
+          <Sidebar nextBooking={nextBooking} />
+        </aside>
+      </div>
     </div>
   );
 }
