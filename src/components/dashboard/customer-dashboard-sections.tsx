@@ -110,28 +110,34 @@ function BookingRow({ booking, variant }: { booking: BookingCardData; variant: "
         : "Completed";
 
   return (
-    <div className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <div className="min-w-0 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <Link href={`/dashboard/bookings/${booking.id}`} className="font-medium hover:underline">
+    <div className="grid gap-3 px-4 py-4 sm:grid-cols-[1fr_auto] sm:items-center">
+      <div className="min-w-0 space-y-1.5">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Link
+            href={`/dashboard/bookings/${booking.id}`}
+            className="min-w-0 flex-1 truncate font-medium hover:underline"
+            title={booking.serviceTitle}
+          >
             {booking.serviceTitle}
           </Link>
           <StatusBadge status={booking.status} />
         </div>
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
           <span className="inline-flex items-center gap-1">
             {variant === "upcoming" ? <CalendarDays className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
             {dateLabel}
           </span>
           <span className="font-medium text-foreground">{formatBookingPriceLabel(booking.priceInCents)}</span>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
           <span className="text-xs text-muted-foreground">{booking.providerName ?? "Provider"}</span>
           <TrustLine trustLevel={booking.providerTrustLevel} isVerified={booking.providerVerified} />
         </div>
       </div>
 
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+      <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">
         {variant === "past" ? (
           <>
             {!booking.hasReview ? (
@@ -139,18 +145,18 @@ function BookingRow({ booking, variant }: { booking: BookingCardData; variant: "
                 <Link href={`/dashboard/bookings/${booking.id}/review`}>Review Now</Link>
               </Button>
             ) : (
-              <Badge variant="secondary" className="inline-flex items-center gap-1">
+              <Badge variant="secondary" className="h-8 px-3 inline-flex items-center gap-1">
                 <Star className="h-3.5 w-3.5" /> Reviewed
               </Badge>
             )}
-            <Button asChild size="sm" variant="outline">
+            <Button asChild size="sm" variant="outline" className="h-8">
               <Link href={`/dashboard/bookings/${booking.id}/receipt`}>
                 <FileText className="mr-2 h-4 w-4" /> View Receipt
               </Link>
             </Button>
           </>
         ) : (
-          <Button asChild size="sm" variant="outline">
+          <Button asChild size="sm" variant="outline" className="h-8">
             <Link href={`/dashboard/bookings/${booking.id}`}>View Booking</Link>
           </Button>
         )}
