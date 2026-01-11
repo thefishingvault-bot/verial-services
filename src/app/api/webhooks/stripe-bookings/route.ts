@@ -8,6 +8,20 @@ import { bookings } from "@/db/schema";
 
 export const runtime = "nodejs";
 
+/**
+ * Stripe bookings webhook (platform / "Your account" events)
+ *
+ * Stripe Dashboard wiring (staging/prod):
+ * - Create an Event Destination (or webhook endpoint) for "Your account" events (NOT connected accounts)
+ * - Endpoint URL: https://<your-domain>/api/webhooks/stripe-bookings
+ * - Events:
+ *   - checkout.session.completed
+ *   - payment_intent.succeeded
+ *   - payment_intent.payment_failed (optional)
+ *   - checkout.session.async_payment_succeeded / checkout.session.async_payment_failed (optional)
+ * - Put the signing secret into STRIPE_BOOKINGS_WEBHOOK_SECRET (do not hardcode)
+ */
+
 async function markBookingPaid(params: {
   source: string;
   eventId: string;
@@ -79,7 +93,8 @@ export async function POST(req: Request) {
 
   try {
     switch (event.type) {
-      case "checkout.session.completed": {
+      case "checkout.session.completed":
+      case "checkout.session.async_payment_succeeded": {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.mode !== "payment") break;
 
@@ -96,7 +111,13 @@ export async function POST(req: Request) {
           mode: session.mode,
         });
 
-        if (!bookingId) break;
+        if (!bookingId) {
+          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+            eventId: event.id,
+            type: event.type,
+          });
+          break;
+        }
 
         await markBookingPaid({
           source: event.type,
@@ -105,6 +126,31 @@ export async function POST(req: Request) {
           paymentIntentId,
         });
 
+        break;
+      }
+
+      case "checkout.session.async_payment_failed": {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const bookingId = (session.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
+        const paymentIntentId =
+          typeof session.payment_intent === "string"
+            ? session.payment_intent
+            : session.payment_intent?.id ?? null;
+
+        console.info("[API_STRIPE_BOOKINGS_WEBHOOK] checkout.session.async_payment_failed", {
+          eventId: event.id,
+          bookingId,
+          paymentIntentId,
+        });
+
+        if (!bookingId) {
+          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+            eventId: event.id,
+            type: event.type,
+          });
+        }
+
+        // Intentionally no DB change; booking remains accepted.
         break;
       }
 
@@ -118,7 +164,14 @@ export async function POST(req: Request) {
           paymentIntentId: pi.id,
         });
 
-        if (!bookingId) break;
+        if (!bookingId) {
+          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+            eventId: event.id,
+            type: event.type,
+            paymentIntentId: pi.id,
+          });
+          break;
+        }
 
         await markBookingPaid({
           source: event.type,
@@ -140,6 +193,14 @@ export async function POST(req: Request) {
           paymentIntentId: pi.id,
           status: pi.status,
         });
+
+        if (!bookingId) {
+          console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Missing metadata.bookingId", {
+            eventId: event.id,
+            type: event.type,
+            paymentIntentId: pi.id,
+          });
+        }
 
         // Intentionally no DB change; booking remains accepted.
         break;

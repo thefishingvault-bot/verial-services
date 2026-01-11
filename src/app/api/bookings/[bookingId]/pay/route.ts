@@ -41,6 +41,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       priceAtBooking: true,
       providerId: true,
       serviceId: true,
+      providerQuotedPrice: true,
     },
   });
 
@@ -53,7 +54,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     return new NextResponse(`Cannot pay for booking with status: ${booking.status}`, { status: 400 });
   }
 
-  const amount = booking.priceAtBooking;
+  const service = await db.query.services.findFirst({
+    where: eq(services.id, booking.serviceId),
+    columns: { title: true, pricingType: true },
+  });
+
+  const pricingType = service?.pricingType ?? "fixed";
+  const requiresQuote = pricingType === "from" || pricingType === "quote";
+
+  const amount = requiresQuote
+    ? booking.providerQuotedPrice ?? null
+    : booking.priceAtBooking;
+
+  if (requiresQuote && (!amount || amount < 100)) {
+    return new NextResponse("Waiting for provider quote", { status: 400 });
+  }
+
   if (!amount || amount < 100) {
     return new NextResponse("Amount must be at least $1.00 NZD", { status: 400 });
   }
@@ -66,11 +82,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
   if (!provider?.stripeConnectId) {
     return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
   }
-
-  const service = await db.query.services.findFirst({
-    where: eq(services.id, booking.serviceId),
-    columns: { title: true },
-  });
 
   const siteUrl = getSiteUrl(req);
 

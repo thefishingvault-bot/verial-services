@@ -85,7 +85,7 @@ export async function PATCH(req: Request) {
     const booking = await db.query.bookings.findFirst({
       where: and(eq(bookings.id, bookingId), eq(bookings.providerId, provider.id)),
       with: {
-        service: { columns: { title: true } },
+        service: { columns: { title: true, pricingType: true } },
       },
       columns: {
         id: true,
@@ -111,14 +111,19 @@ export async function PATCH(req: Request) {
     // If accepting, re-check availability/time-off and overlap.
 
     if (action === "accept") {
-      let amountInCents = booking.priceAtBooking;
-      const isQuoteFlow = !amountInCents;
+      const pricingType = booking.service?.pricingType ?? "fixed";
+      const requiresQuote = pricingType === "from" || pricingType === "quote";
 
-      // Quote flow: customer requested without a price. Provider must set final price on accept.
-      if (!amountInCents) {
-        const n = typeof finalPriceInCents === 'number' ? Math.round(finalPriceInCents) : NaN;
+      let amountInCents = booking.priceAtBooking;
+
+      // From/Quote flow: provider must set the final payable amount on accept.
+      if (requiresQuote) {
+        const n = typeof finalPriceInCents === "number" ? Math.round(finalPriceInCents) : NaN;
         if (!Number.isFinite(n) || n < 100) {
-          return new NextResponse('Final price (in cents) is required to accept quote requests (min $1.00).', { status: 400 });
+          return new NextResponse(
+            "Final price (in cents) is required to accept from/quote requests (min $1.00).",
+            { status: 400 },
+          );
         }
         amountInCents = n;
       }
@@ -184,7 +189,7 @@ export async function PATCH(req: Request) {
         .set({
           status: targetStatus,
           priceAtBooking: amountInCents,
-          providerQuotedPrice: isQuoteFlow ? amountInCents : null,
+          providerQuotedPrice: requiresQuote ? amountInCents : null,
           providerMessage,
           // Payment is created by the customer after accept (platform charge held until completion).
           paymentIntentId: booking.paymentIntentId ?? null,

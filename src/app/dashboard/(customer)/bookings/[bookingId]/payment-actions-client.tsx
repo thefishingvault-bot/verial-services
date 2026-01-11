@@ -9,8 +9,10 @@ export function PaymentActionsClient(props: {
   bookingId: string;
   status: string;
   viewerIsCustomer: boolean;
+  pricingType: 'fixed' | 'from' | 'quote';
+  providerQuotedPrice: number | null;
 }) {
-  const { bookingId, status, viewerIsCustomer } = props;
+  const { bookingId, status, viewerIsCustomer, pricingType, providerQuotedPrice } = props;
   const router = useRouter();
 
   const [isLoading, setIsLoading] = useState(false);
@@ -59,12 +61,21 @@ export function PaymentActionsClient(props: {
     }
   };
 
+  const requiresQuote = pricingType === 'from' || pricingType === 'quote';
+  const quoteReady = providerQuotedPrice != null && providerQuotedPrice >= 100;
+
   return (
     <div className="flex flex-col gap-2">
       {status === 'accepted' && (
-        <Button onClick={handlePayNow} disabled={isLoading}>
-          Pay now to confirm
-        </Button>
+        requiresQuote && !quoteReady ? (
+          <Button variant="outline" disabled>
+            Waiting for provider quote
+          </Button>
+        ) : (
+          <Button onClick={handlePayNow} disabled={isLoading}>
+            Pay now to confirm
+          </Button>
+        )
       )}
 
       {status === 'completed_by_provider' && (

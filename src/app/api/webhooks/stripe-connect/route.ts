@@ -1,6 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings, providerEarnings, providerPayouts, providers } from "@/db/schema";
+import { providerEarnings, providerPayouts, providers } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -8,43 +8,6 @@ import { createNotification } from "@/lib/notifications";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
-
-async function markBookingPaid(params: {
-  source: string;
-  bookingId: string;
-  paymentIntentId: string | null;
-  eventId: string;
-}) {
-  const { source, bookingId, paymentIntentId, eventId } = params;
-
-  if (!bookingId) return;
-  if (!paymentIntentId) {
-    console.info("[API_STRIPE_CONNECT_WEBHOOK] Payment event missing paymentIntentId", {
-      source,
-      bookingId,
-      eventId,
-    });
-    return;
-  }
-
-  const rows = await db
-    .update(bookings)
-    .set({
-      status: "paid",
-      paymentIntentId,
-      updatedAt: new Date(),
-    })
-    .where(and(eq(bookings.id, bookingId), eq(bookings.status, "accepted")))
-    .returning({ id: bookings.id, status: bookings.status, paymentIntentId: bookings.paymentIntentId });
-
-  console.info("[API_STRIPE_CONNECT_WEBHOOK] Booking marked paid", {
-    source,
-    bookingId,
-    paymentIntentId,
-    eventId,
-    updated: rows.length > 0,
-  });
-}
 
 function mapPayoutStatus(status: string) {
   switch (status) {
@@ -405,124 +368,55 @@ export async function POST(req: Request) {
 
   // Handle the event
   switch (event.type as string) {
-    case "checkout.session.completed": {
-      const session = event.data.object as Stripe.Checkout.Session;
-
-      const bookingId = (session.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
-      const paymentIntentId =
-        typeof session.payment_intent === "string"
-          ? session.payment_intent
-          : session.payment_intent?.id ?? null;
-
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] checkout.session.completed", {
-        eventId: event.id,
-        bookingId,
-        paymentIntentId,
-        mode: session.mode,
-      });
-
-      if (!bookingId) break;
-
-      // Best-effort: do not throw if bookingId/paymentIntentId missing.
-      await markBookingPaid({
-        source: event.type,
-        bookingId,
-        paymentIntentId,
-        eventId: event.id,
-      });
-      break;
-    }
-
-    case "payment_intent.succeeded": {
-      const pi = event.data.object as Stripe.PaymentIntent;
-      const bookingId = (pi.metadata as Record<string, string> | null | undefined)?.bookingId ?? null;
-
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] payment_intent.succeeded", {
-        eventId: event.id,
-        bookingId,
-        paymentIntentId: pi.id,
-      });
-
-      if (!bookingId) break;
-
-      await markBookingPaid({
-        source: event.type,
-        bookingId,
-        paymentIntentId: pi.id,
-        eventId: event.id,
-      });
-      break;
-    }
-
     case "account.updated": {
       const account = event.data.object as Stripe.Account;
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] account.updated", { accountId: account.id, eventId: event.id });
-      await updateProviderFromAccount({ account, eventId: event.id });
-      break;
-    }
 
-    case "capability.updated": {
-      const capability = event.data.object as Stripe.Capability;
-      const accountId = typeof capability.account === "string" ? capability.account : capability.account?.id;
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] capability.updated", { accountId, eventId: event.id });
-      if (accountId) {
-        const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
-        await updateProviderFromAccount({ account, eventId: event.id });
+      const result = await updateProviderFromAccount({ account, eventId: event.id });
+      if (!result.ok) {
+        console.warn("[API_STRIPE_CONNECT_WEBHOOK] account.updated did not match provider", {
+          eventId: event.id,
+          stripeConnectId: result.stripeConnectId,
+          reason: result.reason,
+        });
       }
-      break;
-    }
 
-    case "person.updated": {
-      const person = event.data.object as Stripe.Person;
-      const accountRef = (person as unknown as { account?: string | Stripe.Account | null }).account;
-      const accountId = typeof accountRef === "string" ? accountRef : accountRef?.id;
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] person.updated", { accountId, eventId: event.id });
-      if (accountId) {
-        const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
-        await updateProviderFromAccount({ account, eventId: event.id });
-      }
-      break;
-    }
-
-    case "account.external_account.updated": {
-      const external = event.data.object as Stripe.BankAccount | Stripe.Card;
-      const accountRef = (external as unknown as { account?: string | Stripe.Account | null }).account;
-      const accountId = typeof accountRef === "string" ? accountRef : accountRef?.id;
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] account.external_account.updated", { accountId, eventId: event.id });
-      if (accountId) {
-        const account = (await stripe.accounts.retrieve(accountId)) as Stripe.Account;
-        await updateProviderFromAccount({ account, eventId: event.id });
-      }
       break;
     }
 
     case "account.application.deauthorized": {
-      const obj: unknown = event.data.object as unknown;
       const accountId =
-        obj &&
-        typeof obj === "object" &&
-        "account" in obj &&
-        typeof (obj as { account?: unknown }).account === "string"
-          ? ((obj as { account: string }).account ?? undefined)
-          : undefined;
-      console.info("[API_STRIPE_CONNECT_WEBHOOK] account.application.deauthorized", { accountId, eventId: event.id });
-      if (accountId) {
-        const provider = await db.query.providers.findFirst({
-          where: eq(providers.stripeConnectId, accountId),
-          columns: { id: true },
-        });
+        typeof event.account === "string"
+          ? event.account
+          : (event.data.object as { id?: string } | null)?.id ?? null;
 
-        if (provider) {
-          await db
-            .update(providers)
-            .set({
-              chargesEnabled: false,
-              payoutsEnabled: false,
-              updatedAt: new Date(),
-            })
-            .where(eq(providers.id, provider.id));
-        }
+      console.info("[API_STRIPE_CONNECT_WEBHOOK] account.application.deauthorized", {
+        accountId,
+        eventId: event.id,
+      });
+
+      if (!accountId) {
+        console.warn("[API_STRIPE_CONNECT_WEBHOOK] Missing connect account id for deauthorized event", {
+          eventId: event.id,
+        });
+        break;
       }
+
+      const provider = await db.query.providers.findFirst({
+        where: eq(providers.stripeConnectId, accountId),
+        columns: { id: true },
+      });
+
+      if (provider) {
+        await db
+          .update(providers)
+          .set({
+            chargesEnabled: false,
+            payoutsEnabled: false,
+            updatedAt: new Date(),
+          })
+          .where(eq(providers.id, provider.id));
+      }
+
       break;
     }
 

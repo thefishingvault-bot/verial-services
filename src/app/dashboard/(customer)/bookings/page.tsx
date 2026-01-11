@@ -28,7 +28,8 @@ interface CustomerBooking {
   createdAt: string;
   scheduledDate?: string | null;
   priceAtBooking: number;
-  service: { title: string; slug: string };
+  providerQuotedPrice?: number | null;
+  service: { title: string; slug: string; pricingType: 'fixed' | 'from' | 'quote' };
   provider: {
     id: string;
     businessName: string;
@@ -176,11 +177,7 @@ export default function CustomerBookingsPage() {
   }, []);
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      void fetchBookings({ showLoader: true });
-    }, 0);
-
-    return () => clearTimeout(timeoutId);
+    void fetchBookings({ showLoader: true });
   }, [fetchBookings]);
 
   useEffect(() => {
@@ -207,40 +204,44 @@ export default function CustomerBookingsPage() {
     if (handledStripeReturn.current) return;
     handledStripeReturn.current = true;
 
-    // Prevent the Stripe return handler from re-triggering later.
-    window.history.replaceState(null, '', '/dashboard/bookings');
-
-    // Silent refresh: don't show the big loader/spinner.
-    void fetchBookings({ showLoader: false });
-
-    // Deterministic fallback: if we know which booking was just paid, confirm with Stripe server-side.
-    if (stripeReturnBookingId) {
-      void fetch(`/api/bookings/${encodeURIComponent(stripeReturnBookingId)}/sync-payment`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId: stripeReturnSessionId }),
-        cache: 'no-store',
-      }).catch(() => {
-        // ignore
-      });
-    }
-
-    // Webhooks can lag slightly; poll briefly to pick up the paid status.
-    const startedAt = Date.now();
-    const interval = window.setInterval(async () => {
-      const latest = await fetchBookings({ showLoader: false });
-
-      const target = stripeReturnBookingId
-        ? latest?.find((booking) => booking.id === stripeReturnBookingId) ?? null
-        : null;
-
-      if (target?.status === 'paid' || Date.now() - startedAt >= 8000) {
-        window.clearInterval(interval);
+    const run = async () => {
+      // 1) Best-effort: sync server-side first.
+      if (stripeReturnBookingId) {
+        try {
+          await fetch(`/api/bookings/${encodeURIComponent(stripeReturnBookingId)}/sync-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: stripeReturnSessionId }),
+            cache: 'no-store',
+          });
+        } catch {
+          // ignore
+        }
       }
-    }, 1200);
 
-    return () => window.clearInterval(interval);
-  }, [stripeReturnSignal, stripeReturnBookingId, stripeReturnSessionId, fetchBookings]);
+      // 2) Remove success params so it doesn't re-trigger.
+      router.replace('/dashboard/bookings', { scroll: false });
+
+      // 3) Silent refresh from API (source of truth).
+      await fetchBookings({ showLoader: false });
+
+      // 4) Poll briefly to pick up webhook-driven updates; stop early once paid.
+      const startedAt = Date.now();
+      const interval = window.setInterval(async () => {
+        const latest = await fetchBookings({ showLoader: false });
+
+        const target = stripeReturnBookingId
+          ? latest?.find((booking) => booking.id === stripeReturnBookingId) ?? null
+          : null;
+
+        if (target?.status === 'paid' || Date.now() - startedAt >= 8000) {
+          window.clearInterval(interval);
+        }
+      }, 1200);
+    };
+
+    void run();
+  }, [stripeReturnSignal, stripeReturnBookingId, stripeReturnSessionId, fetchBookings, router]);
 
   const handlePayNow = async (booking: CustomerBooking) => {
     setIsLoading(true);
@@ -372,7 +373,13 @@ export default function CustomerBookingsPage() {
                   </Badge>
                   <div className="text-right">
                     <p className="text-xs font-medium text-muted-foreground">Price</p>
-                    <p className="font-semibold leading-tight">{formatPrice(booking.priceAtBooking)}</p>
+                    <p className="font-semibold leading-tight">
+                      {formatPrice(
+                        booking.providerQuotedPrice != null && booking.providerQuotedPrice > 0
+                          ? booking.providerQuotedPrice
+                          : booking.priceAtBooking,
+                      )}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -419,9 +426,16 @@ export default function CustomerBookingsPage() {
                 )}
                 {booking.status === 'accepted' && (
                   <>
-                    <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
-                      Pay now
-                    </Button>
+                    {booking.service.pricingType !== 'fixed' &&
+                    (booking.providerQuotedPrice == null || booking.providerQuotedPrice < 100) ? (
+                      <Button variant="outline" disabled className="w-full sm:w-auto">
+                        Waiting for quote
+                      </Button>
+                    ) : (
+                      <Button onClick={() => handlePayNow(booking)} className="w-full sm:w-auto">
+                        Pay now
+                      </Button>
+                    )}
                     <Button
                       variant="outline"
                       onClick={() => handleCancel(booking.id)}

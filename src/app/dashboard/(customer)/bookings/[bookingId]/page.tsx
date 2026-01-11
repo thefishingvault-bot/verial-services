@@ -64,6 +64,7 @@ type LoadedBooking = {
     id: string;
     title: string;
     slug: string;
+    pricingType: "fixed" | "from" | "quote";
   };
   provider: {
     id: string;
@@ -264,7 +265,7 @@ async function loadBooking(
     },
     with: {
       service: {
-        columns: { id: true, title: true, slug: true },
+        columns: { id: true, title: true, slug: true, pricingType: true },
       },
       provider: {
         columns: { id: true, businessName: true, handle: true, isVerified: true, chargesGst: true },
@@ -558,7 +559,13 @@ export default async function BookingDetailPage({
         </CardHeader>
         <CardContent className="flex flex-wrap gap-3">
           {showCancel && <CancelBookingButton bookingId={booking.id} disabled={!showCancel} />}
-          <PaymentActionsClient bookingId={booking.id} status={booking.status} viewerIsCustomer={viewerIsCustomer} />
+          <PaymentActionsClient
+            bookingId={booking.id}
+            status={booking.status}
+            viewerIsCustomer={viewerIsCustomer}
+            pricingType={service.pricingType}
+            providerQuotedPrice={booking.providerQuotedPrice}
+          />
           {viewerIsCustomer && (
             <Link href={`/dashboard/messages/${booking.id}`}>
               <Button variant="secondary">

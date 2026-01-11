@@ -19,7 +19,7 @@ export async function GET() {
       where: eq(bookings.userId, userId),
       with: {
         service: {
-          columns: { title: true, slug: true },
+          columns: { title: true, slug: true, pricingType: true },
         },
         provider: {
           columns: {
