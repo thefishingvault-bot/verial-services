@@ -4,8 +4,10 @@ import { eq } from "drizzle-orm";
 
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings } from "@/db/schema";
+import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, normalizeStatus, type BookingStatus } from "@/lib/booking-state";
+import { calculateEarnings } from "@/lib/earnings";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 export const runtime = "nodejs";
 
@@ -131,6 +133,107 @@ async function resolveBookingIdFromPaymentIntent(params: {
   return byPi?.id ?? null;
 }
 
+async function upsertProviderEarningsHeld(params: {
+  source: string;
+  eventId: string;
+  bookingId: string;
+  paymentIntentId: string;
+  amountChargedInCents?: number | null;
+}) {
+  const { source, eventId, bookingId, paymentIntentId, amountChargedInCents } = params;
+
+  const booking = await db
+    .select({
+      id: bookings.id,
+      providerId: bookings.providerId,
+      serviceId: bookings.serviceId,
+      priceAtBooking: bookings.priceAtBooking,
+      serviceChargesGst: services.chargesGst,
+      providerChargesGst: providers.chargesGst,
+      providerPlan: providers.plan,
+    })
+    .from(bookings)
+    .leftJoin(services, eq(services.id, bookings.serviceId))
+    .leftJoin(providers, eq(providers.id, bookings.providerId))
+    .where(eq(bookings.id, bookingId))
+    .then((rows) => rows[0]);
+
+  if (!booking) {
+    console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Earnings upsert skipped: booking not found", {
+      source,
+      eventId,
+      bookingId,
+      paymentIntentId,
+    });
+    return { upserted: false };
+  }
+
+  const amountCandidate =
+    (Number.isFinite(amountChargedInCents ?? NaN) ? (amountChargedInCents as number) : null) ??
+    (Number.isFinite(booking.priceAtBooking ?? NaN) ? (booking.priceAtBooking as number) : null);
+
+  if (!amountCandidate || amountCandidate <= 0) {
+    console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Earnings upsert skipped: invalid amount", {
+      source,
+      eventId,
+      bookingId,
+      paymentIntentId,
+      amountChargedInCents: amountChargedInCents ?? null,
+      priceAtBooking: booking.priceAtBooking ?? null,
+    });
+    return { upserted: false };
+  }
+
+  const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
+  const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));
+
+  const breakdown = calculateEarnings({
+    amountInCents: amountCandidate,
+    chargesGst,
+    platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
+  });
+
+  await db
+    .insert(providerEarnings)
+    .values({
+      id: `earn_${bookingId}`,
+      bookingId,
+      providerId: booking.providerId,
+      serviceId: booking.serviceId,
+      grossAmount: breakdown.grossAmount,
+      platformFeeAmount: breakdown.platformFeeAmount,
+      gstAmount: breakdown.gstAmount,
+      netAmount: breakdown.netAmount,
+      status: "held",
+      stripePaymentIntentId: paymentIntentId,
+      stripeTransferId: null,
+      paidAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: providerEarnings.bookingId,
+      set: {
+        grossAmount: breakdown.grossAmount,
+        platformFeeAmount: breakdown.platformFeeAmount,
+        gstAmount: breakdown.gstAmount,
+        netAmount: breakdown.netAmount,
+        status: "held",
+        stripePaymentIntentId: paymentIntentId,
+        stripeTransferId: null,
+        updatedAt: new Date(),
+      },
+    });
+
+  console.info("[API_STRIPE_BOOKINGS_WEBHOOK] Earnings upserted", {
+    source,
+    eventId,
+    bookingId,
+    paymentIntentId,
+  });
+
+  return { upserted: true };
+}
+
 export async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature") ?? req.headers.get("Stripe-Signature");
@@ -205,6 +308,16 @@ export async function POST(req: Request) {
           paymentIntentId,
         });
 
+        if (paymentIntentId) {
+          await upsertProviderEarningsHeld({
+            source: event.type,
+            eventId: event.id,
+            bookingId,
+            paymentIntentId,
+            amountChargedInCents: typeof session.amount_total === "number" ? session.amount_total : null,
+          });
+        }
+
         break;
       }
 
@@ -262,6 +375,17 @@ export async function POST(req: Request) {
           eventId: event.id,
           bookingId,
           paymentIntentId: pi.id,
+        });
+
+        await upsertProviderEarningsHeld({
+          source: event.type,
+          eventId: event.id,
+          bookingId,
+          paymentIntentId: pi.id,
+          amountChargedInCents:
+            typeof (pi as unknown as { amount_received?: unknown }).amount_received === "number"
+              ? ((pi as unknown as { amount_received: number }).amount_received || pi.amount)
+              : pi.amount,
         });
 
         break;

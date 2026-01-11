@@ -44,16 +44,20 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       return NextResponse.json({ ok: true, booking: { id: booking.id, status: "completed" } });
     }
     if (normalizedStatus !== "completed_by_provider") {
-      return new NextResponse(`Cannot confirm completion for status: ${booking.status}`, { status: 400 });
+      return new NextResponse(`Cannot confirm completion for status: ${booking.status}`, { status: 409 });
     }
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.id, booking.providerId),
-      columns: { id: true, stripeConnectId: true, chargesGst: true, plan: true },
+      columns: { id: true, stripeConnectId: true, chargesGst: true, plan: true, payoutsEnabled: true },
     });
 
     if (!provider?.stripeConnectId) {
       return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
+    }
+
+    if (!provider.payoutsEnabled) {
+      return new NextResponse("Provider payouts are not enabled", { status: 400 });
     }
 
     const service = await db.query.services.findFirst({
@@ -153,7 +157,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       bookingId: booking.id,
       bookingStatus: booking.status,
       earningStatus: effectiveEarning.status,
-      hasTransfer: !!effectiveEarning.stripeTransferId,
+      stripeTransferId: effectiveEarning.stripeTransferId,
+      connectId: provider.stripeConnectId,
+      payoutsEnabled: provider.payoutsEnabled,
     });
 
     if (!Number.isFinite(effectiveEarning.netAmount) || effectiveEarning.netAmount <= 0) {
@@ -231,14 +237,14 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
 
       return new NextResponse(
         "Unable to release provider payout right now. Please try again shortly or contact support.",
-        { status: 409 },
+        { status: 502 },
       );
     }
 
     await db
       .update(providerEarnings)
       .set({
-        status: "transferred",
+        status: "awaiting_payout",
         stripeTransferId: transferId,
         transferredAt: new Date(),
         updatedAt: new Date(),
