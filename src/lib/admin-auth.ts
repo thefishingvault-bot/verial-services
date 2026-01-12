@@ -38,7 +38,7 @@ export async function requireAdmin() {
 
   const role = await resolveRole(userId, sessionClaims as SessionClaims | null | undefined);
   if (role !== "admin") {
-    return { isAdmin: false as const, response: new Response("Unauthorized", { status: 401 }) };
+    return { isAdmin: false as const, response: new Response("Forbidden", { status: 403 }) };
   }
 
   return { isAdmin: true as const, userId, sessionClaims, role };

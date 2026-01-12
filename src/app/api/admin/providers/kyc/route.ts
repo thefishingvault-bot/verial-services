@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { and, asc, desc, eq, gte, inArray, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, isNotNull, lte, or, sql } from "drizzle-orm";
 import { bookings, providers, reviews, trustIncidents, users } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProvidersKycQuerySchema, invalidResponse, parseQuery } from "@/lib/validation/admin";
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";
+
+type KycRiskLevel = "low" | "medium" | "high" | "critical";
+type KycDocStatusKey =
+  | "identity_missing"
+  | "business_missing"
+  | "bank_missing"
+  | "any_missing"
+  | "any_pending"
+  | "all_verified";
+
+const parseOptionalDate = (value: string | undefined) => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return date;
+};
+
+const lowerLike = (col: unknown, needle: string) => {
+  // Postgres: lower(col) LIKE %lower(needle)%
+  const pattern = `%${needle.toLowerCase()}%`;
+  return sql<boolean>`LOWER(${col as any}) LIKE ${pattern}`;
+};
 
 export async function GET(request: NextRequest) {
   try {
@@ -15,18 +37,213 @@ export async function GET(request: NextRequest) {
     const queryResult = parseQuery(ProvidersKycQuerySchema, request);
     if (!queryResult.ok) return invalidResponse(queryResult.error);
 
-    const sort = queryResult.data.sort as SortOption;
-    const order = queryResult.data.order as "asc" | "desc";
+    const {
+      page,
+      pageSize,
+      search,
+      kycStatus,
+      riskLevel,
+      docStatus,
+      submittedFrom,
+      submittedTo,
+      kycAgeMin,
+      kycAgeMax,
+      sort,
+      order,
+    } = queryResult.data as {
+      page: number;
+      pageSize: number;
+      search?: string;
+      kycStatus?: string[];
+      riskLevel?: KycRiskLevel[];
+      docStatus?: KycDocStatusKey[];
+      submittedFrom?: string;
+      submittedTo?: string;
+      kycAgeMin?: number;
+      kycAgeMax?: number;
+      sort: SortOption;
+      order: "asc" | "desc";
+    };
 
-    // Build sort clause
+    const parsedFrom = parseOptionalDate(submittedFrom);
+    if (parsedFrom === null) return invalidResponse({ formErrors: ["Invalid submittedFrom"], fieldErrors: {} });
+    const parsedTo = parseOptionalDate(submittedTo);
+    if (parsedTo === null) return invalidResponse({ formErrors: ["Invalid submittedTo"], fieldErrors: {} });
+
+    const offset = (page - 1) * pageSize;
+
+    const bookingAgg = db
+      .select({
+        providerId: bookings.providerId,
+        totalBookings: sql<number>`COUNT(*)`,
+        completedBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} = 'completed')`,
+        canceledBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} IN ('canceled_customer', 'canceled_provider'))`,
+      })
+      .from(bookings)
+      .groupBy(bookings.providerId)
+      .as("booking_agg");
+
+    const reviewAgg = db
+      .select({
+        providerId: reviews.providerId,
+        totalReviews: sql<number>`COUNT(*) FILTER (WHERE ${reviews.isHidden} = false)`,
+        avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+      })
+      .from(reviews)
+      .groupBy(reviews.providerId)
+      .as("review_agg");
+
+    const incidentAgg = db
+      .select({
+        providerId: trustIncidents.providerId,
+        totalIncidents: sql<number>`COUNT(*)`,
+        unresolvedIncidents: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`,
+      })
+      .from(trustIncidents)
+      .groupBy(trustIncidents.providerId)
+      .as("incident_agg");
+
+    const totalBookingsExpr = sql<number>`COALESCE(${bookingAgg.totalBookings}, 0)`;
+    const completedBookingsExpr = sql<number>`COALESCE(${bookingAgg.completedBookings}, 0)`;
+    const canceledBookingsExpr = sql<number>`COALESCE(${bookingAgg.canceledBookings}, 0)`;
+    const unresolvedIncidentsExpr = sql<number>`COALESCE(${incidentAgg.unresolvedIncidents}, 0)`;
+
+    const completionRateExpr = sql<number>`CASE WHEN ${totalBookingsExpr} > 0 THEN (${completedBookingsExpr}::float / ${totalBookingsExpr}::float) * 100 ELSE 0 END`;
+    const cancellationRateExpr = sql<number>`CASE WHEN ${totalBookingsExpr} > 0 THEN (${canceledBookingsExpr}::float / ${totalBookingsExpr}::float) * 100 ELSE 0 END`;
+
+    const kycAgeExpr = sql<number>`CASE WHEN ${providers.kycSubmittedAt} IS NOT NULL THEN FLOOR(EXTRACT(EPOCH FROM (NOW() - ${providers.kycSubmittedAt})) / 86400) ELSE 0 END`;
+
+    const identityStatusExpr = sql<"pending" | "verified" | "rejected" | "missing">`
+      CASE
+        WHEN ${providers.identityDocumentUrl} IS NULL THEN 'missing'
+        WHEN ${providers.kycStatus} = 'verified' THEN 'verified'
+        WHEN ${providers.kycStatus} = 'rejected' THEN 'rejected'
+        ELSE 'pending'
+      END
+    `;
+    const businessStatusExpr = sql<"pending" | "verified" | "rejected" | "missing">`
+      CASE
+        WHEN ${providers.businessDocumentUrl} IS NULL THEN 'missing'
+        WHEN ${providers.kycStatus} = 'verified' THEN 'verified'
+        WHEN ${providers.kycStatus} = 'rejected' THEN 'rejected'
+        ELSE 'pending'
+      END
+    `;
+    const bankStatusExpr = sql<"pending" | "verified" | "rejected" | "missing">`
+      CASE
+        WHEN ${providers.stripeConnectId} IS NULL THEN 'missing'
+        WHEN ${providers.chargesEnabled} = true AND ${providers.payoutsEnabled} = true THEN 'verified'
+        ELSE 'pending'
+      END
+    `;
+
+    const missingDocsCountExpr = sql<number>`
+      (CASE WHEN ${identityStatusExpr} = 'missing' THEN 1 ELSE 0 END)
+      + (CASE WHEN ${businessStatusExpr} = 'missing' THEN 1 ELSE 0 END)
+      + (CASE WHEN ${bankStatusExpr} = 'missing' THEN 1 ELSE 0 END)
+    `;
+
+    const riskScoreExpr = sql<number>`
+      (
+        0
+        + (CASE WHEN ${providers.kycStatus} = 'rejected' THEN 50 ELSE 0 END)
+        + (CASE WHEN ${providers.kycStatus} = 'pending_review' AND ${kycAgeExpr} > 30 THEN 20 ELSE 0 END)
+        + (${missingDocsCountExpr} * 10)
+        + (CASE WHEN ${completionRateExpr} < 70 THEN 15 ELSE 0 END)
+        + (CASE WHEN ${cancellationRateExpr} > 20 AND ${totalBookingsExpr} >= 5 THEN 10 ELSE 0 END)
+        + (CASE WHEN ${totalBookingsExpr} < 5 THEN 10 ELSE 0 END)
+        + (CASE WHEN ${providers.trustScore} < 50 THEN 20 WHEN ${providers.trustScore} < 75 THEN 10 ELSE 0 END)
+        + LEAST(20, ${unresolvedIncidentsExpr} * 5)
+      )
+    `;
+
+    const riskLevelExpr = sql<KycRiskLevel>`
+      CASE
+        WHEN ${riskScoreExpr} >= 70 THEN 'critical'
+        WHEN ${riskScoreExpr} >= 40 THEN 'high'
+        WHEN ${riskScoreExpr} >= 20 THEN 'medium'
+        ELSE 'low'
+      END
+    `;
+
+    const whereParts: Array<ReturnType<typeof and>> = [];
+    const conditions: any[] = [];
+
+    if (search) {
+      const needle = search.toLowerCase();
+      conditions.push(
+        or(
+          lowerLike(providers.id, needle),
+          lowerLike(providers.businessName, needle),
+          lowerLike(providers.handle, needle),
+          lowerLike(users.email, needle),
+          lowerLike(users.firstName, needle),
+          lowerLike(users.lastName, needle),
+        ),
+      );
+    }
+
+    if (kycStatus?.length) {
+      conditions.push(inArray(providers.kycStatus, kycStatus as any));
+    }
+
+    if (parsedFrom) {
+      conditions.push(and(isNotNull(providers.kycSubmittedAt), gte(providers.kycSubmittedAt, parsedFrom)));
+    }
+
+    if (parsedTo) {
+      conditions.push(and(isNotNull(providers.kycSubmittedAt), lte(providers.kycSubmittedAt, parsedTo)));
+    }
+
+    if (typeof kycAgeMin === "number") {
+      conditions.push(sql<boolean>`${kycAgeExpr} >= ${kycAgeMin}`);
+    }
+
+    if (typeof kycAgeMax === "number") {
+      conditions.push(sql<boolean>`${kycAgeExpr} <= ${kycAgeMax}`);
+    }
+
+    if (docStatus?.length) {
+      const docPredicates = docStatus
+        .map((key) => {
+          switch (key) {
+            case "identity_missing":
+              return sql<boolean>`${identityStatusExpr} = 'missing'`;
+            case "business_missing":
+              return sql<boolean>`${businessStatusExpr} = 'missing'`;
+            case "bank_missing":
+              return sql<boolean>`${bankStatusExpr} = 'missing'`;
+            case "any_missing":
+              return sql<boolean>`(${identityStatusExpr} = 'missing' OR ${businessStatusExpr} = 'missing' OR ${bankStatusExpr} = 'missing')`;
+            case "any_pending":
+              return sql<boolean>`(${identityStatusExpr} = 'pending' OR ${businessStatusExpr} = 'pending' OR ${bankStatusExpr} = 'pending')`;
+            case "all_verified":
+              return sql<boolean>`(${identityStatusExpr} = 'verified' AND ${businessStatusExpr} = 'verified' AND ${bankStatusExpr} = 'verified')`;
+          }
+        })
+        .filter(Boolean);
+      if (docPredicates.length === 1) conditions.push(docPredicates[0]);
+      else if (docPredicates.length > 1) conditions.push(or(...docPredicates));
+    }
+
+    if (riskLevel?.length) {
+      if (riskLevel.length === 1) {
+        conditions.push(sql<boolean>`${riskLevelExpr} = ${riskLevel[0]}`);
+      } else {
+        conditions.push(or(...riskLevel.map((level) => sql<boolean>`${riskLevelExpr} = ${level}`)));
+      }
+    }
+
+    const where = conditions.length ? and(...conditions) : undefined;
+
+    // Sorting
     let orderBy;
     switch (sort) {
       case "kyc_status":
         orderBy = order === "asc" ? asc(providers.kycStatus) : desc(providers.kycStatus);
         break;
       case "risk_score":
-        // Computed after we build riskScore per provider
-        orderBy = desc(providers.createdAt);
+        orderBy = order === "asc" ? asc(riskScoreExpr) : desc(riskScoreExpr);
         break;
       case "created":
         orderBy = order === "asc" ? asc(providers.createdAt) : desc(providers.createdAt);
@@ -38,8 +255,18 @@ export async function GET(request: NextRequest) {
         orderBy = desc(providers.createdAt);
     }
 
-    // Fetch all providers with their user data
-    const allProviders = await db
+    const [countRow] = await db
+      .select({ totalCount: sql<number>`COUNT(*)` })
+      .from(providers)
+      .leftJoin(users, eq(providers.userId, users.id))
+      .leftJoin(bookingAgg, eq(bookingAgg.providerId, providers.id))
+      .leftJoin(reviewAgg, eq(reviewAgg.providerId, providers.id))
+      .leftJoin(incidentAgg, eq(incidentAgg.providerId, providers.id))
+      .where(where);
+
+    const totalCount = Number(countRow?.totalCount ?? 0);
+
+    const rows = await db
       .select({
         id: providers.id,
         businessName: providers.businessName,
@@ -60,443 +287,147 @@ export async function GET(request: NextRequest) {
           firstName: users.firstName,
           lastName: users.lastName,
         },
+        totalBookings: totalBookingsExpr,
+        completionRate: completionRateExpr,
+        cancellationRate: cancellationRateExpr,
+        totalReviews: sql<number>`COALESCE(${reviewAgg.totalReviews}, 0)`,
+        avgRating: sql<number>`COALESCE(${reviewAgg.avgRating}, 0)`,
+        totalIncidents: sql<number>`COALESCE(${incidentAgg.totalIncidents}, 0)`,
+        unresolvedIncidents: unresolvedIncidentsExpr,
+        kycAge: kycAgeExpr,
+        riskScore: riskScoreExpr,
+        riskLevel: riskLevelExpr,
+        identityStatus: identityStatusExpr,
+        businessStatus: businessStatusExpr,
+        bankStatus: bankStatusExpr,
       })
       .from(providers)
       .leftJoin(users, eq(providers.userId, users.id))
-      .orderBy(orderBy);
+      .leftJoin(bookingAgg, eq(bookingAgg.providerId, providers.id))
+      .leftJoin(reviewAgg, eq(reviewAgg.providerId, providers.id))
+      .leftJoin(incidentAgg, eq(incidentAgg.providerId, providers.id))
+      .where(where)
+      .orderBy(orderBy)
+      .limit(pageSize)
+      .offset(offset);
 
-    const providerIds = allProviders.map((p) => p.id);
+    const statsRow = await db
+      .select({
+        verifiedProviders: sql<number>`COUNT(*) FILTER (WHERE ${providers.kycStatus} = 'verified')`,
+        pendingReview: sql<number>`COUNT(*) FILTER (WHERE ${providers.kycStatus} = 'pending_review')`,
+        rejectedProviders: sql<number>`COUNT(*) FILTER (WHERE ${providers.kycStatus} = 'rejected')`,
+        notStarted: sql<number>`COUNT(*) FILTER (WHERE ${providers.kycStatus} = 'not_started')`,
+        inProgress: sql<number>`COUNT(*) FILTER (WHERE ${providers.kycStatus} = 'in_progress')`,
+        criticalRisk: sql<number>`COUNT(*) FILTER (WHERE ${riskLevelExpr} = 'critical')`,
+        highRisk: sql<number>`COUNT(*) FILTER (WHERE ${riskLevelExpr} = 'high')`,
+        documentsMissing: sql<number>`COUNT(*) FILTER (WHERE (${identityStatusExpr} = 'missing' OR ${businessStatusExpr} = 'missing' OR ${bankStatusExpr} = 'missing'))`,
+      })
+      .from(providers)
+      .leftJoin(users, eq(providers.userId, users.id))
+      .leftJoin(bookingAgg, eq(bookingAgg.providerId, providers.id))
+      .leftJoin(reviewAgg, eq(reviewAgg.providerId, providers.id))
+      .leftJoin(incidentAgg, eq(incidentAgg.providerId, providers.id))
+      .where(where)
+      .then((r) => r[0]);
 
-    const toWeekKey = (date: Date) => {
-      const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
-      const day = d.getUTCDay();
-      const offset = (day + 6) % 7; // Monday as week start
-      d.setUTCDate(d.getUTCDate() - offset);
-      return d.toISOString().slice(0, 10);
-    };
+    const providersPage = rows.map((row) => {
+      const missingDocuments: string[] = [];
+      if (row.identityStatus === "missing") missingDocuments.push("Identity Document");
+      if (row.businessStatus === "missing") missingDocuments.push("Business Document");
+      if (row.bankStatus === "missing") missingDocuments.push("Bank Account Verification");
 
-    const weeksBack = 5; // current week + 5 previous weeks = 6 points
-    const now = new Date();
-    const start = new Date(now);
-    start.setUTCDate(start.getUTCDate() - weeksBack * 7);
-    const seriesStartWeekKey = toWeekKey(start);
-    const seriesStartDate = new Date(seriesStartWeekKey + "T00:00:00.000Z");
+      const totalSteps = 4;
+      let completedSteps = 0;
+      if (row.kycStatus !== "not_started") completedSteps++;
+      if (row.identityDocumentUrl) completedSteps++;
+      if (row.businessDocumentUrl) completedSteps++;
+      if (row.stripeConnectId) completedSteps++;
 
-    const [bookingAggRows, reviewAggRows, incidentAggRows, submissionSeriesRows, verificationSeriesRows, rejectionSeriesRows] = await Promise.all([
-      providerIds.length
-        ? db
-            .select({
-              providerId: bookings.providerId,
-              totalBookings: sql<number>`COUNT(*)`,
-              completedBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} = 'completed')`,
-              canceledBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} IN ('canceled_customer', 'canceled_provider'))`,
-            })
-            .from(bookings)
-            .where(inArray(bookings.providerId, providerIds))
-            .groupBy(bookings.providerId)
-        : Promise.resolve([]),
-      providerIds.length
-        ? db
-            .select({
-              providerId: reviews.providerId,
-              totalReviews: sql<number>`COUNT(*) FILTER (WHERE ${reviews.isHidden} = false)`,
-              avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
-            })
-            .from(reviews)
-            .where(inArray(reviews.providerId, providerIds))
-            .groupBy(reviews.providerId)
-        : Promise.resolve([]),
-      providerIds.length
-        ? db
-            .select({
-              providerId: trustIncidents.providerId,
-              totalIncidents: sql<number>`COUNT(*)`,
-              unresolvedIncidents: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`,
-            })
-            .from(trustIncidents)
-            .where(inArray(trustIncidents.providerId, providerIds))
-            .groupBy(trustIncidents.providerId)
-        : Promise.resolve([]),
-      db
-        .select({
-          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycSubmittedAt}), 'YYYY-MM-DD')`,
-          count: sql<number>`COUNT(*)`,
-        })
-        .from(providers)
-        .where(and(isNotNull(providers.kycSubmittedAt), gte(providers.kycSubmittedAt, seriesStartDate)))
-        .groupBy(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)
-        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)),
-      db
-        .select({
-          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycVerifiedAt}), 'YYYY-MM-DD')`,
-          count: sql<number>`COUNT(*)`,
-        })
-        .from(providers)
-        .where(and(isNotNull(providers.kycVerifiedAt), gte(providers.kycVerifiedAt, seriesStartDate)))
-        .groupBy(sql`DATE_TRUNC('week', ${providers.kycVerifiedAt})`)
-        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycVerifiedAt})`)),
-      db
-        .select({
-          weekStart: sql<string>`TO_CHAR(DATE_TRUNC('week', ${providers.kycSubmittedAt}), 'YYYY-MM-DD')`,
-          count: sql<number>`COUNT(*)`,
-        })
-        .from(providers)
-        .where(
-          and(
-            eq(providers.kycStatus, "rejected"),
-            isNotNull(providers.kycSubmittedAt),
-            gte(providers.kycSubmittedAt, seriesStartDate),
-          ),
-        )
-        .groupBy(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)
-        .orderBy(asc(sql`DATE_TRUNC('week', ${providers.kycSubmittedAt})`)),
-    ]);
+      const kycCompletionPercentage = Math.round((completedSteps / totalSteps) * 100);
 
-    const bookingAgg = new Map(
-      bookingAggRows.map((r) => [
-        r.providerId,
-        {
-          totalBookings: Number(r.totalBookings ?? 0),
-          completedBookings: Number(r.completedBookings ?? 0),
-          canceledBookings: Number(r.canceledBookings ?? 0),
+      const stripeOnboardingStatus = row.stripeConnectId
+        ? row.chargesEnabled && row.payoutsEnabled
+          ? ("completed" as const)
+          : ("in_progress" as const)
+        : ("not_started" as const);
+
+      return {
+        id: row.id,
+        businessName: row.businessName,
+        handle: row.handle,
+        status: row.status,
+        kycStatus: row.kycStatus,
+        kycSubmittedAt: row.kycSubmittedAt,
+        kycVerifiedAt: row.kycVerifiedAt,
+        identityDocumentUrl: row.identityDocumentUrl,
+        businessDocumentUrl: row.businessDocumentUrl,
+        stripeConnectId: row.stripeConnectId,
+        chargesEnabled: row.chargesEnabled,
+        payoutsEnabled: row.payoutsEnabled,
+        trustScore: Number(row.trustScore ?? 0),
+        riskScore: Number(row.riskScore ?? 0),
+        riskLevel: row.riskLevel,
+        totalBookings: Number(row.totalBookings ?? 0),
+        completionRate: Number(row.completionRate ?? 0),
+        cancellationRate: Number(row.cancellationRate ?? 0),
+        totalReviews: Number(row.totalReviews ?? 0),
+        avgRating: Number(row.avgRating ?? 0),
+        totalIncidents: Number(row.totalIncidents ?? 0),
+        unresolvedIncidents: Number(row.unresolvedIncidents ?? 0),
+        createdAt: row.createdAt,
+        daysActive: Math.floor((Date.now() - row.createdAt.getTime()) / (1000 * 60 * 60 * 24)),
+        kycCompletionPercentage,
+        missingDocuments,
+        kycAge: Number(row.kycAge ?? 0),
+        kycRiskFactors: [],
+        kycRecommendations: [],
+        kycAlerts: [],
+        documentVerificationStatus: {
+          identity: row.identityStatus,
+          business: row.businessStatus,
+          bank: row.bankStatus,
         },
-      ]),
-    );
-
-    const reviewAgg = new Map(
-      reviewAggRows.map((r) => [
-        r.providerId,
-        {
-          totalReviews: Number(r.totalReviews ?? 0),
-          avgRating: Number(r.avgRating ?? 0),
-        },
-      ]),
-    );
-
-    const incidentAgg = new Map(
-      incidentAggRows.map((r) => [
-        r.providerId,
-        {
-          totalIncidents: Number(r.totalIncidents ?? 0),
-          unresolvedIncidents: Number(r.unresolvedIncidents ?? 0),
-        },
-      ]),
-    );
-
-    // Calculate additional metrics for each provider
-    const providersWithMetrics = allProviders.map((provider) => {
-        const bookingRow = bookingAgg.get(provider.id) ?? {
-          totalBookings: 0,
-          completedBookings: 0,
-          canceledBookings: 0,
-        };
-
-        const totalBookings = bookingRow.totalBookings;
-        const completedBookings = bookingRow.completedBookings;
-        const canceledBookings = bookingRow.canceledBookings;
-
-        const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
-        const cancellationRate = totalBookings > 0 ? (canceledBookings / totalBookings) * 100 : 0;
-
-        const reviewRow = reviewAgg.get(provider.id) ?? { totalReviews: 0, avgRating: 0 };
-        const totalReviews = reviewRow.totalReviews;
-        const avgRating = reviewRow.avgRating;
-
-        // Calculate KYC completion percentage
-        let kycCompletionPercentage = 0;
-        const missingDocuments: string[] = [];
-        const kycRiskFactors: string[] = [];
-        const kycRecommendations: string[] = [];
-        const kycAlerts: string[] = [];
-        const complianceFlags: string[] = [];
-
-        // Document verification status (best-effort, based on available fields)
-        const identityStatus = provider.identityDocumentUrl
-          ? provider.kycStatus === "verified"
-            ? ("verified" as const)
-            : provider.kycStatus === "rejected"
-              ? ("rejected" as const)
-              : ("pending" as const)
-          : ("missing" as const);
-
-        const businessStatus = provider.businessDocumentUrl
-          ? provider.kycStatus === "verified"
-            ? ("verified" as const)
-            : provider.kycStatus === "rejected"
-              ? ("rejected" as const)
-              : ("pending" as const)
-          : ("missing" as const);
-
-        const bankStatus = provider.stripeConnectId
-          ? provider.chargesEnabled && provider.payoutsEnabled
-            ? ("verified" as const)
-            : ("pending" as const)
-          : ("missing" as const);
-
-        const documentVerificationStatus = {
-          identity: identityStatus,
-          business: businessStatus,
-          bank: bankStatus,
-        };
-
-        // Calculate completion based on available data
-        const totalSteps = 4; // KYC submission, identity doc, business doc, stripe connect
-        let completedSteps = 0;
-
-        if (provider.kycStatus !== "not_started") completedSteps++;
-        if (provider.identityDocumentUrl) completedSteps++;
-        if (provider.businessDocumentUrl) completedSteps++;
-        if (provider.stripeConnectId) completedSteps++;
-
-        kycCompletionPercentage = Math.round((completedSteps / totalSteps) * 100);
-
-        // Determine missing documents
-        if (identityStatus === "missing") missingDocuments.push("Identity Document");
-        if (businessStatus === "missing") missingDocuments.push("Business Document");
-        if (bankStatus === "missing") missingDocuments.push("Bank Account Verification");
-
-        // Calculate KYC age (days since submitted)
-        const kycAge = provider.kycSubmittedAt
-          ? Math.floor((Date.now() - provider.kycSubmittedAt.getTime()) / (1000 * 60 * 60 * 24))
-          : 0;
-
-        // Risk assessment logic
-        let calculatedRiskLevel: "low" | "medium" | "high" | "critical" = "low";
-        let calculatedRiskScore = 0;
-
-        // Risk factors based on various metrics
-        if (provider.kycStatus === "rejected") {
-          calculatedRiskScore += 50;
-          kycRiskFactors.push("Previous KYC rejection");
-          kycAlerts.push("Provider has been rejected in KYC process");
-        }
-
-        if (provider.kycStatus === "pending_review" && kycAge > 30) {
-          calculatedRiskScore += 20;
-          kycRiskFactors.push("Long pending KYC review");
-          kycAlerts.push("KYC review overdue - requires immediate attention");
-        }
-
-        if (missingDocuments.length > 0) {
-          calculatedRiskScore += missingDocuments.length * 10;
-          kycRiskFactors.push(`${missingDocuments.length} missing documents`);
-        }
-
-        if (completionRate < 70) {
-          calculatedRiskScore += 15;
-          kycRiskFactors.push("Low booking completion rate");
-        }
-
-        if (cancellationRate > 20 && totalBookings >= 5) {
-          calculatedRiskScore += 10;
-          kycRiskFactors.push("High cancellation rate");
-        }
-
-        if (totalBookings < 5) {
-          calculatedRiskScore += 10;
-          kycRiskFactors.push("Limited booking history");
-        }
-
-        // Adjust risk based on trust score (lower trust score increases risk)
-        if (provider.trustScore < 50) {
-          calculatedRiskScore += 20;
-          kycRiskFactors.push("Low trust score");
-        } else if (provider.trustScore < 75) {
-          calculatedRiskScore += 10;
-          kycRiskFactors.push("Moderate trust score");
-        }
-
-        // Determine risk level
-        if (calculatedRiskScore >= 70) calculatedRiskLevel = "critical";
-        else if (calculatedRiskScore >= 40) calculatedRiskLevel = "high";
-        else if (calculatedRiskScore >= 20) calculatedRiskLevel = "medium";
-        else calculatedRiskLevel = "low";
-
-        // Generate recommendations
-        if (missingDocuments.length > 0) {
-          kycRecommendations.push(`Request missing documents: ${missingDocuments.join(", ")}`);
-        }
-
-        if (provider.kycStatus === "pending_review") {
-          kycRecommendations.push("Complete KYC review process");
-        }
-
-        if (completionRate < 80) {
-          kycRecommendations.push("Improve booking completion rate through better service quality");
-        }
-
-        if (!provider.stripeConnectId) {
-          kycRecommendations.push("Complete Stripe Connect onboarding for payment processing");
-        }
-
-        // Compliance flags
-        if (provider.kycStatus === "rejected") {
-          complianceFlags.push("KYC Rejection");
-        }
-
-        if (missingDocuments.length > 0) {
-          complianceFlags.push("Incomplete Documentation");
-        }
-
-        if (calculatedRiskLevel === "critical" || calculatedRiskLevel === "high") {
-          complianceFlags.push("High Risk Provider");
-        }
-
-        // Calculate days active
-        const daysActive = Math.floor((Date.now() - provider.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-
-        const incidentRow = incidentAgg.get(provider.id) ?? { totalIncidents: 0, unresolvedIncidents: 0 };
-        const unresolvedIncidents = incidentRow.unresolvedIncidents;
-        const totalIncidents = incidentRow.totalIncidents;
-
-        if (unresolvedIncidents > 0) {
-          calculatedRiskScore += Math.min(20, unresolvedIncidents * 5);
-          kycRiskFactors.push("Unresolved trust incidents");
-        }
-
-        // Stripe onboarding status
-        let stripeOnboardingStatus: "not_started" | "in_progress" | "completed" | "failed" = "not_started";
-        if (provider.stripeConnectId) {
-          stripeOnboardingStatus = provider.chargesEnabled && provider.payoutsEnabled ? "completed" : "in_progress";
-        }
-
-        return {
-          ...provider,
-          totalBookings,
-          completionRate,
-          cancellationRate,
-          totalReviews,
-          avgRating,
-          kycCompletionPercentage,
-          missingDocuments,
-          kycAge,
-          kycRiskFactors,
-          kycRecommendations,
-          kycAlerts,
-          documentVerificationStatus,
-          stripeOnboardingStatus,
-          complianceFlags,
-          daysActive,
-          totalIncidents,
-          unresolvedIncidents,
-          riskLevel: calculatedRiskLevel,
-          riskScore: calculatedRiskScore,
-        };
-      });
-
-    if (sort === "risk_score") {
-      providersWithMetrics.sort((a, b) => {
-        const diff = (a.riskScore ?? 0) - (b.riskScore ?? 0);
-        return order === "asc" ? diff : -diff;
-      });
-    }
-
-    // Calculate platform-wide analytics
-    const totalProviders = providersWithMetrics.length;
-    const verifiedProviders = providersWithMetrics.filter(p => p.kycStatus === "verified").length;
-    const pendingReview = providersWithMetrics.filter(p => p.kycStatus === "pending_review").length;
-    const rejectedProviders = providersWithMetrics.filter(p => p.kycStatus === "rejected").length;
-    const notStarted = providersWithMetrics.filter(p => p.kycStatus === "not_started").length;
-    const inProgress = providersWithMetrics.filter(p => p.kycStatus === "in_progress").length;
-
-    // Risk distribution
-    const riskDistribution = {
-      critical: providersWithMetrics.filter(p => p.riskLevel === "critical").length,
-      high: providersWithMetrics.filter(p => p.riskLevel === "high").length,
-      medium: providersWithMetrics.filter(p => p.riskLevel === "medium").length,
-      low: providersWithMetrics.filter(p => p.riskLevel === "low").length,
-    };
-
-    // Document status
-    const documentStatus = {
-      identityVerified: providersWithMetrics.filter(p => p.documentVerificationStatus.identity === "verified").length,
-      businessVerified: providersWithMetrics.filter(p => p.documentVerificationStatus.business === "verified").length,
-      bankVerified: providersWithMetrics.filter(p => p.documentVerificationStatus.bank === "verified").length,
-      documentsMissing: providersWithMetrics.filter(p =>
-        p.documentVerificationStatus.identity === "missing" ||
-        p.documentVerificationStatus.business === "missing" ||
-        p.documentVerificationStatus.bank === "missing"
-      ).length,
-    };
-
-    // Timeline metrics (30 days)
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    const recentSubmissions = providersWithMetrics.filter(p =>
-      p.kycSubmittedAt && p.kycSubmittedAt >= thirtyDaysAgo
-    ).length;
-
-    const recentVerifications = providersWithMetrics.filter(p =>
-      p.kycVerifiedAt && p.kycVerifiedAt >= thirtyDaysAgo
-    ).length;
-
-    const recentRejections = providersWithMetrics.filter((p) =>
-      p.kycStatus === "rejected" && p.kycSubmittedAt && p.kycSubmittedAt >= thirtyDaysAgo,
-    ).length;
-
-    // Calculate average processing time
-    const completedKycs = providersWithMetrics.filter(p =>
-      p.kycSubmittedAt && p.kycVerifiedAt
-    );
-
-    const avgProcessingTime = completedKycs.length > 0
-      ? completedKycs.reduce((sum, p) => {
-          const processingTime = p.kycVerifiedAt!.getTime() - p.kycSubmittedAt!.getTime();
-          return sum + (processingTime / (1000 * 60 * 60 * 24)); // Convert to days
-        }, 0) / completedKycs.length
-      : 0;
-
-    const kycCompletionRate = totalProviders > 0 ? (verifiedProviders / totalProviders) * 100 : 0;
-
-    const analytics = {
-      platformKycStats: {
-        totalProviders,
-        verifiedProviders,
-        pendingReview,
-        rejectedProviders,
-        notStarted,
-        inProgress,
-        avgKycCompletionTime: Math.round(avgProcessingTime * 10) / 10,
-        kycCompletionRate: Math.round(kycCompletionRate * 10) / 10,
-      },
-      riskDistribution,
-      documentStatus,
-      timelineSeries: (() => {
-        const mk = (rows: Array<{ weekStart: string; count: number }>) =>
-          new Map(rows.map((r) => [String(r.weekStart), Number(r.count ?? 0)]));
-
-        const submissionsByWeek = mk(submissionSeriesRows);
-        const verificationsByWeek = mk(verificationSeriesRows);
-        const rejectionsByWeek = mk(rejectionSeriesRows);
-
-        const points: Array<{ name: string; submissions: number; verifications: number; rejections: number }> = [];
-        const startWeek = new Date(seriesStartDate);
-        for (let i = 0; i <= weeksBack; i++) {
-          const d = new Date(startWeek);
-          d.setUTCDate(d.getUTCDate() + i * 7);
-          const key = d.toISOString().slice(0, 10);
-          points.push({
-            name: key,
-            submissions: submissionsByWeek.get(key) ?? 0,
-            verifications: verificationsByWeek.get(key) ?? 0,
-            rejections: rejectionsByWeek.get(key) ?? 0,
-          });
-        }
-
-        return { points };
-      })(),
-      timelineMetrics: {
-        kycSubmissions30d: recentSubmissions,
-        kycVerifications30d: recentVerifications,
-        kycRejections30d: recentRejections,
-        avgProcessingTime: Math.round(avgProcessingTime * 10) / 10,
-      },
-    };
+        stripeOnboardingStatus,
+        complianceFlags: [],
+        user: row.user,
+      };
+    });
 
     return NextResponse.json({
-      providers: providersWithMetrics,
-      analytics,
+      providers: providersPage,
+      analytics: {
+        platformKycStats: {
+          totalProviders: totalCount,
+          verifiedProviders: Number(statsRow?.verifiedProviders ?? 0),
+          pendingReview: Number(statsRow?.pendingReview ?? 0),
+          rejectedProviders: Number(statsRow?.rejectedProviders ?? 0),
+          notStarted: Number(statsRow?.notStarted ?? 0),
+          inProgress: Number(statsRow?.inProgress ?? 0),
+          avgKycCompletionTime: 0,
+          kycCompletionRate: totalCount > 0 ? Math.round(((Number(statsRow?.verifiedProviders ?? 0) / totalCount) * 100) * 10) / 10 : 0,
+        },
+        riskDistribution: {
+          critical: Number(statsRow?.criticalRisk ?? 0),
+          high: Number(statsRow?.highRisk ?? 0),
+          medium: 0,
+          low: 0,
+        },
+        documentStatus: {
+          identityVerified: 0,
+          businessVerified: 0,
+          bankVerified: 0,
+          documentsMissing: Number(statsRow?.documentsMissing ?? 0),
+        },
+        timelineMetrics: {
+          kycSubmissions30d: 0,
+          kycVerifications30d: 0,
+          kycRejections30d: 0,
+          avgProcessingTime: 0,
+        },
+      },
+      page,
+      pageSize,
+      totalCount,
     });
 
   } catch (error) {

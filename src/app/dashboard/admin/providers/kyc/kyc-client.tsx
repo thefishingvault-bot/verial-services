@@ -7,7 +7,7 @@ import { scheduleReport, getScheduledReports, cancelScheduledReport } from '@/li
 import { useRealTimeUpdates } from '@/hooks/useRealTimeUpdates';
 import { RealTimeNotifications, NotificationItem } from '@/components/RealTimeNotifications';
 import { LiveActivityIndicator, AutoRefreshToggle } from '@/components/LiveActivityIndicator';
-import { matchesDocumentStatusFilters } from './kyc-filters';
+ 
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";
 
@@ -131,7 +131,20 @@ type KycAnalytics = {
 type ApiResponse = {
   providers: KycProvider[];
   analytics: KycAnalytics;
+  page: number;
+  pageSize: number;
+  totalCount: number;
 };
+
+const parseCsvParam = (value: string | null): string[] => {
+  if (!value) return [];
+  return value
+    .split(",")
+    .map((v) => v.trim())
+    .filter(Boolean);
+};
+
+const toCsvParam = (values: string[]) => values.filter(Boolean).join(",");
 
 type ScheduledReport = {
   id: string;
@@ -279,24 +292,21 @@ function ScheduledReportsModal({
 export default function AdminKycStatusPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const searchParamsString = searchParams.toString();
   const [providers, setProviders] = useState<KycProvider[]>([]);
   const [analytics, setAnalytics] = useState<KycAnalytics | null>(null);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
+  const [mutatingProviderId, setMutatingProviderId] = useState<string | null>(null);
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [savedFilters, setSavedFilters] = useState<KycFilterPreset[]>([]);
   const [filterName, setFilterName] = useState('');
-  const [kycStatusFilter, setKycStatusFilter] = useState<string[]>([]);
-  const [riskLevelFilter, setRiskLevelFilter] = useState<string[]>([]);
-  const [documentStatusFilter, setDocumentStatusFilter] = useState<string[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
   const [showExportMenu, setShowExportMenu] = useState(false);
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduledReports, setScheduledReports] = useState<ScheduledReport[]>([]);
-  const [dateRange, setDateRange] = useState({ start: '', end: '' });
-  const [kycAgeRange, setKycAgeRange] = useState({ min: '', max: '' });
 
   // Real-time updates state
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -307,6 +317,34 @@ export default function AdminKycStatusPage() {
   const sortBy = (searchParams.get("sort") as SortOption) || "kyc_status";
   const sortOrder = searchParams.get("order") === "asc" ? "asc" : "desc";
 
+  const page = Math.max(1, Number(searchParams.get("page") ?? 1) || 1);
+  const pageSize = Math.min(200, Math.max(1, Number(searchParams.get("pageSize") ?? 50) || 50));
+
+  const searchQuery = searchParams.get("search") ?? "";
+  const kycStatusFilter = parseCsvParam(searchParams.get("kycStatus"));
+  const riskLevelFilter = parseCsvParam(searchParams.get("riskLevel"));
+  const documentStatusFilter = parseCsvParam(searchParams.get("docStatus"));
+  const submittedFrom = searchParams.get("submittedFrom") ?? "";
+  const submittedTo = searchParams.get("submittedTo") ?? "";
+  const kycAgeMin = searchParams.get("kycAgeMin") ?? "";
+  const kycAgeMax = searchParams.get("kycAgeMax") ?? "";
+
+  const updateQuery = (updates: Record<string, string | null | undefined>, opts?: { resetPage?: boolean }) => {
+    const params = new URLSearchParams(searchParamsString);
+    for (const [key, value] of Object.entries(updates)) {
+      if (value === undefined) continue;
+      if (value === null || value === "") params.delete(key);
+      else params.set(key, value);
+    }
+    if (opts?.resetPage) params.set("page", "1");
+    router.push(`?${params.toString()}`);
+  };
+
+  const setCsvFilter = (key: string, values: string[]) => {
+    const csv = toCsvParam(values);
+    updateQuery({ [key]: csv || null }, { resetPage: true });
+  };
+
   const fetchProviders = useCallback(async (opts?: { silent?: boolean }) => {
     const silent = Boolean(opts?.silent);
     if (!silent) setLoading(true);
@@ -314,10 +352,9 @@ export default function AdminKycStatusPage() {
     setIsUnauthorized(false);
 
     try {
-      const params = new URLSearchParams({
-        sort: sortBy,
-        order: sortOrder,
-      });
+      const params = new URLSearchParams(searchParamsString);
+      params.set("sort", sortBy);
+      params.set("order", sortOrder);
       const response = await fetch(`/api/admin/providers/kyc?${params}`);
 
       if (response.status === 401 || response.status === 403) {
@@ -334,6 +371,7 @@ export default function AdminKycStatusPage() {
       const data: ApiResponse = await response.json();
       setProviders(data.providers.map(normalizeKycProvider));
       setAnalytics(data.analytics);
+      setTotalCount(Number(data.totalCount ?? 0));
       setLastRefreshedAt(new Date());
     } catch (err) {
       console.error("Error fetching KYC providers:", err);
@@ -341,7 +379,45 @@ export default function AdminKycStatusPage() {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [sortBy, sortOrder]);
+  }, [searchParamsString, sortBy, sortOrder]);
+
+  const setProviderKycStatus = useCallback(
+    async (args: { providerId: string; kycStatus: KycProvider["kycStatus"]; reason?: string }) => {
+      setError(null);
+      setIsUnauthorized(false);
+      setMutatingProviderId(args.providerId);
+      try {
+        const res = await fetch(`/api/admin/providers/${args.providerId}/kyc`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            action: "set_status",
+            kycStatus: args.kycStatus,
+            reason: args.reason,
+          }),
+        });
+
+        if (res.status === 401 || res.status === 403) {
+          setIsUnauthorized(true);
+          setError("You are not authorized to perform this action.");
+          return;
+        }
+
+        if (!res.ok) {
+          const text = await res.text().catch(() => "");
+          throw new Error(text || "Failed to update KYC status");
+        }
+
+        await fetchProviders({ silent: true });
+      } catch (e) {
+        console.error("Failed to update KYC status", e);
+        setError("Failed to update KYC status.");
+      } finally {
+        setMutatingProviderId(null);
+      }
+    },
+    [fetchProviders],
+  );
 
   useEffect(() => {
     fetchProviders();
@@ -584,56 +660,6 @@ export default function AdminKycStatusPage() {
     }
   };
 
-  // Advanced filtering logic
-  const applyAdvancedFilters = (providers: KycProvider[]) => {
-    return providers.filter(provider => {
-      // Search query filter
-      if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
-        const matchesSearch =
-          provider.businessName.toLowerCase().includes(query) ||
-          provider.handle.toLowerCase().includes(query) ||
-          provider.user.email.toLowerCase().includes(query) ||
-          provider.user.firstName?.toLowerCase().includes(query) ||
-          provider.user.lastName?.toLowerCase().includes(query);
-        if (!matchesSearch) return false;
-      }
-
-      // KYC Status filter
-      if (kycStatusFilter.length > 0 && !kycStatusFilter.includes(provider.kycStatus)) {
-        return false;
-      }
-
-      // Risk level filter
-      if (riskLevelFilter.length > 0 && !riskLevelFilter.includes(provider.riskLevel)) {
-        return false;
-      }
-
-      // Document status filter
-      if (documentStatusFilter.length > 0) {
-        if (!matchesDocumentStatusFilters(provider.documentVerificationStatus, documentStatusFilter)) return false;
-      }
-
-      // Date range filters
-      if (dateRange.start && new Date(provider.createdAt) < new Date(dateRange.start)) {
-        return false;
-      }
-      if (dateRange.end && new Date(provider.createdAt) > new Date(dateRange.end)) {
-        return false;
-      }
-
-      // KYC age range
-      if (kycAgeRange.min && provider.kycAge < parseInt(kycAgeRange.min)) {
-        return false;
-      }
-      if (kycAgeRange.max && provider.kycAge > parseInt(kycAgeRange.max)) {
-        return false;
-      }
-
-      return true;
-    });
-  };
-
   const saveFilterPreset = () => {
     if (!filterName.trim()) {
       alert('Please enter a name for the filter preset');
@@ -648,8 +674,8 @@ export default function AdminKycStatusPage() {
         kycStatusFilter,
         riskLevelFilter,
         documentStatusFilter,
-        dateRange,
-        kycAgeRange
+        dateRange: { start: submittedFrom, end: submittedTo },
+        kycAgeRange: { min: kycAgeMin, max: kycAgeMax },
       },
       createdAt: new Date().toISOString()
     };
@@ -663,22 +689,36 @@ export default function AdminKycStatusPage() {
   };
 
   const loadFilterPreset = (preset: KycFilterPreset) => {
-    setSearchQuery(preset.filters.searchQuery || '');
-    setKycStatusFilter(preset.filters.kycStatusFilter || []);
-    setRiskLevelFilter(preset.filters.riskLevelFilter || []);
-    setDocumentStatusFilter(preset.filters.documentStatusFilter || []);
-    setDateRange(preset.filters.dateRange || { start: '', end: '' });
-    setKycAgeRange(preset.filters.kycAgeRange || { min: '', max: '' });
+    updateQuery(
+      {
+        search: preset.filters.searchQuery || null,
+        kycStatus: toCsvParam(preset.filters.kycStatusFilter || []) || null,
+        riskLevel: toCsvParam(preset.filters.riskLevelFilter || []) || null,
+        docStatus: toCsvParam(preset.filters.documentStatusFilter || []) || null,
+        submittedFrom: preset.filters.dateRange?.start || null,
+        submittedTo: preset.filters.dateRange?.end || null,
+        kycAgeMin: preset.filters.kycAgeRange?.min || null,
+        kycAgeMax: preset.filters.kycAgeRange?.max || null,
+      },
+      { resetPage: true },
+    );
     setShowAdvancedFilters(true);
   };
 
   const clearAllFilters = () => {
-    setSearchQuery('');
-    setKycStatusFilter([]);
-    setRiskLevelFilter([]);
-    setDocumentStatusFilter([]);
-    setDateRange({ start: '', end: '' });
-    setKycAgeRange({ min: '', max: '' });
+    updateQuery(
+      {
+        search: null,
+        kycStatus: null,
+        riskLevel: null,
+        docStatus: null,
+        submittedFrom: null,
+        submittedTo: null,
+        kycAgeMin: null,
+        kycAgeMax: null,
+      },
+      { resetPage: true },
+    );
   };
 
   // Load saved filters on component mount
@@ -686,9 +726,6 @@ export default function AdminKycStatusPage() {
     const presets = JSON.parse(localStorage.getItem('kycFilterPresets') || '[]');
     setSavedFilters(presets);
   }, []);
-
-  // Apply filters to providers
-  const filteredProviders = applyAdvancedFilters(providers);
 
   // Real-time updates setup
   const { isConnected, lastUpdate, isRetrying } = useRealTimeUpdates(
@@ -735,12 +772,14 @@ export default function AdminKycStatusPage() {
   const handleSortChange = (newSort: SortOption) => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("sort", newSort);
+    params.set("page", "1");
     router.push(`?${params.toString()}`);
   };
 
   const handleOrderChange = (newOrder: "asc" | "desc") => {
     const params = new URLSearchParams(searchParams.toString());
     params.set("order", newOrder);
+    params.set("page", "1");
     router.push(`?${params.toString()}`);
   };
 
@@ -818,18 +857,18 @@ export default function AdminKycStatusPage() {
     );
   }
 
-  // Calculate summary stats
-  const totalProviders = providers.length;
-  const verifiedProviders = providers.filter(p => p.kycStatus === "verified").length;
-  const pendingReview = providers.filter(p => p.kycStatus === "pending_review").length;
-  const rejectedProviders = providers.filter(p => p.kycStatus === "rejected").length;
-  const criticalRisk = providers.filter(p => p.riskLevel === "critical").length;
-  const highRisk = providers.filter(p => p.riskLevel === "high").length;
-  const documentsMissing = providers.filter(p =>
-    p.documentVerificationStatus.identity === 'missing' ||
-    p.documentVerificationStatus.business === 'missing' ||
-    p.documentVerificationStatus.bank === 'missing'
-  ).length;
+  // Calculate summary stats (server-filtered set)
+  const totalProviders = analytics?.platformKycStats.totalProviders ?? totalCount;
+  const verifiedProviders = analytics?.platformKycStats.verifiedProviders ?? 0;
+  const pendingReview = analytics?.platformKycStats.pendingReview ?? 0;
+  const rejectedProviders = analytics?.platformKycStats.rejectedProviders ?? 0;
+  const criticalRisk = analytics?.riskDistribution.critical ?? 0;
+  const highRisk = analytics?.riskDistribution.high ?? 0;
+  const documentsMissing = analytics?.documentStatus.documentsMissing ?? 0;
+
+  const totalPages = Math.max(1, Math.ceil((totalCount || 0) / pageSize));
+  const canPreviousPage = page > 1;
+  const canNextPage = page < totalPages;
 
   const asPercent = (numerator: number, denominator: number) => {
     if (!denominator || denominator <= 0) return 0;
@@ -1045,7 +1084,7 @@ export default function AdminKycStatusPage() {
               value={kycStatusFilter.length === 1 ? kycStatusFilter[0] : "all"}
               onChange={(e) => {
                 const value = e.target.value;
-                setKycStatusFilter(value === "all" ? [] : [value]);
+                setCsvFilter("kycStatus", value === "all" ? [] : [value]);
               }}
             >
               <option value="all">All Status</option>
@@ -1064,7 +1103,7 @@ export default function AdminKycStatusPage() {
               value={riskLevelFilter.length === 1 ? riskLevelFilter[0] : "all"}
               onChange={(e) => {
                 const value = e.target.value;
-                setRiskLevelFilter(value === "all" ? [] : [value]);
+                setCsvFilter("riskLevel", value === "all" ? [] : [value]);
               }}
             >
               <option value="all">All Risks</option>
@@ -1087,7 +1126,7 @@ export default function AdminKycStatusPage() {
                   value === "complete" ? ["all_verified"] :
                   value === "missing" ? ["any_missing"] :
                   value === "pending" ? ["any_pending"] : [];
-                setDocumentStatusFilter(mapped);
+                setCsvFilter("docStatus", mapped);
               }}
             >
               <option value="all">All</option>
@@ -1128,7 +1167,7 @@ export default function AdminKycStatusPage() {
                 type="text"
                 placeholder="Search by name, handle, or email..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => updateQuery({ search: e.target.value }, { resetPage: true })}
                 className="w-full border px-3 py-2 rounded"
               />
             </div>
@@ -1145,11 +1184,10 @@ export default function AdminKycStatusPage() {
                         type="checkbox"
                         checked={kycStatusFilter.includes(status)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setKycStatusFilter(prev => [...prev, status]);
-                          } else {
-                            setKycStatusFilter(prev => prev.filter(s => s !== status));
-                          }
+                          const next = e.target.checked
+                            ? Array.from(new Set([...kycStatusFilter, status]))
+                            : kycStatusFilter.filter((s) => s !== status);
+                          setCsvFilter("kycStatus", next);
                         }}
                         className="mr-2"
                       />
@@ -1169,11 +1207,10 @@ export default function AdminKycStatusPage() {
                         type="checkbox"
                         checked={riskLevelFilter.includes(level)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setRiskLevelFilter(prev => [...prev, level]);
-                          } else {
-                            setRiskLevelFilter(prev => prev.filter(l => l !== level));
-                          }
+                          const next = e.target.checked
+                            ? Array.from(new Set([...riskLevelFilter, level]))
+                            : riskLevelFilter.filter((l) => l !== level);
+                          setCsvFilter("riskLevel", next);
                         }}
                         className="mr-2"
                       />
@@ -1198,11 +1235,10 @@ export default function AdminKycStatusPage() {
                         type="checkbox"
                         checked={documentStatusFilter.includes(type.value)}
                         onChange={(e) => {
-                          if (e.target.checked) {
-                            setDocumentStatusFilter(prev => [...prev, type.value]);
-                          } else {
-                            setDocumentStatusFilter(prev => prev.filter(t => t !== type.value));
-                          }
+                          const next = e.target.checked
+                            ? Array.from(new Set([...documentStatusFilter, type.value]))
+                            : documentStatusFilter.filter((t) => t !== type.value);
+                          setCsvFilter("docStatus", next);
                         }}
                         className="mr-2"
                       />
@@ -1216,18 +1252,18 @@ export default function AdminKycStatusPage() {
             {/* Date Range Filters */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Date Range</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">KYC Submission Date Range</label>
                 <div className="flex gap-2">
                   <input
                     type="date"
-                    value={dateRange.start}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                    value={submittedFrom}
+                    onChange={(e) => updateQuery({ submittedFrom: e.target.value }, { resetPage: true })}
                     className="flex-1 border px-3 py-2 rounded text-sm"
                   />
                   <input
                     type="date"
-                    value={dateRange.end}
-                    onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                    value={submittedTo}
+                    onChange={(e) => updateQuery({ submittedTo: e.target.value }, { resetPage: true })}
                     className="flex-1 border px-3 py-2 rounded text-sm"
                   />
                 </div>
@@ -1240,16 +1276,16 @@ export default function AdminKycStatusPage() {
                     type="number"
                     placeholder="Min"
                     min="0"
-                    value={kycAgeRange.min}
-                    onChange={(e) => setKycAgeRange(prev => ({ ...prev, min: e.target.value }))}
+                    value={kycAgeMin}
+                    onChange={(e) => updateQuery({ kycAgeMin: e.target.value }, { resetPage: true })}
                     className="flex-1 border px-3 py-2 rounded text-sm"
                   />
                   <input
                     type="number"
                     placeholder="Max"
                     min="0"
-                    value={kycAgeRange.max}
-                    onChange={(e) => setKycAgeRange(prev => ({ ...prev, max: e.target.value }))}
+                    value={kycAgeMax}
+                    onChange={(e) => updateQuery({ kycAgeMax: e.target.value }, { resetPage: true })}
                     className="flex-1 border px-3 py-2 rounded text-sm"
                   />
                 </div>
@@ -1584,6 +1620,44 @@ export default function AdminKycStatusPage() {
 
       {/* Provider List */}
       <div id="pending-review">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-3">
+        <div className="text-sm text-gray-600">
+          Showing {(totalCount === 0) ? 0 : (page - 1) * pageSize + 1}
+          -{Math.min(page * pageSize, totalCount)} of {totalCount}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className="text-sm text-gray-600">Rows</label>
+          <select
+            className="border px-2 py-1 rounded text-sm"
+            value={String(pageSize)}
+            onChange={(e) => updateQuery({ pageSize: e.target.value }, { resetPage: true })}
+          >
+            <option value="25">25</option>
+            <option value="50">50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+          <button
+            type="button"
+            disabled={!canPreviousPage}
+            onClick={() => updateQuery({ page: String(Math.max(1, page - 1)) })}
+            className="border px-3 py-1 rounded text-sm disabled:opacity-50"
+          >
+            Prev
+          </button>
+          <div className="text-sm text-gray-700">
+            Page {page} of {totalPages}
+          </div>
+          <button
+            type="button"
+            disabled={!canNextPage}
+            onClick={() => updateQuery({ page: String(Math.min(totalPages, page + 1)) })}
+            className="border px-3 py-1 rounded text-sm disabled:opacity-50"
+          >
+            Next
+          </button>
+        </div>
+      </div>
       {viewMode === "table" ? (
         <div className="bg-white shadow rounded-lg overflow-hidden">
           <table className="w-full">
@@ -1610,7 +1684,7 @@ export default function AdminKycStatusPage() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredProviders.map((provider) => (
+              {providers.map((provider) => (
                 <tr key={provider.id} className="hover:bg-gray-50">
                   <td className="px-4 py-4 whitespace-nowrap">
                     <div>
@@ -1719,20 +1793,34 @@ export default function AdminKycStatusPage() {
                         View
                       </a>
                       {provider.kycStatus === "pending_review" && (
-                        <a
-                          href={`/dashboard/admin/providers/${provider.id}#kyc`}
-                          className="text-green-600 hover:text-green-900"
-                        >
-                          Review
-                        </a>
-                      )}
-                      {provider.kycStatus === "verified" && (
-                        <a
-                          href={`/dashboard/admin/providers/${provider.id}#kyc`}
-                          className="text-gray-600 hover:text-gray-900"
-                        >
-                          Update
-                        </a>
+                        <>
+                          <button
+                            type="button"
+                            className="text-green-600 hover:text-green-900 disabled:opacity-50"
+                            disabled={mutatingProviderId === provider.id}
+                            onClick={() =>
+                              setProviderKycStatus({ providerId: provider.id, kycStatus: "verified" })
+                            }
+                          >
+                            Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="text-red-600 hover:text-red-900 disabled:opacity-50"
+                            disabled={mutatingProviderId === provider.id}
+                            onClick={() => {
+                              const reason = window.prompt("Reason for rejection?");
+                              if (!reason?.trim()) return;
+                              void setProviderKycStatus({
+                                providerId: provider.id,
+                                kycStatus: "rejected",
+                                reason: reason.trim(),
+                              });
+                            }}
+                          >
+                            Reject
+                          </button>
+                        </>
                       )}
                     </div>
                   </td>
@@ -1744,7 +1832,7 @@ export default function AdminKycStatusPage() {
       ) : (
         /* Card View */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {filteredProviders.map((provider) => (
+          {providers.map((provider) => (
             <div key={provider.id} className="border rounded-lg p-4 bg-white shadow">
               <div className="flex justify-between items-start mb-2">
                 <div>
@@ -1803,6 +1891,37 @@ export default function AdminKycStatusPage() {
                     </div>
                   </div>
                 </div>
+
+                {provider.kycStatus === "pending_review" && (
+                  <div className="flex gap-2 pt-2">
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded bg-green-600 text-white text-sm disabled:opacity-50"
+                      disabled={mutatingProviderId === provider.id}
+                      onClick={() =>
+                        setProviderKycStatus({ providerId: provider.id, kycStatus: "verified" })
+                      }
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="px-3 py-2 rounded bg-red-600 text-white text-sm disabled:opacity-50"
+                      disabled={mutatingProviderId === provider.id}
+                      onClick={() => {
+                        const reason = window.prompt("Reason for rejection?");
+                        if (!reason?.trim()) return;
+                        void setProviderKycStatus({
+                          providerId: provider.id,
+                          kycStatus: "rejected",
+                          reason: reason.trim(),
+                        });
+                      }}
+                    >
+                      Reject
+                    </button>
+                  </div>
+                )}
 
                 <div className="text-xs text-gray-500">
                   <div>Stripe: {provider.stripeConnectId ? "Connected" : "Not Connected"}</div>

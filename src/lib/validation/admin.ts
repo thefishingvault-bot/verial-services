@@ -44,6 +44,31 @@ export const ProviderVerificationSchema = z.object({
   isVerified: z.boolean(),
 });
 
+export const ProviderKycMutationSchema = z
+  .object({
+    action: z.enum(["set_status"]),
+    kycStatus: z.enum(["not_started", "in_progress", "pending_review", "verified", "rejected"]),
+    reason: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+    adminNotes: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v ? v : undefined)),
+  })
+  .superRefine((data, ctx) => {
+    if (data.kycStatus === "rejected" && !data.reason) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["reason"],
+        message: "Reason is required when rejecting KYC",
+      });
+    }
+  });
+
 export const ProviderBanSchema = z.object({
   reason: z.string().trim().optional().transform((v) => v || "Banned by admin"),
 });
@@ -125,7 +150,58 @@ export const TemplatesQuerySchema = z.object({
   search: z.string().trim().optional(),
 });
 
+const csvEnumOptional = <T extends [string, ...string[]]>(values: T) =>
+  z.preprocess(
+    (value) => {
+      if (value === undefined || value === null) return undefined;
+      if (typeof value === "string") {
+        const items = value
+          .split(",")
+          .map((v) => v.trim())
+          .filter(Boolean);
+        return items.length ? items : undefined;
+      }
+      return value;
+    },
+    z.array(z.enum(values)).optional(),
+  );
+
 export const ProvidersKycQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(200).default(50),
+  search: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  kycStatus: csvEnumOptional([
+    "not_started",
+    "in_progress",
+    "pending_review",
+    "verified",
+    "rejected",
+  ]),
+  riskLevel: csvEnumOptional(["low", "medium", "high", "critical"]),
+  docStatus: csvEnumOptional([
+    "identity_missing",
+    "business_missing",
+    "bank_missing",
+    "any_missing",
+    "any_pending",
+    "all_verified",
+  ]),
+  submittedFrom: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  submittedTo: z
+    .string()
+    .trim()
+    .optional()
+    .transform((v) => (v ? v : undefined)),
+  kycAgeMin: z.coerce.number().int().min(0).optional(),
+  kycAgeMax: z.coerce.number().int().min(0).optional(),
   sort: z
     .enum(["kyc_status", "risk_score", "created", "business_name"])
     .optional()
