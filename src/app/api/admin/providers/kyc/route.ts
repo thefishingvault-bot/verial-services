@@ -75,9 +75,11 @@ export async function GET(request: NextRequest) {
     const bookingAgg = db
       .select({
         providerId: bookings.providerId,
-        totalBookings: sql<number>`COUNT(*)`,
-        completedBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} = 'completed')`,
-        canceledBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} IN ('canceled_customer', 'canceled_provider'))`,
+        totalBookings: sql<number>`COUNT(*)`.as("totalBookings"),
+        completedBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} = 'completed')`.as("completedBookings"),
+        canceledBookings: sql<number>`COUNT(*) FILTER (WHERE ${bookings.status} IN ('canceled_customer', 'canceled_provider'))`.as(
+          "canceledBookings",
+        ),
       })
       .from(bookings)
       .groupBy(bookings.providerId)
@@ -86,8 +88,10 @@ export async function GET(request: NextRequest) {
     const reviewAgg = db
       .select({
         providerId: reviews.providerId,
-        totalReviews: sql<number>`COUNT(*) FILTER (WHERE ${reviews.isHidden} = false)`,
-        avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
+        totalReviews: sql<number>`COUNT(*) FILTER (WHERE ${reviews.isHidden} = false)`.as("totalReviews"),
+        avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`.as(
+          "avgRating",
+        ),
       })
       .from(reviews)
       .groupBy(reviews.providerId)
@@ -96,8 +100,10 @@ export async function GET(request: NextRequest) {
     const incidentAgg = db
       .select({
         providerId: trustIncidents.providerId,
-        totalIncidents: sql<number>`COUNT(*)`,
-        unresolvedIncidents: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`,
+        totalIncidents: sql<number>`COUNT(*)`.as("totalIncidents"),
+        unresolvedIncidents: sql<number>`COUNT(*) FILTER (WHERE ${trustIncidents.resolved} = false)`.as(
+          "unresolvedIncidents",
+        ),
       })
       .from(trustIncidents)
       .groupBy(trustIncidents.providerId)
