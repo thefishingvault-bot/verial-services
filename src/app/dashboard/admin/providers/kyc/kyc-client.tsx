@@ -10,6 +10,38 @@ import { LiveActivityIndicator, AutoRefreshToggle } from '@/components/LiveActiv
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";
 
+const toValidDate = (value: unknown): Date | null => {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value as string | number);
+  return Number.isNaN(date.getTime()) ? null : date;
+};
+
+const toDate = (value: unknown): Date => toValidDate(value) ?? new Date(0);
+
+const toFiniteNumber = (value: unknown, fallback = 0): number => {
+  const numberValue = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+};
+
+const normalizeKycProvider = (provider: KycProvider): KycProvider => ({
+  ...provider,
+  createdAt: toDate(provider.createdAt),
+  kycSubmittedAt: toValidDate(provider.kycSubmittedAt),
+  kycVerifiedAt: toValidDate(provider.kycVerifiedAt),
+  trustScore: toFiniteNumber(provider.trustScore, 0),
+  riskScore: toFiniteNumber(provider.riskScore, 0),
+  totalBookings: toFiniteNumber(provider.totalBookings, 0),
+  completionRate: toFiniteNumber(provider.completionRate, 0),
+  cancellationRate: toFiniteNumber(provider.cancellationRate, 0),
+  totalReviews: toFiniteNumber(provider.totalReviews, 0),
+  avgRating: toFiniteNumber(provider.avgRating, 0),
+  totalIncidents: toFiniteNumber(provider.totalIncidents, 0),
+  unresolvedIncidents: toFiniteNumber(provider.unresolvedIncidents, 0),
+  daysActive: toFiniteNumber(provider.daysActive, 0),
+  kycCompletionPercentage: toFiniteNumber(provider.kycCompletionPercentage, 0),
+  kycAge: toFiniteNumber(provider.kycAge, 0),
+});
+
 type KycProvider = {
   id: string;
   businessName: string;
@@ -292,7 +324,7 @@ export default function AdminKycStatusPage() {
       }
 
       const data: ApiResponse = await response.json();
-      setProviders(data.providers);
+      setProviders(data.providers.map(normalizeKycProvider));
       setAnalytics(data.analytics);
     } catch (err) {
       console.error("Error fetching KYC providers:", err);

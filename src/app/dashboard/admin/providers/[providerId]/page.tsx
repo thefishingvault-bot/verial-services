@@ -15,6 +15,11 @@ import { AdminProviderKycDocuments } from '@/components/admin/provider-kyc-docum
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
 
+const toFiniteNumber = (value: unknown, fallback = 0) => {
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : fallback;
+};
+
 const toValidDate = (value: unknown): Date | null => {
   if (!value) return null;
   const date = value instanceof Date ? value : new Date(value as string | number);
@@ -171,8 +176,8 @@ export default async function AdminProviderDetailPage({
     .orderBy(desc(providerNotes.createdAt))
     .limit(10);
 
-  const avgRating = reviewStats?.avgRating ?? 0;
-  const totalReviews = reviewStats?.total ?? 0;
+  const avgRating = toFiniteNumber(reviewStats?.avgRating, 0);
+  const totalReviews = toFiniteNumber(reviewStats?.total, 0);
   const completedLast90Days = recentCompletedStats?.completedLast90Days ?? 0;
 
   const displayName = provider.businessName || `@${provider.handle}`;
