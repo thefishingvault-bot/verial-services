@@ -29,8 +29,8 @@ type ProviderHealth = {
   cancelledBookings: number;
   totalReviews: number;
   avgRating: number | null;
-  cancellationRate: number;
-  completionRate: number;
+  cancellationRate: number | null;
+  completionRate: number | null;
   // New v2 fields
   bookings30d: number;
   completed30d: number;
@@ -38,10 +38,10 @@ type ProviderHealth = {
   bookings90d: number;
   completed90d: number;
   cancelled90d: number;
-  completionRate30d: number;
-  cancellationRate30d: number;
-  completionRate90d: number;
-  cancellationRate90d: number;
+  completionRate30d: number | null;
+  cancellationRate30d: number | null;
+  completionRate90d: number | null;
+  cancellationRate90d: number | null;
   totalIncidents: number;
   unresolvedIncidents: number;
   recentIncidents: number;
@@ -83,8 +83,8 @@ type BookingTrendPoint = {
 
 type AnalyticsData = {
   platformAverages: {
-    avgCompletionRate: number;
-    avgCancellationRate: number;
+    avgCompletionRate: number | null;
+    avgCancellationRate: number | null;
     avgTrustScore: number;
     totalBookings: number;
     totalIncidents: number;
@@ -268,6 +268,16 @@ export default function AdminProviderHealthPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [providers, setProviders] = useState<ProviderHealth[]>([]);
+
+  const formatPercent = (value: number | null | undefined, digits = 1) => {
+    if (value === null || value === undefined || Number.isNaN(value)) return "N/A";
+    return `${value.toFixed(digits)}%`;
+  };
+
+  const providersWithCompletionRate = providers.filter(
+    (provider): provider is ProviderHealth & { completionRate: number } =>
+      typeof provider.completionRate === "number" && Number.isFinite(provider.completionRate)
+  );
   const [analytics, setAnalytics] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -464,11 +474,13 @@ export default function AdminProviderHealthPage() {
       }
 
       // Numeric range filters
-      if (completionRateRange.min && provider.completionRate < parseFloat(completionRateRange.min)) {
-        return false;
+      if (completionRateRange.min) {
+        if (provider.completionRate === null) return false;
+        if (provider.completionRate < parseFloat(completionRateRange.min)) return false;
       }
-      if (completionRateRange.max && provider.completionRate > parseFloat(completionRateRange.max)) {
-        return false;
+      if (completionRateRange.max) {
+        if (provider.completionRate === null) return false;
+        if (provider.completionRate > parseFloat(completionRateRange.max)) return false;
       }
 
       if (trustScoreRange.min && provider.trustScore < parseInt(trustScoreRange.min)) {
@@ -694,17 +706,27 @@ export default function AdminProviderHealthPage() {
   const servicesAddedCount = filteredProviders.filter(p => p.totalServices > 0).length;
   const reviewsCount = filteredProviders.filter(p => p.totalReviews > 0).length;
   const trust80Count = filteredProviders.filter(p => p.trustScore >= 80).length;
-  const averageCompletionRate = filteredProviders.length > 0
-    ? Math.round(filteredProviders.reduce((sum, p) => sum + p.completionRate, 0) / filteredProviders.length)
-    : 0;
+  const averageCompletionRate = (() => {
+    const rates = filteredProviders
+      .map((p) => p.completionRate)
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v));
+    if (rates.length === 0) return null;
+    return Math.round(rates.reduce((sum, v) => sum + v, 0) / rates.length);
+  })();
 
   const totalBookingsLast30d = filteredProviders.reduce((sum, p) => sum + p.bookings30d, 0);
   const activeProvidersCount = analytics?.summary.activeProviders ?? filteredProviders.filter(p => p.totalBookings > 0).length;
 
-  const completionTrend = analytics?.trends.bookingTimeSeries.map((point) => ({
-    name: point.date.slice(5),
-    value: Number(point.completionRate.toFixed(1)),
-  })) || [];
+  const completionTrend =
+    analytics?.trends.bookingTimeSeries
+      .filter(
+        (point): point is typeof point & { completionRate: number } =>
+          typeof point.completionRate === 'number' && Number.isFinite(point.completionRate)
+      )
+      .map((point) => ({
+        name: point.date.slice(5),
+        value: Number(point.completionRate.toFixed(1)),
+      })) || [];
 
   const bookingVolumeTrend = analytics?.trends.bookingTimeSeries.map((point) => ({
     name: point.date.slice(5),
@@ -1270,7 +1292,7 @@ export default function AdminProviderHealthPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
           <div className="text-center p-4 bg-blue-50 rounded-lg">
             <div className="text-2xl font-bold text-blue-600">
-              {analytics?.platformAverages.avgCompletionRate.toFixed(1) || 0}%
+              {formatPercent(analytics?.platformAverages.avgCompletionRate, 1)}
             </div>
             <div className="text-sm text-gray-600">Avg Completion Rate</div>
           </div>
@@ -1282,7 +1304,7 @@ export default function AdminProviderHealthPage() {
           </div>
           <div className="text-center p-4 bg-yellow-50 rounded-lg">
             <div className="text-2xl font-bold text-yellow-600">
-              {analytics?.platformAverages.avgCancellationRate.toFixed(1) || 0}%
+              {formatPercent(analytics?.platformAverages.avgCancellationRate, 1)}
             </div>
             <div className="text-sm text-gray-600">Avg Cancellation Rate</div>
           </div>
@@ -1337,10 +1359,10 @@ export default function AdminProviderHealthPage() {
               <h5 className="text-sm font-medium text-gray-700 mb-2">Provider Performance Distribution</h5>
               <BarChart
                 data={[
-                  { name: 'Excellent (95-100%)', value: providers.filter(p => p.completionRate >= 95).length, color: '#10B981' },
-                  { name: 'Good (85-94%)', value: providers.filter(p => p.completionRate >= 85 && p.completionRate < 95).length, color: '#3B82F6' },
-                  { name: 'Average (70-84%)', value: providers.filter(p => p.completionRate >= 70 && p.completionRate < 85).length, color: '#F59E0B' },
-                  { name: 'Poor (<70%)', value: providers.filter(p => p.completionRate < 70).length, color: '#EF4444' }
+                  { name: 'Excellent (95-100%)', value: providersWithCompletionRate.filter(p => p.completionRate >= 95).length, color: '#10B981' },
+                  { name: 'Good (85-94%)', value: providersWithCompletionRate.filter(p => p.completionRate >= 85 && p.completionRate < 95).length, color: '#3B82F6' },
+                  { name: 'Average (70-84%)', value: providersWithCompletionRate.filter(p => p.completionRate >= 70 && p.completionRate < 85).length, color: '#F59E0B' },
+                  { name: 'Poor (<70%)', value: providersWithCompletionRate.filter(p => p.completionRate < 70).length, color: '#EF4444' }
                 ]}
                 width={400}
                 height={200}
@@ -1360,7 +1382,7 @@ export default function AdminProviderHealthPage() {
             <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
               <div className="text-lg font-semibold text-green-900 mb-1">Avg Completion Rate</div>
               <div className="text-3xl font-bold text-green-600">
-                {averageCompletionRate}%
+                {averageCompletionRate === null ? 'N/A' : `${averageCompletionRate}%`}
               </div>
               <div className="text-sm text-green-700 mt-1">Across all providers</div>
             </div>
@@ -1380,8 +1402,8 @@ export default function AdminProviderHealthPage() {
             <h4 className="text-md font-medium text-gray-900 mb-3">Top Performers</h4>
             <div className="space-y-2">
               {providers
-                .filter(p => p.totalBookings > 0)
-                .sort((a, b) => b.completionRate - a.completionRate)
+                .filter(p => p.completionRate !== null && p.completionRate !== undefined)
+                .sort((a, b) => (b.completionRate ?? 0) - (a.completionRate ?? 0))
                 .slice(0, 5)
                 .map((provider, index) => (
                   <div key={provider.id} className="flex justify-between items-center p-2 bg-green-50 rounded">
@@ -1390,7 +1412,7 @@ export default function AdminProviderHealthPage() {
                       <span className="text-sm">{provider.businessName}</span>
                     </div>
                     <span className="text-sm font-medium text-green-600">
-                      {provider.completionRate.toFixed(1)}%
+                      {formatPercent(provider.completionRate, 1)}
                     </span>
                   </div>
                 ))}
@@ -1401,8 +1423,8 @@ export default function AdminProviderHealthPage() {
             <h4 className="text-md font-medium text-gray-900 mb-3">Needs Improvement</h4>
             <div className="space-y-2">
               {providers
-                .filter(p => p.totalBookings > 0)
-                .sort((a, b) => a.completionRate - b.completionRate)
+                .filter(p => p.completionRate !== null && p.completionRate !== undefined)
+                .sort((a, b) => (a.completionRate ?? 0) - (b.completionRate ?? 0))
                 .slice(0, 5)
                 .map((provider, index) => (
                   <div key={provider.id} className="flex justify-between items-center p-2 bg-red-50 rounded">
@@ -1411,7 +1433,7 @@ export default function AdminProviderHealthPage() {
                       <span className="text-sm">{provider.businessName}</span>
                     </div>
                     <span className="text-sm font-medium text-red-600">
-                      {provider.completionRate.toFixed(1)}%
+                      {formatPercent(provider.completionRate, 1)}
                     </span>
                   </div>
                 ))}
@@ -1634,7 +1656,7 @@ export default function AdminProviderHealthPage() {
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-sm font-medium">Consistent Performers</span>
                   <span className="text-blue-600 font-bold">
-                    {providers.filter(p => p.daysActive > 90 && p.completionRate > 85).length}
+                    {providers.filter(p => p.daysActive > 90 && p.completionRate !== null && p.completionRate > 85).length}
                   </span>
                 </div>
                 <div className="text-xs text-gray-600">
@@ -1724,7 +1746,7 @@ export default function AdminProviderHealthPage() {
             <div className="p-4 bg-gray-50 rounded-lg">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm font-medium">Medium Risk Threshold</span>
-                <span className="text-yellow-600 font-bold">40-59</span>
+                <span className="text-yellow-600 font-bold">30-59</span>
               </div>
               <div className="text-xs text-gray-600">
                 Regular monitoring required
@@ -2061,10 +2083,10 @@ export default function AdminProviderHealthPage() {
                       {provider.totalBookings} bookings
                     </div>
                     <div className="text-xs text-gray-500">
-                      {provider.completionRate.toFixed(1)}% completion
+                      {formatPercent(provider.completionRate, 1)} completion
                     </div>
                     <div className="text-xs text-gray-500">
-                      {provider.cancellationRate.toFixed(1)}% cancellation
+                      {formatPercent(provider.cancellationRate, 1)} cancellation
                     </div>
                   </td>
                   <td className="px-4 py-4 whitespace-nowrap">
@@ -2198,7 +2220,7 @@ export default function AdminProviderHealthPage() {
                 </div>
                 <div className="flex justify-between">
                   <span>Completion:</span>
-                  <span>{provider.completionRate.toFixed(1)}%</span>
+                  <span>{formatPercent(provider.completionRate, 1)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Unresolved Incidents:</span>

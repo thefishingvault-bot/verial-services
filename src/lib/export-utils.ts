@@ -16,18 +16,18 @@ type ProviderHealthData = {
   cancelledBookings: number;
   totalReviews: number;
   avgRating: number | null;
-  cancellationRate: number;
-  completionRate: number;
+  cancellationRate: number | null;
+  completionRate: number | null;
   bookings30d: number;
   completed30d: number;
   cancelled30d: number;
   bookings90d: number;
   completed90d: number;
   cancelled90d: number;
-  completionRate30d: number;
-  cancellationRate30d: number;
-  completionRate90d: number;
-  cancellationRate90d: number;
+  completionRate30d: number | null;
+  cancellationRate30d: number | null;
+  completionRate90d: number | null;
+  cancellationRate90d: number | null;
   totalIncidents: number;
   unresolvedIncidents: number;
   recentIncidents: number;
@@ -95,9 +95,9 @@ export function exportToCSV(data: ProviderHealthData[], filename: string = 'prov
     provider.riskLevel,
     provider.riskScore,
     provider.trustScore,
-    provider.completionRate.toFixed(2),
+    provider.completionRate === null ? 'N/A' : provider.completionRate.toFixed(2),
     provider.totalBookings,
-    provider.cancellationRate.toFixed(2),
+    provider.cancellationRate === null ? 'N/A' : provider.cancellationRate.toFixed(2),
     provider.totalReviews,
     provider.avgRating?.toFixed(1) || 'N/A',
     provider.daysActive,
@@ -148,8 +148,8 @@ export function exportToJSON(data: ProviderHealthData[], filename: string = 'pro
 
 type AnalyticsData = {
   platformAverages: {
-    avgCompletionRate: number;
-    avgCancellationRate: number;
+    avgCompletionRate: number | null;
+    avgCancellationRate: number | null;
     avgTrustScore: number;
     totalBookings: number;
     totalIncidents: number;
@@ -181,6 +181,14 @@ type AnalyticsData = {
 export async function generatePDFReport(data: ProviderHealthData[], analytics: AnalyticsData, filename: string = 'provider-health-report.pdf') {
   // This would typically use a PDF generation library like jsPDF or Puppeteer
   // For now, we'll create a simple HTML-based PDF structure
+
+  const completionRates = data
+    .map((p) => p.completionRate)
+    .filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+  const avgCompletionRateDisplay =
+    completionRates.length === 0
+      ? 'N/A'
+      : `${(completionRates.reduce((sum, v) => sum + v, 0) / completionRates.length).toFixed(1)}%`;
 
   const reportHTML = `
     <!DOCTYPE html>
@@ -221,7 +229,7 @@ export async function generatePDFReport(data: ProviderHealthData[], analytics: A
         </div>
         <div class="metric">
           <h3>Avg Completion Rate</h3>
-          <div class="value">${(data.reduce((sum, p) => sum + p.completionRate, 0) / data.length).toFixed(1)}%</div>
+          <div class="value">${avgCompletionRateDisplay}</div>
         </div>
         <div class="metric">
           <h3>Active Providers</h3>
@@ -248,7 +256,7 @@ export async function generatePDFReport(data: ProviderHealthData[], analytics: A
               <td>${provider.businessName}<br><small>@${provider.handle}</small></td>
               <td>${provider.riskLevel.toUpperCase()}</td>
               <td>${provider.riskScore}</td>
-              <td>${provider.completionRate.toFixed(1)}%</td>
+              <td>${provider.completionRate === null ? 'N/A' : `${provider.completionRate.toFixed(1)}%`}</td>
               <td>${provider.totalBookings}</td>
               <td>${provider.unresolvedIncidents}</td>
               <td>${provider.status}</td>

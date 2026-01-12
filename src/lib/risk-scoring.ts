@@ -7,8 +7,8 @@ export interface ProviderRiskMetrics {
   trustScore: number;
   unresolvedIncidents: number;
   recentIncidents: number;
-  completionRate: number;
-  cancellationRate: number;
+  completionRate: number | null;
+  cancellationRate: number | null;
   totalSuspensions: number;
   avgRating: number;
   totalBookings: number;
@@ -100,9 +100,9 @@ export class RiskScoringEngine {
     // Get performance metrics
     const performanceMetrics = await db
       .select({
-        totalBookings: sql<number>`count(*)`,
-        completedBookings: sql<number>`count(case when ${bookings.status} = 'completed' then 1 end)`,
-        cancelledBookings: sql<number>`count(case when ${bookings.status} = 'canceled' then 1 end)`,
+        totalCountableBookings: sql<number>`count(case when ${bookings.status} in ('completed', 'completed_by_provider', 'canceled_customer', 'canceled_provider', 'refunded') then 1 end)`,
+        completedBookings: sql<number>`count(case when ${bookings.status} in ('completed', 'completed_by_provider') then 1 end)`,
+        cancelledBookings: sql<number>`count(case when ${bookings.status} in ('canceled_customer', 'canceled_provider', 'refunded') then 1 end)`,
         avgRating: sql<number>`avg(${reviews.rating})`,
       })
       .from(bookings)
@@ -117,12 +117,12 @@ export class RiskScoringEngine {
       .from(providerSuspensions)
       .where(eq(providerSuspensions.providerId, providerId));
 
-    const totalBookings = performanceMetrics[0]?.totalBookings || 0;
+    const totalBookings = performanceMetrics[0]?.totalCountableBookings || 0;
     const completedBookings = performanceMetrics[0]?.completedBookings || 0;
     const cancelledBookings = performanceMetrics[0]?.cancelledBookings || 0;
 
-    const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 100;
-    const cancellationRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : 0;
+    const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : null;
+    const cancellationRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : null;
 
     const daysActive = Math.floor((now.getTime() - provider[0].createdAt.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -158,8 +158,17 @@ export class RiskScoringEngine {
     riskScore += incidentRisk * this.WEIGHTS.INCIDENT_HISTORY;
 
     // Performance metrics component
-    const performanceRisk = Math.max(0, (80 - metrics.completionRate) + metrics.cancellationRate);
-    riskScore += Math.min(performanceRisk, 100) * this.WEIGHTS.PERFORMANCE_METRICS;
+    // Only apply if the provider has countable (terminal) bookings.
+    if (
+      metrics.totalBookings > 0 &&
+      typeof metrics.completionRate === 'number' &&
+      Number.isFinite(metrics.completionRate) &&
+      typeof metrics.cancellationRate === 'number' &&
+      Number.isFinite(metrics.cancellationRate)
+    ) {
+      const performanceRisk = Math.max(0, (80 - metrics.completionRate) + metrics.cancellationRate);
+      riskScore += Math.min(performanceRisk, 100) * this.WEIGHTS.PERFORMANCE_METRICS;
+    }
 
     // Suspension history component
     const suspensionRisk = Math.min(metrics.totalSuspensions * 20, 100);
@@ -200,11 +209,11 @@ export class RiskScoringEngine {
       factors.push(`${metrics.recentIncidents} incidents in last 30 days`);
     }
 
-    if (metrics.completionRate < 80) {
+    if (typeof metrics.completionRate === 'number' && Number.isFinite(metrics.completionRate) && metrics.completionRate < 80) {
       factors.push(`Low completion rate (${metrics.completionRate.toFixed(1)}%)`);
     }
 
-    if (metrics.cancellationRate > 15) {
+    if (typeof metrics.cancellationRate === 'number' && Number.isFinite(metrics.cancellationRate) && metrics.cancellationRate > 15) {
       factors.push(`High cancellation rate (${metrics.cancellationRate.toFixed(1)}%)`);
     }
 
@@ -235,7 +244,7 @@ export class RiskScoringEngine {
       recommendations.push("Consider temporary suspension if issues persist");
     }
 
-    if (metrics.completionRate < 80) {
+    if (typeof metrics.completionRate === 'number' && Number.isFinite(metrics.completionRate) && metrics.completionRate < 80) {
       recommendations.push("Monitor booking completion patterns");
       recommendations.push("Provide performance improvement guidance");
     }
@@ -245,7 +254,7 @@ export class RiskScoringEngine {
       recommendations.push("Review incident details for patterns");
     }
 
-    if (metrics.cancellationRate > 15) {
+    if (typeof metrics.cancellationRate === 'number' && Number.isFinite(metrics.cancellationRate) && metrics.cancellationRate > 15) {
       recommendations.push("Investigate frequent cancellation reasons");
       recommendations.push("Consider booking policy review");
     }
@@ -273,7 +282,7 @@ export class RiskScoringEngine {
       alerts.push(`High incident frequency (${metrics.recentIncidents} in 30 days)`);
     }
 
-    if (metrics.completionRate < 50) {
+    if (typeof metrics.completionRate === 'number' && Number.isFinite(metrics.completionRate) && metrics.completionRate < 50) {
       alerts.push(`Severely low completion rate (${metrics.completionRate.toFixed(1)}%)`);
     }
 

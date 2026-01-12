@@ -24,6 +24,13 @@ export async function GET(request: NextRequest) {
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
 
+    // "Countable" (terminal) bookings:
+    // - Completed: completed, completed_by_provider
+    // - Cancelled: canceled_customer, canceled_provider, refunded
+    // Everything else is not counted toward completion/cancellation rates.
+    const COMPLETED_STATUSES = ["completed", "completed_by_provider"] as const;
+    const CANCELLED_STATUSES = ["canceled_customer", "canceled_provider", "refunded"] as const;
+
     // Get all enabled risk rules for reference
     const enabledRiskRules = await db
       .select({
@@ -61,16 +68,16 @@ export async function GET(request: NextRequest) {
       .select({
         providerId: bookings.providerId,
         totalBookings: sql<number>`cast(count(*) as int)`,
-        completedBookings: sql<number>`cast(count(case when ${bookings.status} = 'completed' then 1 end) as int)`,
-        cancelledBookings: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') then 1 end) as int)`,
+        completedBookings: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${COMPLETED_STATUSES.join("','")}')`)} then 1 end) as int)`,
+        cancelledBookings: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${CANCELLED_STATUSES.join("','")}')`)} then 1 end) as int)`,
 
         bookings30d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
-        completed30d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
-        cancelled30d: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+        completed30d: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${COMPLETED_STATUSES.join("','")}')`)} and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
+        cancelled30d: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${CANCELLED_STATUSES.join("','")}')`)} and ${bookings.createdAt} >= ${thirtyDaysAgo} then 1 end) as int)`,
 
         bookings90d: sql<number>`cast(count(case when ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
-        completed90d: sql<number>`cast(count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
-        cancelled90d: sql<number>`cast(count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
+        completed90d: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${COMPLETED_STATUSES.join("','")}')`)} and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
+        cancelled90d: sql<number>`cast(count(case when ${bookings.status} in ${sql.raw(`('${CANCELLED_STATUSES.join("','")}')`)} and ${bookings.createdAt} >= ${ninetyDaysAgo} then 1 end) as int)`,
       })
       .from(bookings)
       .where(inArray(bookings.providerId, allProviderIds))
@@ -157,14 +164,17 @@ export async function GET(request: NextRequest) {
       const totalBookings = Number(booking?.totalBookings ?? 0);
       const completedBookings = Number(booking?.completedBookings ?? 0);
       const cancelledBookings = Number(booking?.cancelledBookings ?? 0);
+      const totalCountableBookings = completedBookings + cancelledBookings;
 
       const bookings30d = Number(booking?.bookings30d ?? 0);
       const completed30d = Number(booking?.completed30d ?? 0);
       const cancelled30d = Number(booking?.cancelled30d ?? 0);
+      const countable30d = completed30d + cancelled30d;
 
       const bookings90d = Number(booking?.bookings90d ?? 0);
       const completed90d = Number(booking?.completed90d ?? 0);
       const cancelled90d = Number(booking?.cancelled90d ?? 0);
+      const countable90d = completed90d + cancelled90d;
 
       const totalReviews = Number(review?.totalReviews ?? 0);
       const avgRating = review?.avgRating === null || review?.avgRating === undefined ? null : Number(review.avgRating);
@@ -184,14 +194,14 @@ export async function GET(request: NextRequest) {
 
       const totalServices = Number(svc?.totalServices ?? 0);
 
-      const completionRate = totalBookings > 0 ? (completedBookings / totalBookings) * 100 : 0;
-      const cancellationRate = totalBookings > 0 ? (cancelledBookings / totalBookings) * 100 : 0;
+      const completionRate = totalCountableBookings > 0 ? (completedBookings / totalCountableBookings) * 100 : null;
+      const cancellationRate = totalCountableBookings > 0 ? (cancelledBookings / totalCountableBookings) * 100 : null;
 
-      const completionRate30d = bookings30d > 0 ? (completed30d / bookings30d) * 100 : 0;
-      const cancellationRate30d = bookings30d > 0 ? (cancelled30d / bookings30d) * 100 : 0;
+      const completionRate30d = countable30d > 0 ? (completed30d / countable30d) * 100 : null;
+      const cancellationRate30d = countable30d > 0 ? (cancelled30d / countable30d) * 100 : null;
 
-      const completionRate90d = bookings90d > 0 ? (completed90d / bookings90d) * 100 : 0;
-      const cancellationRate90d = bookings90d > 0 ? (cancelled90d / bookings90d) * 100 : 0;
+      const completionRate90d = countable90d > 0 ? (completed90d / countable90d) * 100 : null;
+      const cancellationRate90d = countable90d > 0 ? (cancelled90d / countable90d) * 100 : null;
 
       const daysSinceCreation = Math.floor((now.getTime() - provider.createdAt.getTime()) / (1000 * 60 * 60 * 24));
       const bookingFrequency = daysSinceCreation > 0 ? totalBookings / daysSinceCreation : 0;
@@ -205,14 +215,14 @@ export async function GET(request: NextRequest) {
         cancellationRate,
         totalSuspensions,
         avgRating: avgRating ?? 0,
-        totalBookings,
+        totalBookings: totalCountableBookings,
         daysActive: daysSinceCreation,
       });
 
       const applicableRules = enabledRiskRules.filter((rule) => {
         if (rule.incidentType === "complaint" && totalIncidents > 0) return true;
         if (rule.incidentType === "violation" && unresolvedIncidents > 0) return true;
-        if (rule.incidentType === "service_quality" && completionRate < 80) return true;
+        if (rule.incidentType === "service_quality" && typeof completionRate === "number" && completionRate < 80) return true;
         if (rule.incidentType === "review_abuse" && (avgRating ?? 5) < 3.0) return true;
         return false;
       });
@@ -323,9 +333,16 @@ export async function GET(request: NextRequest) {
     const totalProviders = filteredProviders.length;
     const activeProviders = filteredProviders.filter(p => p.totalBookings > 0).length;
 
+    const platformCompleted = filteredProviders.reduce((sum, p) => sum + Number(p.completedBookings ?? 0), 0);
+    const platformCancelled = filteredProviders.reduce((sum, p) => sum + Number(p.cancelledBookings ?? 0), 0);
+    const platformCountable = platformCompleted + platformCancelled;
+    const platformCompletionRate = platformCountable > 0 ? (platformCompleted / platformCountable) * 100 : null;
+    const platformCancellationRate = platformCountable > 0 ? (platformCancelled / platformCountable) * 100 : null;
+
     const platformAverages = {
-      avgCompletionRate: totalProviders > 0 ? filteredProviders.reduce((sum, p) => sum + p.completionRate, 0) / totalProviders : 0,
-      avgCancellationRate: totalProviders > 0 ? filteredProviders.reduce((sum, p) => sum + p.cancellationRate, 0) / totalProviders : 0,
+      // Weighted platform rate based on countable (terminal) bookings only.
+      avgCompletionRate: platformCompletionRate,
+      avgCancellationRate: platformCancellationRate,
       avgTrustScore: totalProviders > 0 ? filteredProviders.reduce((sum, p) => sum + p.trustScore, 0) / totalProviders : 0,
       totalBookings: filteredProviders.reduce((sum, p) => sum + p.totalBookings, 0),
       totalIncidents: filteredProviders.reduce((sum, p) => sum + p.totalIncidents, 0),
@@ -338,9 +355,9 @@ export async function GET(request: NextRequest) {
     const bookingTrendsRaw = providerIds.length === 0 ? [] : await db
       .select({
         day: sql<Date>`date_trunc('day', ${bookings.createdAt})`,
-        total: sql<number>`count(*)`,
-        completed: sql<number>`count(case when ${bookings.status} = 'completed' then 1 end)`,
-        canceled: sql<number>`count(case when (${bookings.status} = 'canceled_customer' or ${bookings.status} = 'canceled_provider') then 1 end)`,
+        total: sql<number>`count(case when ${bookings.status} in ${sql.raw(`('${[...COMPLETED_STATUSES, ...CANCELLED_STATUSES].join("','")}')`)} then 1 end)`,
+        completed: sql<number>`count(case when ${bookings.status} in ${sql.raw(`('${COMPLETED_STATUSES.join("','")}')`)} then 1 end)`,
+        canceled: sql<number>`count(case when ${bookings.status} in ${sql.raw(`('${CANCELLED_STATUSES.join("','")}')`)} then 1 end)`,
       })
       .from(bookings)
       .where(and(
