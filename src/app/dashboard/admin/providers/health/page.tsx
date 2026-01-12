@@ -1,19 +1,10 @@
-import { currentUser } from "@clerk/nextjs/server";
 import { redirect } from "next/navigation";
 import AdminProviderHealthClient from "./health-client";
-import { requireAdmin } from "@/lib/admin";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export default async function AdminProviderHealthPage() {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect("/dashboard");
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect("/dashboard");
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect("/dashboard");
 
   return <AdminProviderHealthClient />;
 }
