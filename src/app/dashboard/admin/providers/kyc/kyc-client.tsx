@@ -7,6 +7,7 @@ import { scheduleReport, getScheduledReports, cancelScheduledReport } from '@/li
 import { useRealTimeUpdates } from '@/hooks/useRealTimeUpdates';
 import { RealTimeNotifications, NotificationItem } from '@/components/RealTimeNotifications';
 import { LiveActivityIndicator, AutoRefreshToggle } from '@/components/LiveActivityIndicator';
+import { matchesDocumentStatusFilters } from './kyc-filters';
 
 type SortOption = "kyc_status" | "risk_score" | "created" | "business_name";
 
@@ -187,14 +188,17 @@ function ScheduledReportsModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email Address
+            Email (stored locally only)
           </label>
+          <div className="text-xs text-gray-500 mb-2">
+            Local demo: this does not send emails or schedule backend jobs.
+          </div>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full border px-3 py-2 rounded"
-            placeholder="admin@company.com"
+            placeholder="you@company.com"
             required
           />
         </div>
@@ -233,7 +237,7 @@ function ScheduledReportsModal({
             type="submit"
             className="flex-1 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
           >
-            Schedule Report
+            Save Preset
           </button>
           <button
             type="button"
@@ -247,7 +251,7 @@ function ScheduledReportsModal({
 
       {existingReports.length > 0 && (
         <div className="mt-6 pt-4 border-t">
-          <h4 className="text-sm font-medium text-gray-900 mb-3">Scheduled Reports</h4>
+          <h4 className="text-sm font-medium text-gray-900 mb-3">Saved Presets (local)</h4>
           <div className="space-y-2">
             {existingReports.map((report) => (
               <div key={report.id} className="flex justify-between items-center p-2 bg-gray-50 rounded text-sm">
@@ -261,7 +265,7 @@ function ScheduledReportsModal({
                   onClick={() => onCancelReport(report.id)}
                   className="text-red-600 hover:text-red-900 text-xs"
                 >
-                  Cancel
+                  Remove
                 </button>
               </div>
             ))}
@@ -279,6 +283,7 @@ export default function AdminKycStatusPage() {
   const [analytics, setAnalytics] = useState<KycAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isUnauthorized, setIsUnauthorized] = useState(false);
   const [viewMode, setViewMode] = useState<"table" | "cards">("table");
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [savedFilters, setSavedFilters] = useState<KycFilterPreset[]>([]);
@@ -297,6 +302,7 @@ export default function AdminKycStatusPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [autoRefreshEnabled, setAutoRefreshEnabled] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState(30000); // 30 seconds
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
 
   const sortBy = (searchParams.get("sort") as SortOption) || "kyc_status";
   const sortOrder = searchParams.get("order") === "asc" ? "asc" : "desc";
@@ -305,6 +311,7 @@ export default function AdminKycStatusPage() {
     const silent = Boolean(opts?.silent);
     if (!silent) setLoading(true);
     setError(null);
+    setIsUnauthorized(false);
 
     try {
       const params = new URLSearchParams({
@@ -313,8 +320,9 @@ export default function AdminKycStatusPage() {
       });
       const response = await fetch(`/api/admin/providers/kyc?${params}`);
 
-      if (response.status === 403) {
-        // Stop retrying on 403 - user is not authorized
+      if (response.status === 401 || response.status === 403) {
+        // Stop retrying on unauthorized
+        setIsUnauthorized(true);
         setError("You are not authorized to view this page.");
         return;
       }
@@ -326,6 +334,7 @@ export default function AdminKycStatusPage() {
       const data: ApiResponse = await response.json();
       setProviders(data.providers.map(normalizeKycProvider));
       setAnalytics(data.analytics);
+      setLastRefreshedAt(new Date());
     } catch (err) {
       console.error("Error fetching KYC providers:", err);
       setError("Something went wrong while loading KYC providers.");
@@ -558,10 +567,10 @@ export default function AdminKycStatusPage() {
       const newReport = scheduleReport(email, frequency, reportType);
       setScheduledReports(prev => [...prev, newReport]);
       setShowScheduleModal(false);
-      alert('Report scheduled successfully!');
+      alert('Saved locally (demo only). No emails are sent.');
     } catch (error) {
       console.error('Scheduling failed:', error);
-      alert('Failed to schedule report. Please try again.');
+      alert('Failed to save preset locally. Please try again.');
     }
   };
 
@@ -602,18 +611,7 @@ export default function AdminKycStatusPage() {
 
       // Document status filter
       if (documentStatusFilter.length > 0) {
-        const hasMatchingDoc = documentStatusFilter.some(status => {
-          switch (status) {
-            case 'identity_missing': return provider.documentVerificationStatus.identity === 'missing';
-            case 'business_missing': return provider.documentVerificationStatus.business === 'missing';
-            case 'bank_missing': return provider.documentVerificationStatus.bank === 'missing';
-            case 'all_verified': return provider.documentVerificationStatus.identity === 'verified' &&
-                                provider.documentVerificationStatus.business === 'verified' &&
-                                provider.documentVerificationStatus.bank === 'verified';
-            default: return false;
-          }
-        });
-        if (!hasMatchingDoc) return false;
+        if (!matchesDocumentStatusFilters(provider.documentVerificationStatus, documentStatusFilter)) return false;
       }
 
       // Date range filters
@@ -720,6 +718,10 @@ export default function AdminKycStatusPage() {
     }
   );
 
+  const realtimeModeLabel = (typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SIMULATE_REALTIME_UPDATES === 'true')
+    ? 'Demo / Simulated'
+    : 'Polling';
+
   // Polling for periodic data refresh - DISABLED to prevent infinite loops
   // const { } = usePollingUpdates(
   //   async () => {
@@ -784,6 +786,22 @@ export default function AdminKycStatusPage() {
     return <div className="p-6">Loading KYC Status Dashboard...</div>;
   }
 
+  if (isUnauthorized) {
+    return (
+      <div className="p-6">
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <div className="flex items-center gap-3">
+            <div className="text-yellow-700 text-lg">⚠️</div>
+            <div>
+              <h3 className="text-lg font-medium text-yellow-900">Unauthorized</h3>
+              <p className="text-yellow-800">You don’t have permission to view the KYC dashboard.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className="p-6">
@@ -834,12 +852,13 @@ export default function AdminKycStatusPage() {
           {/* Real-time Status */}
           <div className="flex flex-col items-end space-y-1">
             <LiveActivityIndicator
-              isConnected={isConnected}
-              lastUpdate={lastUpdate}
+              isConnected={autoRefreshEnabled}
+              lastUpdate={lastRefreshedAt}
               isRetrying={isRetrying}
               onRefresh={handleManualRefresh}
               updateInterval={refreshInterval}
             />
+            <div className="text-xs text-gray-500">Live refresh: {realtimeModeLabel}</div>
             <AutoRefreshToggle
               enabled={autoRefreshEnabled}
               onToggle={handleAutoRefreshToggle}
@@ -897,7 +916,7 @@ export default function AdminKycStatusPage() {
                     }}
                     className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
                   >
-                    ⏰ Schedule Reports
+                    ⏰ Saved export presets (local)
                   </button>
                 </div>
               </div>
@@ -1833,7 +1852,7 @@ export default function AdminKycStatusPage() {
       {showScheduleModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-lg max-w-md w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">Schedule KYC Reports</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-4">Saved export presets (local demo)</h3>
             <ScheduledReportsModal
               onSchedule={(email, frequency, reportType) => {
                 handleScheduleReport(email, frequency, reportType);

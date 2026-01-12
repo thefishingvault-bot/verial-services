@@ -14,6 +14,11 @@ export interface RealTimeConfig {
   updateInterval: number; // in milliseconds
   maxRetries: number;
   retryDelay: number;
+  /**
+   * When true, injects simulated events on an interval.
+   * This must never be treated as real-time production data.
+   */
+  simulate: boolean;
 }
 
 const DEFAULT_CONFIG: RealTimeConfig = {
@@ -21,6 +26,7 @@ const DEFAULT_CONFIG: RealTimeConfig = {
   updateInterval: 30000, // 30 seconds
   maxRetries: 3,
   retryDelay: 5000, // 5 seconds
+  simulate: false,
 };
 
 export function useRealTimeUpdates(
@@ -33,7 +39,8 @@ export function useRealTimeUpdates(
   const [error, setError] = useState<string | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
 
-  const finalConfig = { ...DEFAULT_CONFIG, ...config };
+  const envSimulate = typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SIMULATE_REALTIME_UPDATES === 'true';
+  const finalConfig = { ...DEFAULT_CONFIG, ...config, simulate: config.simulate ?? envSimulate };
   const wsRef = useRef<WebSocket | null>(null);
   const isConnectedRef = useRef(false);
   const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -43,43 +50,42 @@ export function useRealTimeUpdates(
   const connectWebSocket = useCallback(() => {
     if (!finalConfig.enabled) return;
 
+    // Real-time transport is not implemented. We only ever simulate when explicitly enabled.
+    if (!finalConfig.simulate) {
+      setIsConnected(false);
+      isConnectedRef.current = false;
+      setError(null);
+      return;
+    }
+
     try {
-      // Simulate WebSocket connection for now
       setIsConnected(true);
       isConnectedRef.current = true;
       setError(null);
       retryCountRef.current = 0;
 
-      // Simulate receiving updates
       const simulateUpdate = () => {
         if (!isConnectedRef.current) return;
 
-        const mockUpdates: RealTimeUpdate[] = [
-          {
-            id: `update-${Date.now()}`,
-            type: 'provider_update',
-            data: { providerId: 'mock-provider', status: 'updated' },
-            timestamp: new Date()
-          }
-        ];
+        const update: RealTimeUpdate = {
+          id: `sim-${Date.now()}`,
+          type: 'provider_update',
+          data: { providerId: 'simulated-provider', status: 'updated', simulated: true },
+          timestamp: new Date(),
+        };
 
-        mockUpdates.forEach(update => {
-          setUpdates(prev => [update, ...prev.slice(0, 49)]); // Keep last 50 updates
-          setLastUpdate(update.timestamp);
-          onUpdate?.(update);
-        });
+        setUpdates((prev) => [update, ...prev.slice(0, 49)]);
+        setLastUpdate(update.timestamp);
+        onUpdate?.(update);
       };
 
-      // Simulate periodic updates
       pollIntervalRef.current = setInterval(simulateUpdate, finalConfig.updateInterval);
-
     } catch (err) {
       console.error('WebSocket connection failed:', err);
       setError('Failed to connect to real-time updates');
       setIsConnected(false);
-      // Retry logic will be handled by the caller
     }
-  }, [finalConfig.enabled, finalConfig.updateInterval, onUpdate]);
+  }, [finalConfig.enabled, finalConfig.simulate, finalConfig.updateInterval, onUpdate]);
 
   const handleRetry = useCallback(() => {
     if (retryCountRef.current >= finalConfig.maxRetries) {
@@ -124,54 +130,15 @@ export function useRealTimeUpdates(
   }, []);
 
   useEffect(() => {
-    if (finalConfig.enabled) {
-      // Start connection asynchronously
-      const startConnection = async () => {
-        try {
-          // Simulate WebSocket connection for now
-          setIsConnected(true);
-          isConnectedRef.current = true;
-          setError(null);
-          retryCountRef.current = 0;
+    if (!finalConfig.enabled) return;
 
-          // Simulate receiving updates
-          const simulateUpdate = () => {
-            if (!isConnectedRef.current) return;
-
-            const mockUpdates: RealTimeUpdate[] = [
-              {
-                id: `update-${Date.now()}`,
-                type: 'provider_update',
-                data: { providerId: 'mock-provider', status: 'updated' },
-                timestamp: new Date()
-              }
-            ];
-
-            mockUpdates.forEach(update => {
-              setUpdates(prev => [update, ...prev.slice(0, 49)]); // Keep last 50 updates
-              setLastUpdate(update.timestamp);
-              onUpdate?.(update);
-            });
-          };
-
-          // Simulate periodic updates
-          pollIntervalRef.current = setInterval(simulateUpdate, finalConfig.updateInterval);
-
-        } catch (err) {
-          console.error('WebSocket connection failed:', err);
-          setError('Failed to connect to real-time updates');
-          setIsConnected(false);
-          // Retry logic will be handled by the caller
-        }
-      };
-
-      startConnection();
-    }
+    // Start connection (simulation only, unless a real transport is implemented later).
+    connectWebSocket();
 
     return () => {
       disconnect();
     };
-  }, [finalConfig.enabled, finalConfig.updateInterval, onUpdate, disconnect]);
+  }, [finalConfig.enabled, connectWebSocket, disconnect]);
 
   return {
     isConnected,
@@ -179,6 +146,7 @@ export function useRealTimeUpdates(
     updates,
     error,
     isRetrying,
+    isSimulated: finalConfig.simulate,
     connect: connectWebSocket,
     disconnect,
     sendMessage,

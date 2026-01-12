@@ -286,8 +286,7 @@ export async function generatePDFReport(data: ProviderHealthData[], analytics: A
 }
 
 export function scheduleReport(email: string, frequency: 'daily' | 'weekly' | 'monthly', reportType: 'summary' | 'detailed') {
-  // This would typically make an API call to schedule automated reports
-  // For now, we'll store in localStorage as a mock implementation
+  // Local demo only: stored in localStorage. No backend scheduling and no emails are sent.
   const scheduledReports = JSON.parse(localStorage.getItem('scheduledReports') || '[]');
 
   const newReport = {
