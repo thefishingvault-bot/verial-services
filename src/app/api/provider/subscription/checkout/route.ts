@@ -21,6 +21,7 @@ import {
   validateSubscriptionMonthlyPrice,
   type StripeMode,
 } from "@/lib/stripe";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -200,10 +201,13 @@ export async function POST(req: Request) {
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
-      columns: { id: true, stripeCustomerId: true },
+      columns: { id: true, stripeCustomerId: true, isSuspended: true, suspensionReason: true, suspensionStartDate: true, suspensionEndDate: true },
     });
 
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     const dbUser = await db.query.users.findFirst({
       where: eq(users.id, userId),

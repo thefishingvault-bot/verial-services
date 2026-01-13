@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/components/ui/use-toast";
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 type DayOfWeek = "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" | "sunday";
 
@@ -158,20 +159,16 @@ export function ProviderAvailabilityForm() {
         isEnabled: row.isEnabled,
       }));
 
-      const res = await fetch("/api/provider/availability/schedule", {
+      await fetchJson<void>("/api/provider/availability/schedule", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
       toast({ title: "Availability updated" });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Failed to save availability.";
-      setError(message);
+      const message = getErrorMessage(err, "Failed to save availability.");
+      if (message) setError(message);
     } finally {
       setIsSaving(false);
     }

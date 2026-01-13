@@ -3,6 +3,7 @@ import { auth } from "@clerk/nextjs/server";
 import { eq, and } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { providerTimeOffs, providers } from "@/db/schema";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     const provider = await db.query.providers.findFirst({ where: eq(providers.userId, userId) });
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     const { id } = await params;
 

@@ -26,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
 import { formatBookingPriceLabel } from "@/lib/pricing";
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 type ProviderBookingStatus =
   | "pending"
@@ -109,23 +110,17 @@ export function ProviderBookingsClient() {
         throw new Error("A reason is required.");
       }
 
-      const res = await fetch("/api/provider/bookings/update-status", {
+      await fetchJson("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ bookingId, action, reason: actionReason }),
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to update booking status.");
-      }
-
       toast({ title: `Booking ${action}` });
       fetchBookings();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Something went wrong updating the booking.";
-      toast({ variant: "destructive", title: "Error", description: message });
+      const message = getErrorMessage(err, "Something went wrong updating the booking.");
+      if (message) toast({ variant: "destructive", title: "Error", description: message });
     } finally {
       setActionLoading(null);
     }

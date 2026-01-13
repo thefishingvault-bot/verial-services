@@ -13,6 +13,7 @@ import {
   type ProviderPlan,
 } from "@/lib/provider-subscription";
 import { checkProvidersColumnsExist } from "@/lib/provider-subscription-schema";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -194,9 +195,16 @@ export async function POST() {
         stripeCurrentPeriodEnd: true,
         stripeCancelAtPeriodEnd: true,
         stripeSubscriptionUpdatedAt: true,
+        isSuspended: true,
+        suspensionReason: true,
+        suspensionStartDate: true,
+        suspensionEndDate: true,
       },
     });
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     const dbUser = await db.query.users.findFirst({
       where: eq(users.id, userId),

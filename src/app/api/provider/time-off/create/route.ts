@@ -4,6 +4,7 @@ import { and, between, eq, inArray, lte, gte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { bookings, providerTimeOffs, providers } from "@/db/schema";
 import { hasOverlap } from "@/lib/time-off-overlap";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -16,6 +17,9 @@ export async function POST(req: Request) {
 
     const provider = await db.query.providers.findFirst({ where: eq(providers.userId, userId) });
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     const body = (await req.json()) as {
       startTime?: string;

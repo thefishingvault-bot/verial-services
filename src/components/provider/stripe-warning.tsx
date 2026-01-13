@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 export function StripeWarning(props?: {
   stripeConnectId?: string | null;
@@ -47,28 +48,23 @@ export function StripeWarning(props?: {
     setError(null);
 
     try {
-      const res = await fetch("/api/provider/stripe/connect/onboard", {
+      const { url } = await fetchJson<{ url: string }>("/api/provider/stripe/connect/onboard", {
         method: "POST",
       });
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        throw new Error(text || `Request failed (${res.status})`);
-      }
-
-      const { url } = (await res.json()) as { url: string };
       if (!url) throw new Error("Missing Stripe onboarding URL");
 
       window.location.href = url;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unable to start Stripe onboarding";
-      setError(message);
-      toast({
-        variant: "destructive",
-        title: "Stripe onboarding failed",
-        description: message,
-      });
-      setLoading(false);
+      const message = getErrorMessage(err, "Unable to start Stripe onboarding");
+      if (message) {
+        setError(message);
+        toast({
+          variant: "destructive",
+          title: "Stripe onboarding failed",
+          description: message,
+        });
+        setLoading(false);
+      }
     }
   };
 

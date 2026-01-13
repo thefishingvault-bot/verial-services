@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { stripe } from "@/lib/stripe";
 import { checkProvidersColumnsExist } from "@/lib/provider-subscription-schema";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -29,10 +30,14 @@ export async function POST(req: Request) {
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
-      columns: { stripeCustomerId: true },
+      columns: { stripeCustomerId: true, isSuspended: true, suspensionReason: true, suspensionStartDate: true, suspensionEndDate: true },
     });
 
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
+
     if (!provider.stripeCustomerId) {
       return NextResponse.json({ error: "No Stripe customer found for provider" }, { status: 400 });
     }

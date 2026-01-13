@@ -33,6 +33,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/components/ui/use-toast';
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 const categories = [
   'cleaning',
@@ -189,27 +190,29 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
 
     try {
       setCoverUploadState('presigning');
-      const presignResponse = await fetch('/api/uploads/presign-service-cover', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          serviceId: serviceId ?? undefined,
-          fileType: file.type,
-          fileSize: file.size,
-        }),
-      });
+      const { uploadUrl, publicUrl } = await fetchJson<{ uploadUrl: string; publicUrl: string }>(
+        '/api/uploads/presign-service-cover',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            serviceId: serviceId ?? undefined,
+            fileType: file.type,
+            fileSize: file.size,
+          }),
+        },
+      );
 
-      if (!presignResponse.ok) {
-        throw new Error(await presignResponse.text());
-      }
-
-      const { uploadUrl, publicUrl } = (await presignResponse.json()) as {
+      const parsedPresign = { uploadUrl, publicUrl } as {
         uploadUrl: string;
         publicUrl: string;
       };
 
+      const presignedUploadUrl = parsedPresign.uploadUrl;
+      const presignedPublicUrl = parsedPresign.publicUrl;
+
       setCoverUploadState('uploading');
-      const uploadResponse = await fetch(uploadUrl, {
+      const uploadResponse = await fetch(presignedUploadUrl, {
         method: 'PUT',
         body: file,
         headers: { 'Content-Type': file.type },
@@ -220,7 +223,7 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
 
       // Create mode: store URL in form state and include it on submit.
       if (mode === 'create') {
-        form.setValue('coverImageUrl', publicUrl, { shouldDirty: true });
+        form.setValue('coverImageUrl', presignedPublicUrl, { shouldDirty: true });
         setCoverUploadState('idle');
         return;
       }
@@ -231,24 +234,23 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
       }
 
       setCoverUploadState('saving');
-      const updateResponse = await fetch('/api/services/update-cover', {
+      await fetchJson('/api/services/update-cover', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, publicUrl }),
+        body: JSON.stringify({ serviceId, publicUrl: presignedPublicUrl }),
       });
-      if (!updateResponse.ok) {
-        throw new Error(await updateResponse.text());
-      }
 
-      form.setValue('coverImageUrl', publicUrl, { shouldDirty: true });
+      form.setValue('coverImageUrl', presignedPublicUrl, { shouldDirty: true });
       setCoverUploadState('idle');
 
       toast({ title: 'Cover image updated' });
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to upload cover image.';
+      const message = getErrorMessage(err, 'Failed to upload cover image.');
       setCoverUploadState('error');
-      setCoverError(message);
-      toast({ variant: 'destructive', title: 'Error', description: message });
+      if (message) {
+        setCoverError(message);
+        toast({ variant: 'destructive', title: 'Error', description: message });
+      }
     }
   };
 
@@ -267,23 +269,22 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
 
     try {
       setCoverUploadState('saving');
-      const updateResponse = await fetch('/api/services/update-cover', {
+      await fetchJson('/api/services/update-cover', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ serviceId, publicUrl: null }),
       });
-      if (!updateResponse.ok) {
-        throw new Error(await updateResponse.text());
-      }
 
       form.setValue('coverImageUrl', null, { shouldDirty: true });
       toast({ title: 'Cover image removed' });
       setCoverUploadState('idle');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to remove cover image.';
+      const message = getErrorMessage(err, 'Failed to remove cover image.');
       setCoverUploadState('error');
-      setCoverError(message);
-      toast({ variant: 'destructive', title: 'Error', description: message });
+      if (message) {
+        setCoverError(message);
+        toast({ variant: 'destructive', title: 'Error', description: message });
+      }
     }
   };
 
@@ -295,7 +296,7 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
       const priceInCents = values.pricingType === 'quote' ? null : Math.round(values.price * 100);
 
       if (mode === 'create') {
-        const res = await fetch('/api/services/create', {
+        await fetchJson('/api/services/create', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -309,11 +310,6 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
           }),
         });
 
-        if (!res.ok) {
-          const errorText = await res.text().catch(() => 'Failed to create service.');
-          throw new Error(errorText || 'Failed to create service.');
-        }
-
         toast({ title: 'Service created', description: 'Saved as a draft in Your Services.' });
         router.push('/dashboard/provider/services');
         router.refresh();
@@ -324,7 +320,7 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
         throw new Error('Missing serviceId.');
       }
 
-      const res = await fetch(`/api/services/${serviceId}`,
+      await fetchJson(`/api/services/${serviceId}`,
         {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -341,16 +337,12 @@ export function ProviderServiceForm(props: ProviderServiceFormProps) {
         },
       );
 
-      if (!res.ok) {
-        throw new Error(await res.text());
-      }
-
       toast({ title: 'Service updated', description: 'Your changes have been saved.' });
       router.push('/dashboard/provider/services');
       router.refresh();
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Failed to save service.';
-      toast({ variant: 'destructive', title: 'Error', description: message });
+      const message = getErrorMessage(err, 'Failed to save service.');
+      if (message) toast({ variant: 'destructive', title: 'Error', description: message });
     } finally {
       setIsSaving(false);
     }

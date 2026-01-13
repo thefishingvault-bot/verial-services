@@ -6,6 +6,7 @@ import { AlertTriangle, ShieldCheck, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 interface ConnectDetails {
   chargesEnabled: boolean;
@@ -44,13 +45,14 @@ export function ProviderConnectBanner() {
     setCreatingLink(true);
     setError(null);
     try {
-      const res = await fetch("/api/provider/connect/create-link", { method: "POST" });
-      if (!res.ok) throw new Error(await res.text());
-      const { url } = (await res.json()) as { url: string };
+      const { url } = await fetchJson<{ url: string }>("/api/provider/connect/create-link", { method: "POST" });
       window.location.href = url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to start onboarding");
-      setCreatingLink(false);
+      const message = getErrorMessage(err, "Unable to start onboarding");
+      if (message) {
+        setError(message);
+        setCreatingLink(false);
+      }
     }
   };
 

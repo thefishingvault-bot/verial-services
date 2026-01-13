@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { providerEarnings, providerPayouts, providers } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { stripe } from "@/lib/stripe";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,9 @@ export async function GET() {
     if (!provider || !provider.stripeConnectId) {
       return new NextResponse("Provider not connected", { status: 404 });
     }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     // 1) Fetch latest payouts from Stripe
     const stripePayouts = await stripe.payouts.list(

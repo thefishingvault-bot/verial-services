@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { stripe } from "@/lib/stripe";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -30,12 +31,15 @@ export async function POST() {
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
-    columns: { id: true, userId: true, stripeConnectId: true },
+    columns: { id: true, userId: true, stripeConnectId: true, isSuspended: true, suspensionReason: true, suspensionStartDate: true, suspensionEndDate: true },
   });
 
   if (!provider) {
     return new NextResponse("Provider not found.", { status: 404 });
   }
+
+  const access = assertProviderCanTransactFromProvider(provider);
+  if (!access.ok) return access.response;
 
   const hadConnectId = !!provider.stripeConnectId;
   console.info("[STRIPE_CONNECT_ONBOARD_CLICK]", {

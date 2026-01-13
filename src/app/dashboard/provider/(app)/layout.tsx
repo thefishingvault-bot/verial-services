@@ -1,6 +1,7 @@
 import { requireProvider } from "@/lib/auth-guards";
 import { getProviderAccessStateForUserId } from "@/lib/provider-access";
 import { ProviderSuspensionBanner } from "@/components/dashboard/provider-suspension-banner";
+import { ProviderLimitedModePopup } from "@/components/dashboard/provider-limited-mode-popup";
 import { ProviderShell } from "../provider-shell";
 
 export default async function ProviderAppLayout({
@@ -16,6 +17,7 @@ export default async function ProviderAppLayout({
   return (
     <>
       <ProviderSuspensionBanner state={state} />
+      <ProviderLimitedModePopup />
       <ProviderShell>{children}</ProviderShell>
     </>
   );

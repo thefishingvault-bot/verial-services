@@ -88,6 +88,29 @@ export async function getProviderAccessStateForUserId(userId: string, now: Date 
   };
 }
 
+export async function assertProviderCanTransactForUserId(userId: string, now: Date = new Date()) {
+  const access = await getProviderAccessStateForUserId(userId, now);
+  if (!access) {
+    // Caller should handle "provider not found" separately.
+    return {
+      ok: true as const,
+      providerId: null as string | null,
+      state: { status: "active" as const, reason: null, startsAt: null, endsAt: null },
+    };
+  }
+
+  if (access.state.status === "active") {
+    return { ok: true as const, providerId: access.providerId, state: access.state };
+  }
+
+  return {
+    ok: false as const,
+    providerId: access.providerId,
+    state: access.state,
+    response: providerSuspendedResponse(access.state),
+  };
+}
+
 export function providerSuspendedPayload(state: ProviderAccessState) {
   const endsAt = state.endsAt ? state.endsAt.toISOString() : null;
   const startsAt = state.startsAt ? state.startsAt.toISOString() : null;

@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/use-toast";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
 import { formatBookingPriceLabel } from "@/lib/pricing";
+import { fetchJson, getErrorMessage } from "@/lib/api/fetch-json";
 
 const ACTIONS = {
   accept: "Accept",
@@ -142,7 +143,7 @@ export function ProviderBookingDetailClient({ bookingId }: { bookingId: string }
           ? Math.round((parseFloat(finalPriceNzd) || 0) * 100)
           : undefined;
 
-      const res = await fetch("/api/provider/bookings/update-status", {
+      await fetchJson("/api/provider/bookings/update-status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -157,11 +158,6 @@ export function ProviderBookingDetailClient({ bookingId }: { bookingId: string }
           finalPriceInCents,
         }),
       });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(text || "Failed to update booking");
-      }
 
       if (action === "accept") {
         toast({ title: isQuoteFlow ? "Quote sent" : "Booking accepted" });
@@ -179,11 +175,14 @@ export function ProviderBookingDetailClient({ bookingId }: { bookingId: string }
 
       await refreshBooking();
     } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Action failed",
-        description: err instanceof Error ? err.message : "Unknown error",
-      });
+      const message = getErrorMessage(err, "Unknown error");
+      if (message) {
+        toast({
+          variant: "destructive",
+          title: "Action failed",
+          description: message,
+        });
+      }
     } finally {
       setActionLoading(null);
     }
