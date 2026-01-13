@@ -10,6 +10,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Settings, Shield, CheckCircle, AlertTriangle, ArrowLeft, Plus } from "lucide-react";
 import { requireAdmin } from "@/lib/admin-auth";
+import { PenaltyText } from "@/components/admin/penalty-text";
+import { formatPenalty } from "@/lib/format/penalty";
 
 export const dynamic = "force-dynamic";
 
@@ -137,7 +139,7 @@ export default async function AdminRiskRulesPage() {
                 <TableHead>Rule Name</TableHead>
                 <TableHead>Incident Type</TableHead>
                 <TableHead>Severity</TableHead>
-                <TableHead>Trust Penalty</TableHead>
+                <TableHead>Penalty (points deducted)</TableHead>
                 <TableHead>Auto Suspend</TableHead>
                 <TableHead>Duration</TableHead>
                 <TableHead>Status</TableHead>
@@ -167,11 +169,7 @@ export default async function AdminRiskRulesPage() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    {rule.trustScorePenalty > 0 ? (
-                      <span className="text-red-600 font-medium">-{rule.trustScorePenalty}</span>
-                    ) : (
-                      <span className="text-muted-foreground">0</span>
-                    )}
+                    <PenaltyText points={rule.trustScorePenalty} />
                   </TableCell>
                   <TableCell>
                     <Badge variant={rule.autoSuspend ? "destructive" : "secondary"}>
@@ -239,19 +237,19 @@ export default async function AdminRiskRulesPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div className="bg-muted p-3 rounded border">
               <strong>Customer Complaint (High)</strong>
-              <br />Penalty: -10 points, Auto-suspend: No
+              <br />Penalty: {formatPenalty(10)} points, Auto-suspend: No
             </div>
             <div className="bg-muted p-3 rounded border">
               <strong>Service Violation (Critical)</strong>
-              <br />Penalty: -25 points, Auto-suspend: 7 days
+              <br />Penalty: {formatPenalty(25)} points, Auto-suspend: 7 days
             </div>
             <div className="bg-muted p-3 rounded border">
               <strong>Review Abuse (Medium)</strong>
-              <br />Penalty: -15 points, Auto-suspend: No
+              <br />Penalty: {formatPenalty(15)} points, Auto-suspend: No
             </div>
             <div className="bg-muted p-3 rounded border">
               <strong>Repeated Offenses (Critical)</strong>
-              <br />Penalty: -50 points, Auto-suspend: Indefinite
+              <br />Penalty: {formatPenalty(50)} points, Auto-suspend: Indefinite
             </div>
           </div>
         </AlertDescription>

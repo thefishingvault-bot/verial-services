@@ -96,7 +96,7 @@ export default async function NewRiskRulePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="trustScorePenalty">Trust Score Penalty</Label>
+                <Label htmlFor="trustScorePenalty">Penalty (points deducted)</Label>
                 <Input
                   id="trustScorePenalty"
                   name="trustScorePenalty"
