@@ -3,6 +3,7 @@ import { providers, providerSuburbs, services } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
+import { assertProviderCanTransactFromProvider } from '@/lib/provider-access';
 
 export const runtime = 'nodejs';
 
@@ -55,12 +56,21 @@ export async function PATCH(req: Request) {
 
     const provider = await db.query.providers.findFirst({
       where: (p, { eq }) => eq(p.userId, userId),
-      columns: { id: true },
+      columns: {
+        id: true,
+        isSuspended: true,
+        suspensionReason: true,
+        suspensionStartDate: true,
+        suspensionEndDate: true,
+      },
     });
 
     if (!provider) {
       return new NextResponse('Provider not found', { status: 404 });
     }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     const normalizedCoverageRegion = baseRegion === undefined
       ? undefined

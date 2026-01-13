@@ -30,7 +30,7 @@ export async function POST(req: Request) {
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
-      columns: { stripeCustomerId: true, isSuspended: true, suspensionReason: true, suspensionStartDate: true, suspensionEndDate: true },
+      columns: { id: true, stripeCustomerId: true, isSuspended: true, suspensionReason: true, suspensionStartDate: true, suspensionEndDate: true },
     });
 
     if (!provider) return new NextResponse("Provider not found", { status: 404 });
