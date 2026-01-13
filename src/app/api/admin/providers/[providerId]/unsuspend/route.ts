@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProviderIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
 import { ensureUserExistsInDb } from "@/lib/user-sync";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 
 export async function POST(
   request: NextRequest,
@@ -42,6 +43,13 @@ export async function POST(
       endDate: provider[0].suspensionEndDate,
     };
 
+    const before = {
+      isSuspended: provider[0].isSuspended,
+      suspensionReason: provider[0].suspensionReason,
+      suspensionStartDate: provider[0].suspensionStartDate,
+      suspensionEndDate: provider[0].suspensionEndDate,
+    };
+
     // Update provider to unsuspended
     await db
       .update(providers)
@@ -54,6 +62,13 @@ export async function POST(
       })
       .where(eq(providers.id, providerId));
 
+    const after = {
+      isSuspended: false,
+      suspensionReason: null,
+      suspensionStartDate: null,
+      suspensionEndDate: null,
+    };
+
     // Log the action
     await db.insert(providerSuspensions).values({
       id: `psusp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -63,6 +78,19 @@ export async function POST(
       reason: priorSuspension.reason,
       startDate: priorSuspension.startDate,
       endDate: priorSuspension.endDate,
+    });
+
+    await writeAdminAuditLog({
+      userId: userId!,
+      action: "PROVIDER_UNSUSPEND",
+      resource: "provider",
+      resourceId: providerId,
+      details: JSON.stringify({
+        priorSuspension,
+        before,
+        after,
+      }),
+      request,
     });
 
     // Redirect back to the suspensions page

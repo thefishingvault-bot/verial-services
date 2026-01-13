@@ -4,6 +4,7 @@ import { stripe } from "@/lib/stripe";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -23,6 +24,11 @@ export async function POST() {
 
     if (!provider) {
       return new NextResponse("Provider not found.", { status: 404 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     // --- 1. Create a Stripe Connect account if one doesn't exist ---

@@ -3,6 +3,7 @@ import { providers, providerAvailabilities, dayOfWeekEnum } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = 'nodejs';
 
@@ -50,6 +51,11 @@ export async function POST(req: Request) {
 
     if (!provider) {
       return new NextResponse('Provider not found', { status: 404 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     const newSchedule = (await req.json()) as {

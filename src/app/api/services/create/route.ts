@@ -3,6 +3,7 @@ import { services, serviceCategoryEnum } from "@/db/schema";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { NZ_REGIONS } from "@/lib/data/nz-locations";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -32,6 +33,11 @@ export async function POST(req: Request) {
 
     if (!provider) {
       return new NextResponse("Not a provider. Register as a provider first.", { status: 403 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     if (provider.status === 'rejected') {

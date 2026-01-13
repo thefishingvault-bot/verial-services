@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { NZ_REGIONS } from "@/lib/data/nz-locations";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -85,6 +86,11 @@ export async function PATCH(
     });
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     if (isPublished === true && provider.status !== 'approved') {
@@ -222,6 +228,11 @@ export async function DELETE(
 
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     // Safety: bookings.serviceId may be NOT NULL in the DB schema. Prevent deletion if any booking exists.

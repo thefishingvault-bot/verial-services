@@ -7,7 +7,7 @@ import { sendEmail } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
 import { getDay } from "date-fns";
-import { isProviderCurrentlySuspended } from "@/lib/suspension";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -77,8 +77,11 @@ export async function PATCH(req: Request) {
       return new NextResponse("Provider not found", { status: 404 });
     }
 
-    if (action === "accept" && isProviderCurrentlySuspended(provider)) {
-      return new NextResponse("Provider is currently suspended", { status: 403 });
+    if (action === "accept") {
+      const access = assertProviderCanTransactFromProvider(provider);
+      if (!access.ok) {
+        return access.response;
+      }
     }
 
     // Fetch the booking with context to validate ownership and transition

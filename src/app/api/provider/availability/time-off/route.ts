@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { and, between, eq, gte, inArray, lte } from "drizzle-orm";
 import { hasOverlap } from "@/lib/time-off-overlap";
+import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
 
 export const runtime = "nodejs";
 
@@ -52,6 +53,11 @@ export async function POST(req: Request) {
 
     if (!provider) {
       return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) {
+      return access.response;
     }
 
     const { reason, startTime, endTime } = (await req.json()) as {
