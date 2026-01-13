@@ -3,6 +3,7 @@ import { services, providers } from '@/db/schema';
 import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq, and } from 'drizzle-orm';
+import { assertProviderCanTransactFromProvider } from '@/lib/provider-access';
 
 export const runtime = 'nodejs';
 
@@ -25,6 +26,9 @@ export async function PATCH(req: Request) {
     if (!provider) {
       return new NextResponse('Provider not found', { status: 404 });
     }
+
+    const access = assertProviderCanTransactFromProvider(provider);
+    if (!access.ok) return access.response;
 
     // 2. Update the service, but *only if it belongs to this provider*
     const [updatedService] = await db.update(services)
