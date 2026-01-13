@@ -217,8 +217,8 @@ export default async function AdminTrustIncidentsPage({
           <CardDescription>Filter incidents by status, type, severity, or search</CardDescription>
         </CardHeader>
         <CardContent>
-          <form className="flex flex-wrap gap-4" method="GET">
-            <div className="space-y-2">
+          <form className="flex flex-wrap items-end gap-4" method="GET">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Status</label>
               <select
                 name="status"
@@ -231,7 +231,7 @@ export default async function AdminTrustIncidentsPage({
               </select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Type</label>
               <select
                 name="type"
@@ -251,7 +251,7 @@ export default async function AdminTrustIncidentsPage({
               </select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Severity</label>
               <select
                 name="severity"
@@ -266,25 +266,20 @@ export default async function AdminTrustIncidentsPage({
               </select>
             </div>
 
-            <div className="space-y-2">
+            <div className="space-y-1">
               <label className="text-sm font-medium">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  name="search"
-                  defaultValue={searchQuery}
-                  placeholder="Provider name or description..."
-                  className="pl-9 w-64"
-                />
-              </div>
+              <Input
+                name="search"
+                defaultValue={searchQuery}
+                placeholder="Provider name or description..."
+                className="w-64"
+              />
             </div>
 
-            <div className="flex items-end">
-              <Button type="submit">
-                <Search className="mr-2 h-4 w-4" />
-                Filter
-              </Button>
-            </div>
+            <Button type="submit">
+              <Search className="mr-2 h-4 w-4" />
+              Filter
+            </Button>
           </form>
         </CardContent>
       </Card>
