@@ -16,6 +16,17 @@ vi.mock("@/lib/stripe", () => ({
 }));
 
 const dbMocks = vi.hoisted(() => {
+  const state = {
+    bookingStatus: "accepted" as string,
+    paymentIntentId: null as string | null,
+  };
+
+  const findFirstBookings = vi.fn(async () => ({
+    id: "bk_1",
+    status: state.bookingStatus,
+    paymentIntentId: state.paymentIntentId,
+  }));
+
   const updateBookings = vi.fn(() => ({
     set: vi.fn(() => ({
       where: vi.fn(() => ({
@@ -24,22 +35,70 @@ const dbMocks = vi.hoisted(() => {
     })),
   }));
 
-  return { updateBookings };
+  return { state, findFirstBookings, updateBookings };
 });
 
 vi.mock("@/lib/db", () => ({
   db: {
+    query: {
+      bookings: {
+        findFirst: dbMocks.findFirstBookings,
+      },
+    },
     update: (table: any) => {
       if (table === bookings) return dbMocks.updateBookings();
       throw new Error("Unexpected table");
     },
+    select: () => ({
+      from: () => ({
+        leftJoin: () => ({
+          leftJoin: () => ({
+            where: () => ({
+              then: async (cb: any) =>
+                cb([
+                  {
+                    id: "bk_1",
+                    providerId: "prov_1",
+                    serviceId: "svc_1",
+                    priceAtBooking: 10000,
+                    serviceChargesGst: true,
+                    providerChargesGst: true,
+                    providerPlan: "starter",
+                  },
+                ]),
+            }),
+          }),
+        }),
+      }),
+    }),
+    insert: () => ({
+      values: () => ({
+        onConflictDoUpdate: async () => undefined,
+      }),
+    }),
   },
+}));
+
+vi.mock("@/lib/provider-subscription", () => ({
+  normalizeProviderPlan: (plan: unknown) => plan,
+  getPlatformFeeBpsForPlan: () => 1000,
+}));
+
+vi.mock("@/lib/earnings", () => ({
+  calculateEarnings: ({ amountInCents }: { amountInCents: number }) => ({
+    grossAmount: amountInCents,
+    platformFeeAmount: 1000,
+    gstAmount: 0,
+    netAmount: amountInCents - 1000,
+  }),
 }));
 
 describe("POST /api/webhooks/stripe-bookings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     process.env.STRIPE_BOOKINGS_WEBHOOK_SECRET = "whsec_bookings";
+    dbMocks.state.bookingStatus = "accepted";
+    dbMocks.state.paymentIntentId = null;
   });
 
   it("returns 400 when signature missing", async () => {
@@ -100,6 +159,9 @@ describe("POST /api/webhooks/stripe-bookings", () => {
   });
 
   it("does not update on payment_intent.payment_failed", async () => {
+    // The route intentionally links the PI even on payment_failed. Set existing PI to avoid an update.
+    dbMocks.state.paymentIntentId = "pi_3";
+
     stripeMocks.constructEvent.mockReturnValue({
       id: "evt_3",
       type: "payment_intent.payment_failed",
