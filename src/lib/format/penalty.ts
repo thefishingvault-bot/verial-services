@@ -9,3 +9,9 @@ export function formatPenalty(points: unknown): string {
   if (normalized === 0) return "0";
   return `Deduct ${normalized}`;
 }
+
+export function penaltyToTrustScoreImpact(points: unknown): number {
+  const normalized = normalizePenaltyPoints(points);
+  if (normalized === 0) return 0;
+  return -normalized;
+}

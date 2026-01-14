@@ -35,6 +35,17 @@ export const TrustRuleSchema = z.object({
     }),
 });
 
+export const TrustIncidentCreateSchema = z.object({
+  providerId: providerId(),
+  incidentType: z.string().trim().min(1).max(100),
+  severity: z.enum(["low", "medium", "high", "critical"]),
+  description: z.string().trim().min(1).max(5000),
+  bookingId: z
+    .union([uuid(), z.string().length(0), z.null()])
+    .optional()
+    .transform((v) => (typeof v === "string" && v.length === 0 ? null : v ?? null)),
+});
+
 export const VerifyProviderSchema = z.object({
   providerId: providerId(),
   newStatus: z.enum(["pending", "approved", "rejected"]),

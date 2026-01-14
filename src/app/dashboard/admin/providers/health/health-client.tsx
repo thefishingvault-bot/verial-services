@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LineChart, BarChart, PieChart, AreaChart } from "@/components/charts";
 import { exportToCSV, exportToJSON, generatePDFReport, scheduleReport, getScheduledReports, cancelScheduledReport } from '@/lib/export-utils';
+import { formatPenalty } from "@/lib/format/penalty";
 import { useRealTimeUpdates, usePollingUpdates } from '@/hooks/useRealTimeUpdates';
 import { RealTimeNotifications, NotificationItem } from '@/components/RealTimeNotifications';
 import { LiveActivityIndicator, AutoRefreshToggle } from '@/components/LiveActivityIndicator';
@@ -2109,7 +2110,7 @@ export default function AdminProviderHealthPage() {
                       <div className="space-y-1">
                         {provider.applicableRiskRules.slice(0, 2).map(rule => (
                           <div key={rule.id} className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
-                            {rule.name} (-{rule.trustScorePenalty})
+                            {rule.name} ({formatPenalty(rule.trustScorePenalty)})
                             {rule.autoSuspend && " ⚠️"}
                           </div>
                         ))}
