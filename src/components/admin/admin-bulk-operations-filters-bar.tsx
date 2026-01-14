@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,8 @@ interface AdminBulkOperationsFiltersBarProps {
     status?: string;
     region?: string;
     q?: string;
+    page?: number;
+    pageSize?: number;
   };
   regionOptions?: string[];
 }
@@ -29,12 +31,33 @@ export function AdminBulkOperationsFiltersBar({
   const [region, setRegion] = useState(searchParams.region || 'all');
   const [q, setQ] = useState(searchParams.q || '');
 
-  const handleFilter = () => {
+  useEffect(() => {
+    setStatus(searchParams.status || 'all');
+    setRegion(searchParams.region || 'all');
+    setQ(searchParams.q || '');
+  }, [searchParams.q, searchParams.region, searchParams.status, operationType]);
+
+  const buildParams = (nextType: 'providers' | 'bookings') => {
     const params = new URLSearchParams(currentParams.toString());
-    params.set('type', operationType);
+    params.set('type', nextType);
     params.set('status', status);
     params.set('region', region);
     params.set('q', q);
+
+    // Preserve pagination if present
+    if (typeof searchParams.page === 'number') params.set('page', String(searchParams.page));
+    if (typeof searchParams.pageSize === 'number') params.set('pageSize', String(searchParams.pageSize));
+
+    return params;
+  };
+
+  const handleTypeSwitch = (nextType: 'providers' | 'bookings') => {
+    const params = buildParams(nextType);
+    router.push(`?${params.toString()}`);
+  };
+
+  const handleFilter = () => {
+    const params = buildParams(operationType);
     router.push(`?${params.toString()}`);
   };
 
@@ -51,7 +74,24 @@ export function AdminBulkOperationsFiltersBar({
     <Card>
       <CardContent className="pt-6">
         <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1 min-w-[200px]">
+          <div className="flex gap-2">
+            <Button
+              type="button"
+              variant={operationType === 'providers' ? 'default' : 'outline'}
+              onClick={() => handleTypeSwitch('providers')}
+            >
+              Providers
+            </Button>
+            <Button
+              type="button"
+              variant={operationType === 'bookings' ? 'default' : 'outline'}
+              onClick={() => handleTypeSwitch('bookings')}
+            >
+              Bookings
+            </Button>
+          </div>
+
+          <div className="flex-1 min-w-50">
             <label className="block text-sm font-medium mb-2">Search</label>
             <Input
               placeholder={
@@ -64,7 +104,7 @@ export function AdminBulkOperationsFiltersBar({
             />
           </div>
 
-          <div className="min-w-[150px]">
+          <div className="min-w-37.5">
             <label className="block text-sm font-medium mb-2">Status</label>
             <Select value={status} onValueChange={setStatus}>
               <SelectTrigger>
@@ -92,7 +132,7 @@ export function AdminBulkOperationsFiltersBar({
           </div>
 
           {operationType === 'providers' && (
-            <div className="min-w-[150px]">
+            <div className="min-w-37.5">
               <label className="block text-sm font-medium mb-2">Region</label>
               <Select value={region} onValueChange={setRegion}>
                 <SelectTrigger>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -41,42 +42,93 @@ interface BulkOperationsClientProps {
     status: string;
     region: string;
     q: string;
+    page: number;
+    pageSize: number;
   };
 }
 
 export function BulkOperationsClient({ operationType, filters }: BulkOperationsClientProps) {
+  const router = useRouter();
+  const currentParams = useSearchParams();
+
   const [items, setItems] = useState<(ProviderRow | BookingRow)[]>([]);
   const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(filters.page);
+  const [pageSize, setPageSize] = useState(filters.pageSize);
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [acting, setActing] = useState(false);
   const { toast } = useToast();
 
+  useEffect(() => {
+    // Keep state in sync with URL-driven server defaults
+    setPage(filters.page);
+    setPageSize(filters.pageSize);
+  }, [filters.page, filters.pageSize]);
+
+  const updatePaginationInUrl = useCallback(
+    (next: { page?: number; pageSize?: number }) => {
+      const params = new URLSearchParams(currentParams.toString());
+      if (typeof next.page === 'number') params.set('page', String(next.page));
+      if (typeof next.pageSize === 'number') params.set('pageSize', String(next.pageSize));
+      router.push(`?${params.toString()}`);
+    },
+    [currentParams, router],
+  );
+
   const fetchItems = useCallback(async () => {
     setLoading(true);
+    setErrorMessage(null);
     try {
       const url = new URL('/api/admin/bulk/list', window.location.origin);
       url.searchParams.set('type', operationType);
       url.searchParams.set('status', filters.status);
       url.searchParams.set('region', filters.region);
       url.searchParams.set('q', filters.q);
+      url.searchParams.set('page', String(page));
+      url.searchParams.set('pageSize', String(pageSize));
 
       const response = await fetch(url.toString());
-      if (response.ok) {
-        const data = await response.json();
-        setItems(data.items);
-        setTotalCount(data.totalCount);
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const msg = data?.error ? String(data.error) : `Failed to load ${operationType}.`;
+        setErrorMessage(msg);
+        toast({
+          title: 'Failed to load list',
+          description: msg,
+          variant: 'destructive',
+        });
+        return;
       }
+
+      const data = await response.json();
+      setItems(Array.isArray(data.items) ? data.items : []);
+      setTotalCount(typeof data.totalCount === 'number' ? data.totalCount : 0);
+      setTotalPages(typeof data.totalPages === 'number' ? data.totalPages : 1);
     } catch (error) {
       console.error('Error fetching items:', error);
+      const msg = 'Network error while loading list.';
+      setErrorMessage(msg);
+      toast({
+        title: 'Failed to load list',
+        description: msg,
+        variant: 'destructive',
+      });
     } finally {
       setLoading(false);
     }
-  }, [filters, operationType]);
+  }, [filters.q, filters.region, filters.status, operationType, page, pageSize, toast]);
 
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  useEffect(() => {
+    // Avoid carrying selections across pages/filters.
+    setSelectedIds([]);
+  }, [operationType, filters.q, filters.region, filters.status, page, pageSize]);
 
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
@@ -150,6 +202,22 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
     );
   }
 
+  if (errorMessage) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Failed to load</CardTitle>
+          <CardDescription>{errorMessage}</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={fetchItems} disabled={loading}>
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -175,6 +243,40 @@ export function BulkOperationsClient({ operationType, filters }: BulkOperationsC
             onSelectItem={handleSelectItem}
             onBulkAction={handleBulkAction}
           />
+        )}
+
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between pt-4">
+            <div className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const nextPage = Math.max(1, page - 1);
+                  setPage(nextPage);
+                  updatePaginationInUrl({ page: nextPage });
+                }}
+                disabled={page <= 1}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  const nextPage = Math.min(totalPages, page + 1);
+                  setPage(nextPage);
+                  updatePaginationInUrl({ page: nextPage });
+                }}
+                disabled={page >= totalPages}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
         )}
       </CardContent>
     </Card>

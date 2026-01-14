@@ -25,6 +25,8 @@ export default async function AdminBulkOperationsPage({
   const statusFilter = params.status;
   const regionFilter = params.region;
   const searchQuery = params.q;
+  const page = params.page;
+  const pageSize = params.pageSize;
 
   const regionOptions =
     operationType === 'providers'
@@ -54,14 +56,14 @@ export default async function AdminBulkOperationsPage({
       <Suspense>
         <AdminBulkOperationsFiltersBar
           operationType={operationType}
-          searchParams={{ status: statusFilter, region: regionFilter, q: searchQuery }}
+          searchParams={{ status: statusFilter, region: regionFilter, q: searchQuery, page, pageSize }}
           regionOptions={regionOptions}
         />
       </Suspense>
 
       <BulkOperationsClient
         operationType={operationType}
-        filters={{ status: statusFilter, region: regionFilter, q: searchQuery }}
+        filters={{ status: statusFilter, region: regionFilter, q: searchQuery, page, pageSize }}
       />
     </div>
   );

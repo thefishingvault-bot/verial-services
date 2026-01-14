@@ -8,11 +8,18 @@ import { ensureUserExistsInDb } from '@/lib/user-sync';
 import { writeAdminAuditLog } from '@/lib/admin-audit';
 
 const BulkActionSchema = z
-  .object({
-    type: z.enum(['providers', 'bookings']),
-    action: z.string().min(1),
-    ids: z.array(z.string().min(1)).min(1).max(200),
-  })
+  .discriminatedUnion('type', [
+    z.object({
+      type: z.literal('providers'),
+      action: z.enum(['suspend', 'unsuspend', 'reject']),
+      ids: z.array(z.string().min(1)).min(1).max(200),
+    }),
+    z.object({
+      type: z.literal('bookings'),
+      action: z.enum(['cancel', 'complete']),
+      ids: z.array(z.string().min(1)).min(1).max(200),
+    }),
+  ])
   .transform((data) => ({
     ...data,
     ids: Array.from(new Set(data.ids)),
@@ -43,7 +50,7 @@ export async function POST(req: Request) {
     if (type === 'providers') {
       if (action === 'suspend') {
         const now = new Date();
-        const updated = await db.transaction(async (tx) => {
+        const updatedProviderIds = await db.transaction(async (tx) => {
           const updatedProviders = await tx
             .update(providers)
             .set({
@@ -70,26 +77,32 @@ export async function POST(req: Request) {
             );
           }
 
-          return updatedProviders.length;
+          return updatedProviders.map((p) => p.id);
         });
+
+        const updated = updatedProviderIds.length;
 
         console.log(`[API_ADMIN_BULK] Suspended ${updated} providers`);
 
-        await writeAdminAuditLog({
-          userId: admin.userId!,
-          action: 'PROVIDER_SUSPEND',
-          resource: 'provider',
-          resourceId: null,
-          details: `Bulk suspended ${updated} provider(s) (requested ${ids.length}).`,
-          request: req,
-        });
+        await Promise.all(
+          updatedProviderIds.map((id) =>
+            writeAdminAuditLog({
+              userId: admin.userId!,
+              action: 'PROVIDER_SUSPEND',
+              resource: 'provider',
+              resourceId: id,
+              details: `Bulk suspended provider (requested ${ids.length}).`,
+              request: req,
+            }),
+          ),
+        );
 
         return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
 
       if (action === 'unsuspend') {
         const now = new Date();
-        const updated = await db.transaction(async (tx) => {
+        const updatedProviderIds = await db.transaction(async (tx) => {
           const prior = await tx
             .select({
               id: providers.id,
@@ -100,7 +113,7 @@ export async function POST(req: Request) {
             .from(providers)
             .where(and(inArray(providers.id, ids), eq(providers.isSuspended, true)));
 
-          if (prior.length === 0) return 0;
+          if (prior.length === 0) return [];
 
           await tx
             .update(providers)
@@ -128,19 +141,25 @@ export async function POST(req: Request) {
             })),
           );
 
-          return prior.length;
+          return prior.map((p) => p.id);
         });
+
+        const updated = updatedProviderIds.length;
 
         console.log(`[API_ADMIN_BULK] Unsuspended ${updated} providers`);
 
-        await writeAdminAuditLog({
-          userId: admin.userId!,
-          action: 'PROVIDER_UNSUSPEND',
-          resource: 'provider',
-          resourceId: null,
-          details: `Bulk unsuspended ${updated} provider(s) (requested ${ids.length}).`,
-          request: req,
-        });
+        await Promise.all(
+          updatedProviderIds.map((id) =>
+            writeAdminAuditLog({
+              userId: admin.userId!,
+              action: 'PROVIDER_UNSUSPEND',
+              resource: 'provider',
+              resourceId: id,
+              details: `Bulk unsuspended provider (requested ${ids.length}).`,
+              request: req,
+            }),
+          ),
+        );
 
         return NextResponse.json({ success: true, requested: ids.length, affected: updated });
       }
@@ -158,14 +177,18 @@ export async function POST(req: Request) {
 
         console.log(`[API_ADMIN_BULK] Rejected ${updated.length} provider applications`);
 
-        await writeAdminAuditLog({
-          userId: admin.userId!,
-          action: 'USER_ROLE_CHANGE',
-          resource: 'provider',
-          resourceId: null,
-          details: `Bulk rejected ${updated.length} provider application(s) (requested ${ids.length}).`,
-          request: req,
-        });
+        await Promise.all(
+          updated.map(({ id }) =>
+            writeAdminAuditLog({
+              userId: admin.userId!,
+              action: 'PROVIDER_APPLICATION_REJECT',
+              resource: 'provider',
+              resourceId: id,
+              details: `Bulk rejected provider application (requested ${ids.length}).`,
+              request: req,
+            }),
+          ),
+        );
 
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
@@ -189,14 +212,18 @@ export async function POST(req: Request) {
 
         console.log(`[API_ADMIN_BULK] Canceled ${updated.length} bookings`);
 
-        await writeAdminAuditLog({
-          userId: admin.userId!,
-          action: 'BOOKING_CANCEL',
-          resource: 'booking',
-          resourceId: null,
-          details: `Bulk canceled ${updated.length} booking(s) (requested ${ids.length}).`,
-          request: req,
-        });
+        await Promise.all(
+          updated.map(({ id }) =>
+            writeAdminAuditLog({
+              userId: admin.userId!,
+              action: 'BOOKING_CANCEL',
+              resource: 'booking',
+              resourceId: id,
+              details: `Bulk canceled booking (requested ${ids.length}).`,
+              request: req,
+            }),
+          ),
+        );
 
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }
@@ -214,14 +241,18 @@ export async function POST(req: Request) {
 
         console.log(`[API_ADMIN_BULK] Marked ${updated.length} bookings as completed`);
 
-        await writeAdminAuditLog({
-          userId: admin.userId!,
-          action: 'BOOKING_COMPLETE',
-          resource: 'booking',
-          resourceId: null,
-          details: `Bulk marked ${updated.length} booking(s) as completed (requested ${ids.length}).`,
-          request: req,
-        });
+        await Promise.all(
+          updated.map(({ id }) =>
+            writeAdminAuditLog({
+              userId: admin.userId!,
+              action: 'BOOKING_COMPLETE',
+              resource: 'booking',
+              resourceId: id,
+              details: `Bulk marked booking as completed (requested ${ids.length}).`,
+              request: req,
+            }),
+          ),
+        );
 
         return NextResponse.json({ success: true, requested: ids.length, affected: updated.length });
       }

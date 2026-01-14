@@ -3,6 +3,16 @@ import { providers, users, bookings, services, bookingStatusEnum } from '@/db/sc
 import { eq, and, or, ilike, sql, inArray } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/admin-auth';
+import { z } from 'zod';
+
+const BulkListQuerySchema = z.object({
+  type: z.enum(['providers', 'bookings']).default('providers'),
+  status: z.string().trim().optional().default('all'),
+  region: z.string().trim().optional().default('all'),
+  q: z.string().trim().optional().default(''),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
 
 export async function GET(req: Request) {
   try {
@@ -10,10 +20,17 @@ export async function GET(req: Request) {
     if (!admin.isAdmin) return admin.response;
 
     const { searchParams } = new URL(req.url);
-    const type = searchParams.get('type') || 'providers';
-    const status = searchParams.get('status') || 'all';
-    const region = searchParams.get('region') || 'all';
-    const q = searchParams.get('q') || '';
+
+    const parsed = BulkListQuerySchema.safeParse(Object.fromEntries(searchParams.entries()));
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: 'Invalid query params', details: parsed.error.flatten() },
+        { status: 400 },
+      );
+    }
+
+    const { type, status, region, q, page, pageSize } = parsed.data;
+    const offset = (page - 1) * pageSize;
 
     if (type === 'providers') {
       // Build where conditions for providers
@@ -66,7 +83,8 @@ export async function GET(req: Request) {
           users.email,
         )
         .orderBy(providers.createdAt)
-        .limit(100);
+        .limit(pageSize)
+        .offset(offset);
 
       const totalCount = await db
         .select({ count: sql<number>`COUNT(DISTINCT ${providers.id})` })
@@ -75,9 +93,14 @@ export async function GET(req: Request) {
         .leftJoin(services, eq(services.providerId, providers.id))
         .where(where);
 
+      const totalPages = Math.max(1, Math.ceil(totalCount[0].count / pageSize));
+
       return NextResponse.json({
         items: providersData,
         totalCount: totalCount[0].count,
+        page,
+        pageSize,
+        totalPages,
       });
     } else if (type === 'bookings') {
       // Build where conditions for bookings
@@ -131,7 +154,8 @@ export async function GET(req: Request) {
         .innerJoin(services, eq(bookings.serviceId, services.id))
         .where(where)
         .orderBy(bookings.createdAt)
-        .limit(100);
+        .limit(pageSize)
+        .offset(offset);
 
       const totalCount = await db
         .select({ count: sql<number>`count(*)` })
@@ -141,9 +165,14 @@ export async function GET(req: Request) {
         .innerJoin(services, eq(bookings.serviceId, services.id))
         .where(where);
 
+      const totalPages = Math.max(1, Math.ceil(totalCount[0].count / pageSize));
+
       return NextResponse.json({
         items: bookingsData,
         totalCount: totalCount[0].count,
+        page,
+        pageSize,
+        totalPages,
       });
     }
 
