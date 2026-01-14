@@ -736,6 +736,21 @@ export const scheduledCommunications = pgTable("scheduled_communications", {
   status: varchar("status", { length: 20 }).default("scheduled").notNull(), // 'scheduled', 'sent', 'failed'
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+/**
+ * Provider Saved Replies
+ * Provider-owned message snippets used in booking chat (Pro/Elite feature).
+ */
+export const providerSavedReplies = pgTable("provider_saved_replies", {
+  id: varchar("id", { length: 255 }).primaryKey(), // e.g., psr_...
+  providerId: varchar("provider_id", { length: 255 })
+    .notNull()
+    .references(() => providers.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 120 }).notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
 // Define the relationships for our ORM
 
 export const usersRelations = relations(users, ({ one, many }) => ({
@@ -764,6 +779,7 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   payouts: many(providerPayouts),
   earnings: many(providerEarnings),
   financialAuditLogs: many(financialAuditLogs),
+  savedReplies: many(providerSavedReplies),
 }));
 
 export const favoriteProvidersRelations = relations(favoriteProviders, ({ one }) => ({
@@ -785,6 +801,13 @@ export const serviceFavoritesRelations = relations(serviceFavorites, ({ one }) =
   service: one(services, {
     fields: [serviceFavorites.serviceId],
     references: [services.id],
+  }),
+}));
+
+export const providerSavedRepliesRelations = relations(providerSavedReplies, ({ one }) => ({
+  provider: one(providers, {
+    fields: [providerSavedReplies.providerId],
+    references: [providers.id],
   }),
 }));
 

@@ -7,6 +7,7 @@ import { db } from "@/lib/db";
 import { bookings, providers } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { getProviderMoneySummary } from "@/server/providers/earnings";
+import { normalizeProviderPlan } from "@/lib/provider-subscription";
 
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
@@ -14,12 +15,13 @@ type ProviderOverviewMetrics = {
   totalEarnedNetCents: number;
   pendingTransferNetCents: number;
   paidOutNetCents: number;
+  plan: "starter" | "pro" | "elite" | "unknown";
 };
 
 async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
-    columns: { id: true },
+    columns: { id: true, plan: true },
   });
 
   if (!provider) {
@@ -29,8 +31,11 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
       totalEarnedNetCents: 0,
       pendingTransferNetCents: 0,
       paidOutNetCents: 0,
+      plan: "starter",
     };
   }
+
+  const plan = normalizeProviderPlan(provider.plan);
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -65,13 +70,72 @@ async function loadOverview(userId: string): Promise<ProviderOverviewMetrics> {
     totalEarnedNetCents,
     pendingTransferNetCents,
     paidOutNetCents,
+    plan,
   };
+}
+
+async function loadAdvancedAnalytics(providerUserId: string) {
+  const provider = await db.query.providers.findFirst({
+    where: eq(providers.userId, providerUserId),
+    columns: { id: true, plan: true },
+  });
+
+  if (!provider) return null;
+  const plan = normalizeProviderPlan(provider.plan);
+  if (plan !== "pro" && plan !== "elite") return { plan, analytics: null } as const;
+
+  const now = new Date();
+  const thirtyDaysAgo = new Date(now);
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+  const [completedRow, acceptanceRow] = await Promise.all([
+    db
+      .select({
+        completed: sql<number>`cast(count(*) as int)`,
+      })
+      .from(bookings)
+      .where(and(eq(bookings.providerId, provider.id), eq(bookings.status, "completed"), gte(bookings.createdAt, thirtyDaysAgo)))
+      .then((rows) => rows[0]),
+    db
+      .select({
+        requested: sql<number>`cast(count(*) as int)`,
+        accepted: sql<number>`cast(sum(case when ${bookings.status} = 'accepted' then 1 else 0 end) as int)`,
+        paid: sql<number>`cast(sum(case when ${bookings.status} = 'paid' then 1 else 0 end) as int)`,
+      })
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.providerId, provider.id),
+          gte(bookings.createdAt, thirtyDaysAgo),
+          inArray(bookings.status, ["pending", "accepted", "declined", "paid", "completed", "canceled_customer", "canceled_provider"]),
+        ),
+      )
+      .then((rows) => rows[0]),
+  ]);
+
+  const requested = Number(acceptanceRow?.requested ?? 0);
+  const accepted = Number(acceptanceRow?.accepted ?? 0);
+  const paid = Number(acceptanceRow?.paid ?? 0);
+  const completed = Number(completedRow?.completed ?? 0);
+
+  return {
+    plan,
+    analytics: {
+      windowDays: 30,
+      requested,
+      accepted,
+      paid,
+      completed,
+      acceptanceRate: requested ? accepted / requested : null,
+      paidRate: requested ? paid / requested : null,
+    },
+  } as const;
 }
 
 export default async function ProviderDashboardPage() {
   const { userId } = await requireProvider();
 
-  const metrics = await loadOverview(userId);
+  const [metrics, advanced] = await Promise.all([loadOverview(userId), loadAdvancedAnalytics(userId)]);
 
   const cards: Array<{ label: string; value: string; hint: string }> = [
     {
@@ -199,6 +263,48 @@ export default async function ProviderDashboardPage() {
               Review new requests quickly and keep your hours and time off up to date to avoid
               clashes.
             </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Advanced analytics</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 text-sm">
+            {advanced?.analytics ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Requests (30d)</span>
+                  <span className="font-medium">{advanced.analytics.requested}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Accepted</span>
+                  <span className="font-medium">{advanced.analytics.accepted}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Paid</span>
+                  <span className="font-medium">{advanced.analytics.paid}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Completed</span>
+                  <span className="font-medium">{advanced.analytics.completed}</span>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Pro/Elite feature. Rates are calculated from requests in the last 30 days.
+                </p>
+              </>
+            ) : metrics.plan === "pro" || metrics.plan === "elite" ? (
+              <p className="text-muted-foreground">No data yet. Complete a few jobs to see trends.</p>
+            ) : (
+              <>
+                <p className="text-muted-foreground">
+                  Upgrade to Pro to unlock advanced analytics for your bookings.
+                </p>
+                <Button asChild size="sm" variant="outline">
+                  <Link href="/dashboard/provider/billing">View plans</Link>
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
 

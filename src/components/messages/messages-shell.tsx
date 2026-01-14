@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
 import { ArrowLeft, Check, CheckCheck, Clock, Loader2, Paperclip, Send, Smile } from "lucide-react";
@@ -10,6 +11,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import { applyDeliveryStatus, normalizeMessage, replaceTempMessage, type ServerMessage, UiMessage, upsertMessages } from "@/lib/messaging-client";
 import type { PresenceRecord } from "@/lib/presence";
 import { pusherClient } from "@/lib/pusher-client";
@@ -58,6 +68,12 @@ interface Props {
 const PAGE_SIZE = 50;
 const HEARTBEAT_MS = 25000;
 
+type SavedReply = {
+	id: string;
+	title: string;
+	body: string;
+};
+
 const presenceStale = (p?: PresenceRecord | undefined | null) => {
 	if (!p) return true;
 	return Date.now() - p.lastActive > 5 * 60 * 1000;
@@ -76,6 +92,14 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const [presence, setPresence] = useState<Record<string, PresenceRecord>>({});
 	const [typing, setTyping] = useState<Record<string, boolean>>({});
 	const [draft, setDraft] = useState("");
+	const isProviderView = basePath.startsWith("/dashboard/provider/messages");
+	const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
+	const [savedRepliesStatus, setSavedRepliesStatus] = useState<"idle" | "loading" | "available" | "upgrade" | "error">("idle");
+	const [savedReplySelectedId, setSavedReplySelectedId] = useState<string | null>(null);
+	const [showSavedRepliesManager, setShowSavedRepliesManager] = useState(false);
+	const [newReplyTitle, setNewReplyTitle] = useState("");
+	const [newReplyBody, setNewReplyBody] = useState("");
+	const [isSavingReply, setIsSavingReply] = useState(false);
 	const listRef = useRef<HTMLDivElement | null>(null);
 	const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -128,6 +152,27 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 			setIsLoadingThreads(false);
 		}
 	}, [fetchPresence]);
+
+	const loadSavedReplies = useCallback(async () => {
+		if (!isProviderView) return;
+		setSavedRepliesStatus("loading");
+		try {
+			const res = await fetch("/api/provider/saved-replies", { cache: "no-store" });
+			if (res.status === 403) {
+				setSavedReplies([]);
+				setSavedRepliesStatus("upgrade");
+				return;
+			}
+			if (!res.ok) throw new Error("Failed to load saved replies");
+			const data = (await res.json()) as { replies?: SavedReply[] };
+			setSavedReplies(Array.isArray(data.replies) ? data.replies : []);
+			setSavedRepliesStatus("available");
+		} catch (error) {
+			console.error("[SAVED_REPLIES_LOAD]", error);
+			setSavedReplies([]);
+			setSavedRepliesStatus("error");
+		}
+	}, [isProviderView]);
 
 	const loadThread = useCallback(
 		async (threadId: string, cursor?: string | null, append = false) => {
@@ -408,6 +453,10 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	}, [loadThreads]);
 
 	useEffect(() => {
+		void loadSavedReplies();
+	}, [loadSavedReplies]);
+
+	useEffect(() => {
 		const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth < 1024);
 		check();
 		window.addEventListener("resize", check);
@@ -417,6 +466,63 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	useEffect(() => {
 		if (activeId) void loadThread(activeId);
 	}, [activeId, loadThread]);
+
+	const insertSavedReply = useCallback(() => {
+		if (!savedReplySelectedId) return;
+		const found = savedReplies.find((r) => r.id === savedReplySelectedId);
+		if (!found) return;
+		setDraft((prev) => {
+			if (!prev.trim()) return found.body;
+			return `${prev.trimEnd()}\n\n${found.body}`;
+		});
+	}, [savedReplySelectedId, savedReplies]);
+
+	const createSavedReply = useCallback(async () => {
+		if (!isProviderView) return;
+		const title = newReplyTitle.trim();
+		const body = newReplyBody.trim();
+		if (!title || !body) return;
+		setIsSavingReply(true);
+		try {
+			const res = await fetch("/api/provider/saved-replies", {
+				method: "POST",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ title, body }),
+			});
+			if (res.status === 403) {
+				setSavedRepliesStatus("upgrade");
+				return;
+			}
+			if (!res.ok) throw new Error("Failed to create saved reply");
+			const created = (await res.json()) as SavedReply;
+			setSavedReplies((prev) => [created, ...prev]);
+			setNewReplyTitle("");
+			setNewReplyBody("");
+			setSavedRepliesStatus("available");
+		} catch (error) {
+			console.error("[SAVED_REPLIES_CREATE]", error);
+			setSavedRepliesStatus("error");
+		} finally {
+			setIsSavingReply(false);
+		}
+	}, [isProviderView, newReplyBody, newReplyTitle]);
+
+	const deleteSavedReply = useCallback(async (id: string) => {
+		if (!isProviderView) return;
+		try {
+			const res = await fetch(`/api/provider/saved-replies/${id}`, { method: "DELETE" });
+			if (res.status === 403) {
+				setSavedRepliesStatus("upgrade");
+				return;
+			}
+			if (!res.ok) throw new Error("Failed to delete saved reply");
+			setSavedReplies((prev) => prev.filter((r) => r.id !== id));
+			if (savedReplySelectedId === id) setSavedReplySelectedId(null);
+		} catch (error) {
+			console.error("[SAVED_REPLIES_DELETE]", error);
+			setSavedRepliesStatus("error");
+		}
+	}, [isProviderView, savedReplySelectedId]);
 
 	useEffect(() => {
 		const cleanup = activeId ? bindPusher(activeId) : undefined;
@@ -654,6 +760,113 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 						</div>
 
 						<div className="border-t bg-background px-4 py-3">
+							{isProviderView && (
+								<div className="mb-3 space-y-2">
+									<div className="flex flex-wrap items-center gap-2">
+										<span className="text-xs text-muted-foreground">Saved replies</span>
+										{savedRepliesStatus === "upgrade" ? (
+											<div className="flex items-center gap-2 text-xs">
+												<span className="text-muted-foreground">Pro/Elite feature</span>
+												<Button asChild size="sm" variant="outline">
+													<Link href="/dashboard/provider/billing">Upgrade</Link>
+												</Button>
+											</div>
+										) : (
+											<>
+												<Select value={savedReplySelectedId ?? ""} onValueChange={(v) => setSavedReplySelectedId(v)}>
+													<SelectTrigger className="h-8 w-[220px]">
+														<SelectValue placeholder={savedRepliesStatus === "loading" ? "Loading…" : "Choose…"} />
+													</SelectTrigger>
+													<SelectContent>
+														{savedReplies.length === 0
+															? (
+																<SelectItem value="__none" disabled>
+																	No saved replies yet
+																</SelectItem>
+															)
+															: savedReplies.map((r) => (
+																<SelectItem key={r.id} value={r.id}>
+																	{r.title}
+																</SelectItem>
+															))}
+												</SelectContent>
+											</Select>
+											<Button
+												size="sm"
+												variant="outline"
+												disabled={!savedReplySelectedId || savedReplySelectedId === "__none"}
+												onClick={insertSavedReply}
+											>
+												Insert
+											</Button>
+											<Button size="sm" variant="ghost" onClick={() => setShowSavedRepliesManager((v) => !v)}>
+												{showSavedRepliesManager ? "Hide" : "Manage"}
+											</Button>
+										</>
+									)}
+								</div>
+
+								{showSavedRepliesManager && savedRepliesStatus !== "upgrade" && (
+									<Card className="p-3">
+										<div className="space-y-3">
+											<div className="space-y-2">
+												<div className="grid gap-2">
+													<Label className="text-xs">Title</Label>
+													<Input
+														value={newReplyTitle}
+														onChange={(e) => setNewReplyTitle(e.target.value)}
+														placeholder="e.g. Availability update"
+														className="h-8"
+													/>
+												</div>
+												<div className="grid gap-2">
+													<Label className="text-xs">Message</Label>
+													<textarea
+														className="min-h-[72px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
+														value={newReplyBody}
+														onChange={(e) => setNewReplyBody(e.target.value)}
+														placeholder="Write the saved reply content…"
+													/>
+												</div>
+												<div className="flex items-center justify-between">
+													<p className="text-xs text-muted-foreground">Saved replies are visible only to you.</p>
+													<Button
+														size="sm"
+														onClick={() => void createSavedReply()}
+														disabled={isSavingReply || !newReplyTitle.trim() || !newReplyBody.trim()}
+													>
+														{isSavingReply ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null}
+														Save
+													</Button>
+												</div>
+											</div>
+
+										{savedReplies.length > 0 && (
+											<div className="space-y-2">
+												<p className="text-xs font-medium">Your saved replies</p>
+												<div className="space-y-2">
+													{savedReplies.map((r) => (
+														<div
+															key={r.id}
+															className="flex items-start justify-between gap-2 rounded-md border bg-muted/20 p-2"
+														>
+															<div className="min-w-0">
+																<p className="truncate text-xs font-medium">{r.title}</p>
+																<p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{r.body}</p>
+															</div>
+															<Button size="sm" variant="ghost" onClick={() => void deleteSavedReply(r.id)}>
+																Delete
+															</Button>
+														</div>
+													))}
+												</div>
+											</div>
+										)}
+									</div>
+								</Card>
+							)}
+						</div>
+					)}
 							<div className="flex items-end gap-2 rounded-xl border bg-muted/40 px-3 py-2">
 								<button
 									className="rounded-md p-1 text-muted-foreground hover:text-foreground"

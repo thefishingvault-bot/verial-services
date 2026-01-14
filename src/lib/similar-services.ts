@@ -3,6 +3,7 @@ import { providers, reviews, services, serviceFavorites } from "@/db/schema";
 import { and, eq, ne, sql } from "drizzle-orm";
 import { sortServicesByScore } from "@/lib/ranking";
 import { isProviderCurrentlySuspended, providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
+import { normalizeProviderPlan } from "@/lib/provider-subscription";
 
 export type SimilarService = {
   id: string;
@@ -20,6 +21,7 @@ export type SimilarService = {
   providerBusinessName: string | null;
   providerTrustScore: number;
   providerVerified: boolean;
+  providerPlan: string | null;
   providerRegion: string | null;
   avgRating: number;
   reviewCount: number;
@@ -73,6 +75,7 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
       providerBusinessName: providers.businessName,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
+      providerPlan: providers.plan,
       providerRegion: services.region,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
@@ -101,6 +104,7 @@ export async function getSimilarServices(serviceId: string, client = db): Promis
       ...item,
       priceInCents: item.priceInCents ?? 0,
       trustScore: item.providerTrustScore ?? 0,
+      providerPlan: normalizeProviderPlan(item.providerPlan),
     })),
   )
     .slice(0, 6)

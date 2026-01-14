@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { bookings, providers, reviews, serviceFavorites, services } from "@/db/schema";
 import { db } from "@/lib/db";
 import { FAVORITE_BOOST, scoreService, type RankableService } from "@/lib/ranking";
+import { normalizeProviderPlan } from "@/lib/provider-subscription";
 import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 
 type ServiceCategory = (typeof services.$inferSelect)["category"];
@@ -104,6 +105,7 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
       providerTrustLevel: providers.trustLevel,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
+      providerPlan: providers.plan,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
       favoriteCount: sql<number>`(
@@ -144,6 +146,7 @@ export async function getRecommendedServicesForUser(userId: string, limit = 6): 
         isVerified: row.providerVerified ?? false,
         favoriteCount,
         isFavoritedByUser: favoriteServiceIds.has(row.id),
+        providerPlan: normalizeProviderPlan(row.providerPlan),
       };
 
       const baseScore = scoreService(rankable);

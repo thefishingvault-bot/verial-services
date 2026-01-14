@@ -2,6 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { serviceFavorites, services, providers, reviews } from "@/db/schema";
 import { scoreService, type RankableService } from "@/lib/ranking";
+import { normalizeProviderPlan } from "@/lib/provider-subscription";
 import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
 
 export type FavoriteSort = "recent" | "top";
@@ -58,6 +59,7 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       providerTrustLevel: providers.trustLevel,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
+      providerPlan: providers.plan,
       providerRegion: services.region,
       providerSuburb: services.suburb,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
@@ -98,6 +100,7 @@ export async function getUserFavoriteServices(userId: string, sort: FavoriteSort
       isVerified: row.providerVerified ?? false,
       favoriteCount,
       isFavoritedByUser: true,
+      providerPlan: normalizeProviderPlan(row.providerPlan),
     };
 
     return {

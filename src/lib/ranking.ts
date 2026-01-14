@@ -1,5 +1,7 @@
 import { differenceInDays } from "date-fns";
 
+import type { ProviderPlan } from "@/lib/provider-subscription";
+
 export type RankableService = {
   id: string;
   priceInCents: number;
@@ -10,9 +12,17 @@ export type RankableService = {
   isVerified?: boolean;
   favoriteCount?: number;
   isFavoritedByUser?: boolean;
+  providerPlan?: ProviderPlan;
 };
 
 export const FAVORITE_BOOST = 0.75;
+
+export const PROVIDER_PLAN_BOOST: Readonly<Record<ProviderPlan, number>> = {
+  starter: 0,
+  pro: 0.25,
+  elite: 0.5,
+  unknown: 0,
+};
 
 /**
  * Deterministic ranking score for services.
@@ -28,7 +38,9 @@ export function scoreService(service: RankableService): number {
   const favorites = service.favoriteCount ? Math.log10(service.favoriteCount + 1) * 4 : 0;
   const favoriteBoost = service.isFavoritedByUser ? FAVORITE_BOOST : 0;
 
-  return ratingScore + reviewWeight + trustScore + verifyBonus + recencyScore + favorites + favoriteBoost;
+  const planBoost = service.providerPlan ? (PROVIDER_PLAN_BOOST[service.providerPlan] ?? 0) : 0;
+
+  return ratingScore + reviewWeight + trustScore + verifyBonus + recencyScore + favorites + favoriteBoost + planBoost;
 }
 
 export function sortServicesByScore<T extends RankableService>(items: T[]): T[] {

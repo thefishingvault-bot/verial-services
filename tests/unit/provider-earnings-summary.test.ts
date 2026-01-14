@@ -63,10 +63,12 @@ describe("getProviderEarningsSummary", () => {
   it("treats paid bookings without earnings rows as earned and pending", async () => {
     const summary = await getProviderEarningsSummary("prov_1");
 
-    expect(summary.lifetime.net).toBe(5000);
-    expect(summary.last30.net).toBe(5000);
+    // Fixture includes a Pro-plan booking; Pro has a 5% platform fee.
+    // 5000 gross -> 250 fee -> 4750 net.
+    expect(summary.lifetime.net).toBe(4750);
+    expect(summary.last30.net).toBe(4750);
     expect(summary.paidOutNet).toBe(0);
-    expect(summary.pendingPayoutsNet).toBe(5000);
+    expect(summary.pendingPayoutsNet).toBe(4750);
   });
 });
 
@@ -76,7 +78,8 @@ describe("getProviderMoneySummary", () => {
 
     const money = await getProviderMoneySummary("prov_1");
 
-    expect(money.lifetimeEarnedNet).toBe(5000);
+    // Fixture includes a Pro-plan booking; Pro has a 5% platform fee.
+    expect(money.lifetimeEarnedNet).toBe(4750);
     expect(money.paidOutNet).toBe(7000);
     expect(money.pendingNet).toBe(0);
   });
