@@ -3,11 +3,11 @@ import { bookings, users, providers, services } from '@/db/schema';
 import { eq } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { auth, clerkClient } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { AdminRefundConsole } from '@/components/admin/admin-refund-console';
 import { BookingIdParamSchema, parseParamsOrNotFound } from '@/lib/validation/admin-loader-schemas';
+import { requireAdmin } from '@/lib/admin-auth';
 
 const formatCurrency = (cents: number) =>
   new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD' }).format(cents / 100);
@@ -20,18 +20,8 @@ export default async function AdminRefundConsolePage({
 }: {
   params: Promise<{ bookingId: string }>;
 }) {
-  const { userId } = await auth();
-  if (!userId) {
-    redirect('/dashboard');
-  }
-
-  const client = await clerkClient();
-  const user = await client.users.getUser(userId);
-  const role = user.publicMetadata.role;
-
-  if (role !== 'admin') {
-    redirect('/dashboard');
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect('/dashboard');
 
   const { bookingId } = parseParamsOrNotFound(BookingIdParamSchema, await params);
 

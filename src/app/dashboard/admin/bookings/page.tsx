@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { bookings, users, providers, services, bookingStatusEnum } from "@/db/schema";
-import { eq, desc, and, or, ilike, inArray, sql } from "drizzle-orm";
+import { eq, desc, asc, and, or, ilike, inArray, sql } from "drizzle-orm";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { requireAdmin } from "@/lib/admin-auth";
@@ -22,10 +22,46 @@ import {
   ArrowUpDown
 } from "lucide-react";
 import { AdminBookingsSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
+import { computeBookingsListControls } from "@/lib/admin/bookings-list-controls";
 
 type BookingStatusValue = (typeof bookingStatusEnum.enumValues)[number];
 
 export const dynamic = "force-dynamic";
+
+function buildSearchHref(current: {
+  status: string;
+  search: string;
+  tab: string;
+  page: number;
+  pageSize: number;
+  sortBy: string;
+  sortDir: string;
+}, overrides: Partial<Record<string, string | number | undefined>>) {
+  const sp = new URLSearchParams();
+
+  const merged: Record<string, string> = {
+    status: String(overrides.status ?? current.status),
+    search: String(overrides.search ?? current.search ?? ""),
+    tab: String(overrides.tab ?? current.tab),
+    page: String(overrides.page ?? current.page),
+    pageSize: String(overrides.pageSize ?? current.pageSize),
+    sortBy: String(overrides.sortBy ?? current.sortBy),
+    sortDir: String(overrides.sortDir ?? current.sortDir),
+  };
+
+  for (const [k, v] of Object.entries(merged)) {
+    if (v === "" && k === "search") continue;
+    sp.set(k, v);
+  }
+
+  return `/dashboard/admin/bookings?${sp.toString()}`;
+}
+
+function nextSortDir(currentSortBy: string, currentSortDir: string, targetSortBy: string) {
+  if (currentSortBy === targetSortBy) return currentSortDir === "asc" ? "desc" : "asc";
+  if (targetSortBy === "createdAt") return "desc";
+  return "asc";
+}
 
 function formatBookingStatus(status: string) {
   if (status === "canceled_customer") return "Canceled (Customer)";
@@ -48,6 +84,12 @@ export default async function AdminBookingsPage({
   const params = parseSearchParams(AdminBookingsSearchSchema, await searchParams);
   const statusFilter = params.status;
   const searchQuery = params.search;
+  const { page, pageSize, offset, limit, sortBy, sortDir } = computeBookingsListControls({
+    page: params.page,
+    pageSize: params.pageSize,
+    sortBy: params.sortBy,
+    sortDir: params.sortDir,
+  });
   const canceledStatuses: BookingStatusValue[] = ["canceled_customer", "canceled_provider"];
 
   const activeTab =
@@ -110,6 +152,51 @@ export default async function AdminBookingsPage({
     );
   }
 
+  const where = whereConditions.length > 0 ? and(...whereConditions) : undefined;
+
+  const [{ totalCount } = { totalCount: 0 }] = await db
+    .select({ totalCount: sql<number>`count(distinct ${bookings.id})` })
+    .from(bookings)
+    .leftJoin(users, eq(bookings.userId, users.id))
+    .leftJoin(providers, eq(bookings.providerId, providers.id))
+    .leftJoin(services, eq(bookings.serviceId, services.id))
+    .where(where);
+
+  const totalPages = Math.max(1, Math.ceil(Number(totalCount || 0) / pageSize));
+  if (page > totalPages) {
+    redirect(
+      buildSearchHref(
+        {
+          status: statusFilter,
+          search: searchQuery,
+          tab: params.tab,
+          page,
+          pageSize,
+          sortBy,
+          sortDir,
+        },
+        { page: totalPages },
+      ),
+    );
+  }
+
+  const orderByExpr = (() => {
+    const dir = sortDir === "asc" ? asc : desc;
+    switch (sortBy) {
+      case "amount":
+        return dir(bookings.priceAtBooking);
+      case "status":
+        return dir(bookings.status);
+      case "scheduledAt":
+        return dir(bookings.scheduledDate);
+      case "id":
+        return dir(bookings.id);
+      case "createdAt":
+      default:
+        return dir(bookings.createdAt);
+    }
+  })();
+
   // Fetch bookings with related data using joins
   const bookingsData = await db
     .select({
@@ -137,9 +224,10 @@ export default async function AdminBookingsPage({
     .leftJoin(users, eq(bookings.userId, users.id))
     .leftJoin(providers, eq(bookings.providerId, providers.id))
     .leftJoin(services, eq(bookings.serviceId, services.id))
-    .where(whereConditions.length > 0 ? and(...whereConditions) : undefined)
-    .orderBy(desc(bookings.createdAt))
-    .limit(100);
+    .where(where)
+    .orderBy(orderByExpr)
+    .limit(limit)
+    .offset(offset);
 
   const totalBookings = summary?.totalBookings ?? 0;
   const pendingBookings = summary?.pendingBookings ?? 0;
@@ -165,7 +253,7 @@ export default async function AdminBookingsPage({
         <div className="flex gap-2">
           <Button asChild variant="outline">
             <Link
-              href={`/api/admin/bookings/export?status=${encodeURIComponent(statusFilter)}&search=${encodeURIComponent(searchQuery ?? "")}`}
+              href={`/api/admin/bookings/export?status=${encodeURIComponent(statusFilter)}&search=${encodeURIComponent(searchQuery ?? "")}&sortBy=${encodeURIComponent(sortBy)}&sortDir=${encodeURIComponent(sortDir)}`}
             >
               <Calendar className="mr-2 h-4 w-4" />
               Export Report
@@ -263,32 +351,32 @@ export default async function AdminBookingsPage({
               value="all"
               asChild
             >
-              <Link href={`/dashboard/admin/bookings?status=all&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "all", page: 1 })}>
                 All Bookings ({totalBookings})
               </Link>
             </TabsTrigger>
             <TabsTrigger value="pending" asChild>
-              <Link href={`/dashboard/admin/bookings?status=pending&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "pending", page: 1 })}>
                 Pending ({pendingBookings})
               </Link>
             </TabsTrigger>
             <TabsTrigger value="confirmed" asChild>
-              <Link href={`/dashboard/admin/bookings?status=accepted&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "accepted", page: 1 })}>
                 Accepted ({confirmedBookings})
               </Link>
             </TabsTrigger>
             <TabsTrigger value="paid" asChild>
-              <Link href={`/dashboard/admin/bookings?status=paid&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "paid", page: 1 })}>
                 Paid ({paidBookings})
               </Link>
             </TabsTrigger>
             <TabsTrigger value="completed" asChild>
-              <Link href={`/dashboard/admin/bookings?status=completed&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "completed", page: 1 })}>
                 Completed ({completedBookings})
               </Link>
             </TabsTrigger>
             <TabsTrigger value="canceled" asChild>
-              <Link href={`/dashboard/admin/bookings?status=canceled&search=${encodeURIComponent(searchQuery ?? "")}`}>
+              <Link href={buildSearchHref({ status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir }, { status: "canceled", page: 1 })}>
                 Canceled ({canceledBookings})
               </Link>
             </TabsTrigger>
@@ -296,6 +384,10 @@ export default async function AdminBookingsPage({
 
           {/* Advanced Filters */}
           <form method="GET" className="flex flex-col sm:flex-row sm:items-center gap-2 w-full lg:w-auto">
+            <input type="hidden" name="page" value="1" />
+            <input type="hidden" name="pageSize" value={pageSize} />
+            <input type="hidden" name="sortBy" value={sortBy} />
+            <input type="hidden" name="sortDir" value={sortDir} />
             <div className="w-full sm:w-64">
               <Input name="search" placeholder="Search bookings..." defaultValue={searchQuery} />
             </div>
@@ -319,27 +411,117 @@ export default async function AdminBookingsPage({
         </div>
 
         <TabsContent value="all" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
 
         <TabsContent value="pending" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
 
         <TabsContent value="confirmed" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
 
         <TabsContent value="paid" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
 
         <TabsContent value="completed" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
 
         <TabsContent value="canceled" className="space-y-4">
-          <BookingsTable bookings={bookingsData} nowMs={nowMs} />
+          <BookingsTable
+            bookings={bookingsData}
+            nowMs={nowMs}
+            totalCount={Number(totalCount || 0)}
+            page={page}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            makeHref={(overrides) =>
+              buildSearchHref(
+                { status: statusFilter, search: searchQuery, tab: params.tab, page, pageSize, sortBy, sortDir },
+                overrides,
+              )
+            }
+            sortBy={sortBy}
+            sortDir={sortDir}
+          />
         </TabsContent>
       </Tabs>
     </div>
@@ -349,6 +531,13 @@ export default async function AdminBookingsPage({
 function BookingsTable({
   bookings,
   nowMs,
+  totalCount,
+  page,
+  totalPages,
+  pageSize,
+  makeHref,
+  sortBy,
+  sortDir,
 }: {
   bookings: Array<{
     id: string;
@@ -369,7 +558,19 @@ function BookingsTable({
     serviceTitle: string | null;
   }>;
   nowMs: number;
+  totalCount: number;
+  page: number;
+  totalPages: number;
+  pageSize: number;
+  makeHref: (overrides: Partial<Record<string, string | number | undefined>>) => string;
+  sortBy: string;
+  sortDir: string;
 }) {
+  const canPrev = page > 1;
+  const canNext = page < totalPages;
+  const showingFrom = totalCount === 0 ? 0 : (page - 1) * pageSize + 1;
+  const showingTo = Math.min(totalCount, (page - 1) * pageSize + bookings.length);
+
   return (
     <Card>
       <CardHeader>
@@ -384,18 +585,49 @@ function BookingsTable({
             <TableHeader>
               <TableRow>
                 <TableHead>
-                  <div className="flex items-center gap-2">
+                  <Link
+                    href={makeHref({
+                      sortBy: "id",
+                      sortDir: nextSortDir(sortBy, sortDir, "id"),
+                      page: 1,
+                    })}
+                    className="flex items-center gap-2 hover:underline"
+                  >
                     Booking ID
                     <ArrowUpDown className="h-4 w-4" />
-                  </div>
+                  </Link>
                 </TableHead>
                 <TableHead>Customer</TableHead>
                 <TableHead>Provider</TableHead>
                 <TableHead>Service</TableHead>
-                <TableHead>Amount</TableHead>
+                <TableHead>
+                  <Link
+                    href={makeHref({
+                      sortBy: "amount",
+                      sortDir: nextSortDir(sortBy, sortDir, "amount"),
+                      page: 1,
+                    })}
+                    className="flex items-center gap-2 hover:underline"
+                  >
+                    Amount
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Link>
+                </TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Scheduled Date</TableHead>
-                <TableHead>Created</TableHead>
+                <TableHead>
+                  <Link
+                    href={makeHref({
+                      sortBy: "createdAt",
+                      sortDir: nextSortDir(sortBy, sortDir, "createdAt"),
+                      page: 1,
+                    })}
+                    className="flex items-center gap-2 hover:underline"
+                  >
+                    Created
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Link>
+                </TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -568,6 +800,29 @@ function BookingsTable({
           {bookings.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">No bookings found matching the current filters.</div>
           )}
+        </div>
+
+        <div className="flex flex-col gap-3 pt-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="text-sm text-muted-foreground">
+            {totalCount === 0
+              ? "No results"
+              : `Showing ${showingFrom}-${showingTo} of ${totalCount}`}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm" disabled={!canPrev}>
+              <Link href={makeHref({ page: page - 1 })} aria-disabled={!canPrev}>
+                Prev
+              </Link>
+            </Button>
+            <div className="text-sm text-muted-foreground">
+              Page {page} of {totalPages}
+            </div>
+            <Button asChild variant="outline" size="sm" disabled={!canNext}>
+              <Link href={makeHref({ page: page + 1 })} aria-disabled={!canNext}>
+                Next
+              </Link>
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

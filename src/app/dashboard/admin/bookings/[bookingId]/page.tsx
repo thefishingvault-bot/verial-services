@@ -4,11 +4,10 @@ import { eq, desc } from 'drizzle-orm';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { currentUser } from '@clerk/nextjs/server';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { ArrowLeft, CreditCard } from 'lucide-react';
-import { requireAdmin } from '@/lib/admin';
+import { requireAdmin } from '@/lib/admin-auth';
 import { BookingIdParamSchema, parseParamsOrNotFound } from '@/lib/validation/admin-loader-schemas';
 
 const formatCurrency = (cents: number) =>
@@ -22,16 +21,8 @@ export default async function AdminBookingDetailPage({
 }: {
   params: Promise<{ bookingId: string }>;
 }) {
-  const user = await currentUser();
-  if (!user?.id) {
-    redirect('/dashboard');
-  }
-
-  try {
-    await requireAdmin(user.id);
-  } catch {
-    redirect('/dashboard');
-  }
+  const admin = await requireAdmin();
+  if (!admin.isAdmin) redirect('/dashboard');
 
   const { bookingId } = parseParamsOrNotFound(BookingIdParamSchema, await params);
 

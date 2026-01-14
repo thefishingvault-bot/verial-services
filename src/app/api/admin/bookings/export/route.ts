@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { bookings, providers, services, users } from "@/db/schema";
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 
 function escapeCsv(value: unknown) {
@@ -18,6 +18,8 @@ export async function GET(request: NextRequest) {
     const url = new URL(request.url);
     const status = (url.searchParams.get("status") || "all").trim();
     const search = (url.searchParams.get("search") || "").trim();
+    const sortBy = (url.searchParams.get("sortBy") || "createdAt").trim();
+    const sortDir = (url.searchParams.get("sortDir") || "desc").trim();
 
     const whereConditions: Array<ReturnType<typeof sql>> = [];
 
@@ -38,6 +40,23 @@ export async function GET(request: NextRequest) {
     }
 
     const where = whereConditions.length ? and(...whereConditions) : undefined;
+
+    const orderByExpr = (() => {
+      const dir = sortDir === "asc" ? asc : desc;
+      switch (sortBy) {
+        case "amount":
+          return dir(bookings.priceAtBooking);
+        case "status":
+          return dir(bookings.status);
+        case "scheduledAt":
+          return dir(bookings.scheduledDate);
+        case "id":
+          return dir(bookings.id);
+        case "createdAt":
+        default:
+          return dir(bookings.createdAt);
+      }
+    })();
 
     const rows = await db
       .select({
@@ -60,7 +79,7 @@ export async function GET(request: NextRequest) {
       .leftJoin(providers, eq(bookings.providerId, providers.id))
       .leftJoin(services, eq(bookings.serviceId, services.id))
       .where(where)
-      .orderBy(desc(bookings.createdAt))
+      .orderBy(orderByExpr)
       .limit(5000);
 
     const header = [

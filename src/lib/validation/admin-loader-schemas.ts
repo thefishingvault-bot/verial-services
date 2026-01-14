@@ -86,6 +86,12 @@ export const AdminBookingsSearchSchema = z.object({
     .transform((value) => (value === "confirmed" ? "accepted" : value)),
   search: z.string().trim().optional().default(""),
   tab: z.enum(["all", "pending", "confirmed", "paid", "completed", "canceled"]).default("all"),
+
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(25),
+
+  sortBy: z.enum(["createdAt", "amount", "status", "scheduledAt", "id"]).default("createdAt"),
+  sortDir: z.enum(["asc", "desc"]).default("desc"),
 });
 
 export const AdminBulkSearchSchema = z.object({

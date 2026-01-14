@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { BookingIdSchema, RefundCreateSchema, RefundQuerySchema, invalidResponse, parseBody, parseParams, parseQuery } from "@/lib/validation/admin";
 import { createMarketplaceRefund } from "@/lib/stripe-refunds";
+import { writeAdminAuditLog } from "@/lib/admin-audit";
 
 export async function POST(request: NextRequest) {
   try {
@@ -56,6 +57,26 @@ export async function POST(request: NextRequest) {
     // Generate refund ID
     const refundId = `refund_${crypto.randomUUID()}`;
 
+    const auditBefore = {
+      booking: {
+        id: bookingData.id,
+        status: bookingData.status,
+        priceAtBooking: bookingData.priceAtBooking,
+        paymentIntentId: bookingData.paymentIntentId,
+        providerId: bookingData.providerId,
+      },
+      request: {
+        bookingId,
+        amount: refundAmount,
+        reason,
+        description: description ?? null,
+      },
+      refund: {
+        id: refundId,
+        status: "processing" as const,
+      },
+    };
+
     try {
       // Create refund record first
       await db.insert(refunds).values({
@@ -95,6 +116,26 @@ export async function POST(request: NextRequest) {
           updatedAt: new Date(),
         })
         .where(eq(refunds.id, refundId));
+
+      await writeAdminAuditLog({
+        userId: userId!,
+        action: "BOOKING_REFUND",
+        resource: "booking",
+        resourceId: bookingId,
+        details: JSON.stringify({
+          before: auditBefore,
+          after: {
+            refund: {
+              id: refundId,
+              status: stripeResult.refund.status === "succeeded" ? "completed" : "processing",
+              stripeRefundId: stripeResult.refund.id,
+              platformFeeRefunded: stripeResult.refundedPlatformFee ?? 0,
+              providerAmountRefunded: stripeResult.refundedProviderAmount ?? 0,
+            },
+          },
+        }),
+        request,
+      });
 
       return NextResponse.json({
         success: true,
