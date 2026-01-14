@@ -2,6 +2,14 @@ import { notFound } from "next/navigation";
 import { z } from "zod";
 
 const uuid = () => z.string().uuid();
+const bookingId = () =>
+  z.union([
+    uuid(),
+    z
+      .string()
+      .min(1)
+      .regex(/^bk_[A-Za-z0-9_]+$/, "Invalid booking id"),
+  ]);
 const providerId = () =>
   z
     .string()
@@ -27,7 +35,7 @@ export function parseSearchParams<T extends z.ZodTypeAny>(schema: T, raw: unknow
 }
 
 export const ProviderIdParamSchema = z.object({ providerId: providerId() });
-export const BookingIdParamSchema = z.object({ bookingId: uuid() });
+export const BookingIdParamSchema = z.object({ bookingId: bookingId() });
 export const DisputeIdParamSchema = z.object({ disputeId: uuid() });
 export const RuleIdParamSchema = z.object({ ruleId: z.string().min(1) });
 

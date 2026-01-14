@@ -2,6 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 const uuid = () => z.string().uuid();
+const bookingId = () =>
+  z.union([
+    uuid(),
+    z
+      .string()
+      .min(1)
+      .regex(/^bk_[A-Za-z0-9_]+$/, "Invalid booking id"),
+  ]);
 const providerId = () =>
   z
     .string()
@@ -15,7 +23,7 @@ export const PaginationSchema = z.object({
 
 export const ProviderIdSchema = z.object({ providerId: providerId() });
 export const UserIdSchema = z.object({ userId: uuid() });
-export const BookingIdSchema = z.object({ bookingId: uuid() });
+export const BookingIdSchema = z.object({ bookingId: bookingId() });
 export const DisputeIdSchema = z.object({ disputeId: uuid() });
 export const RuleIdSchema = z.object({ ruleId: z.string().min(1) });
 
@@ -41,7 +49,7 @@ export const TrustIncidentCreateSchema = z.object({
   severity: z.enum(["low", "medium", "high", "critical"]),
   description: z.string().trim().min(1).max(5000),
   bookingId: z
-    .union([uuid(), z.string().length(0), z.null()])
+    .union([bookingId(), z.string().length(0), z.null()])
     .optional()
     .transform((v) => (typeof v === "string" && v.length === 0 ? null : v ?? null)),
 });
@@ -111,14 +119,14 @@ export const DisputeResolveSchema = z.object({
 });
 
 export const RefundCreateSchema = z.object({
-  bookingId: uuid(),
+  bookingId: bookingId(),
   amount: z.coerce.number().int().positive(),
   reason: z.string().trim().min(1),
   description: z.string().trim().optional().transform((v) => v || null),
 });
 
 export const RefundQuerySchema = z.object({
-  bookingId: uuid(),
+  bookingId: bookingId(),
 });
 
 export const FeesReportQuerySchema = z.object({
