@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { bookings, users, providers, services } from '@/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, inArray, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
+import { RebookCreateSchema, RebookQuerySchema, invalidResponse, parseBody, parseQuery } from '@/lib/validation/admin';
 
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') || 'canceled';
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const parsedQuery = parseQuery(RebookQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { status, limit } = parsedQuery.data;
+
+    const statusCondition =
+      status === 'canceled'
+        ? inArray(sql<string>`(${bookings.status})::text`, ['canceled_customer', 'canceled_provider'])
+        : eq(bookings.status, status);
 
     // Get cancelled bookings with customer and provider info
     const cancelledBookings = await db
@@ -32,7 +38,7 @@ export async function GET(request: NextRequest) {
       .from(bookings)
       .leftJoin(providers, eq(bookings.providerId, providers.id))
       .leftJoin(services, eq(bookings.serviceId, services.id))
-      .where(sql`${bookings.status} = ${status}`)
+      .where(statusCondition)
       .orderBy(desc(bookings.updatedAt))
       .limit(limit);
 
@@ -51,7 +57,7 @@ export async function GET(request: NextRequest) {
         })
         .from(bookings)
         .leftJoin(users, eq(bookings.userId, users.id))
-        .where(sql`${bookings.id} IN (${bookingIds.map(id => `'${id}'`).join(',')})`);
+        .where(inArray(bookings.id, bookingIds));
 
       customers.forEach(c => {
         customerNames[c.bookingId] = { name: c.name || 'Unknown', email: c.email || 'unknown@example.com' };
@@ -66,7 +72,7 @@ export async function GET(request: NextRequest) {
         .from(bookings)
         .leftJoin(providers, eq(bookings.providerId, providers.id))
         .leftJoin(users, eq(providers.userId, users.id))
-        .where(sql`${bookings.id} IN (${bookingIds.map(id => `'${id}'`).join(',')})`);
+        .where(inArray(bookings.id, bookingIds));
 
       providersInfo.forEach(p => {
         providerNames[p.bookingId] = p.name || 'Unknown';
@@ -99,14 +105,13 @@ export async function POST(request: NextRequest) {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const body = await request.json();
-    const { originalBookingId, newScheduledDateTime } = body;
+    const parsedBody = await parseBody(RebookCreateSchema, request);
+    if (!parsedBody.ok) return invalidResponse(parsedBody.error);
+    const { originalBookingId, newScheduledDateTime, reason } = parsedBody.data;
 
-    if (!originalBookingId || !newScheduledDateTime) {
-      return NextResponse.json(
-        { error: 'Missing required fields: originalBookingId, newScheduledDateTime' },
-        { status: 400 }
-      );
+    const parsedScheduled = new Date(newScheduledDateTime);
+    if (Number.isNaN(parsedScheduled.getTime())) {
+      return NextResponse.json({ error: 'Invalid newScheduledDateTime' }, { status: 400 });
     }
 
     // Get the original booking details
@@ -133,7 +138,7 @@ export async function POST(request: NextRequest) {
       userId: booking.userId,
       providerId: booking.providerId,
       serviceId: booking.serviceId,
-      scheduledDate: new Date(newScheduledDateTime),
+      scheduledDate: parsedScheduled,
       priceAtBooking: booking.priceAtBooking,
       status: 'accepted',
       createdAt: new Date(),
@@ -151,7 +156,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       newBookingId,
-      message: 'Booking successfully rebooked',
+      message: reason ? `Booking successfully rebooked: ${reason}` : 'Booking successfully rebooked',
     });
   } catch (error) {
     console.error('Error rebooking:', error);

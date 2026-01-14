@@ -139,6 +139,37 @@ export const RevenueAnalyticsQuerySchema = z.object({
   groupBy: z.enum(["day", "week", "month"]).optional().default("day"),
 });
 
+export const AdminTimeframeQuerySchema = z.object({
+  timeframe: z.enum(["7d", "30d", "90d"]).optional().default("30d"),
+});
+
+export const CustomerRiskQuerySchema = AdminTimeframeQuerySchema.extend({
+  riskLevel: z.enum(["all", "low", "medium", "high"]).optional().default("all"),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+export const RebookQuerySchema = z.object({
+  status: z.enum(["canceled", "canceled_customer", "canceled_provider"]).optional().default("canceled"),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+export const RebookCreateSchema = z.object({
+  originalBookingId: z.string().trim().min(1).max(255),
+  newScheduledDateTime: z.string().trim().min(1).max(64),
+  reason: z.string().trim().min(1).max(500).optional().default("Admin rebooking"),
+});
+
+export const PayoutExceptionsQuerySchema = AdminTimeframeQuerySchema.extend({
+  status: z
+    .enum(["all", "exceptions", "ready", "disabled", "not_connected"])
+    .optional()
+    .default("all"),
+  page: z.coerce.number().int().min(1).optional().default(1),
+  limit: z.coerce.number().int().min(1).max(200).optional().default(50),
+});
+
+export const TrustIncidentIdSchema = z.object({ incidentId: z.string().min(1).max(255) });
+
 export const FeesByProviderQuerySchema = z.object({
   year: z.coerce.number().int().optional(),
   from: z.string().trim().optional(),

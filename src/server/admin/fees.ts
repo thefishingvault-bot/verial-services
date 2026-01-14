@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { bookings, services, providers, users, providerEarnings } from '@/db/schema';
 import { desc, inArray, eq, gte, lte, and, between, sql, ilike } from 'drizzle-orm';
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from '@/lib/provider-subscription';
 
 export interface FeeReportRow {
   bookingId: string;
@@ -64,6 +65,7 @@ export async function getAdminFeesReport({
       status: bookings.status,
       updatedAt: bookings.updatedAt,
       priceAtBooking: bookings.priceAtBooking,
+      providerPlan: providers.plan,
       serviceTitle: services.title,
       providerName: providers.businessName,
       customerEmail: users.email,
@@ -75,11 +77,9 @@ export async function getAdminFeesReport({
     .where(and(...baseConditions))
     .orderBy(desc(bookings.updatedAt));
 
-  // Calculate fees (as per spec: 10% = PLATFORM_FEE_BPS=1000)
-  const feeBps = parseInt(process.env.PLATFORM_FEE_BPS || '1000');
-
   const report = paidBookings.map(b => {
-    const platformFee = Math.ceil(b.priceAtBooking * (feeBps / 10000));
+    const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(b.providerPlan));
+    const platformFee = Math.ceil(b.priceAtBooking * (platformFeeBps / 10000));
     return {
       bookingId: b.id,
       status: b.status,

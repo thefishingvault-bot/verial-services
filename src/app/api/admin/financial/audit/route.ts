@@ -5,10 +5,10 @@ import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { calculateEarnings } from "@/lib/earnings";
 import { logFinancialAudit } from "@/lib/financial-consistency";
 import { requireAdmin } from "@/lib/admin-auth";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 export const runtime = "nodejs";
 
-const PLATFORM_FEE_BPS = parseInt(process.env.PLATFORM_FEE_BPS || "1000", 10);
 const GST_BPS = parseInt(process.env.GST_BPS || "1500", 10);
 
 export async function POST() {
@@ -48,6 +48,7 @@ export async function POST() {
         netAmount: providerEarnings.netAmount,
         status: providerEarnings.status,
         providerChargesGst: providers.chargesGst,
+        providerPlan: providers.plan,
         kycStatus: providers.kycStatus,
         bookingPrice: bookings.priceAtBooking,
         serviceChargesGst: services.chargesGst,
@@ -59,10 +60,11 @@ export async function POST() {
 
     for (const row of earnings) {
       const chargesGst = row.serviceChargesGst ?? row.providerChargesGst ?? true;
+      const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(row.providerPlan));
       const expected = calculateEarnings({
         amountInCents: row.bookingPrice ?? row.grossAmount,
         chargesGst,
-        platformFeeBps: PLATFORM_FEE_BPS,
+        platformFeeBps,
         gstBps: GST_BPS,
       });
 

@@ -32,6 +32,7 @@ vi.mock("@/db/schema", () => ({
   providers: {
     id: "providers.id",
     businessName: "providers.businessName",
+    plan: "providers.plan",
   },
   users: {
     id: "users.id",
@@ -79,6 +80,7 @@ describe("admin fees providerSearch filtering", () => {
         status: "paid",
         updatedAt: new Date("2025-01-10T01:00:00.000Z"),
         priceAtBooking: 10000,
+        providerPlan: "starter",
         serviceTitle: "Service",
         providerName: "Acme Co",
         customerEmail: "a@example.com",

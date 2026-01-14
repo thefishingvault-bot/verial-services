@@ -34,7 +34,10 @@ export function getPlatformFeeBpsForPlan(plan: ProviderPlan): number {
   const starterBps = Number.parseInt(process.env.PLATFORM_FEE_BPS || "1000", 10);
   if (plan === "starter" || plan === "unknown") return Number.isFinite(starterBps) ? starterBps : 1000;
 
-  // Pro/Elite: no per-booking platform fee by default.
+  // Pro: reduced platform fee (5%).
+  if (plan === "pro") return 500;
+
+  // Elite: no per-booking platform fee.
   return 0;
 }
 

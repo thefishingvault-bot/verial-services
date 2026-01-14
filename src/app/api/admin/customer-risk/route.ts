@@ -1,35 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { users, bookings, reviews, disputes } from '@/db/schema';
-import { eq, desc, and, gte, sql } from 'drizzle-orm';
+import { eq, desc, and, gte, inArray, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
+import { CustomerRiskQuerySchema, invalidResponse, parseQuery } from '@/lib/validation/admin';
+
+export function getTimeframeStartDate(timeframe: '7d' | '30d' | '90d', now: Date) {
+  switch (timeframe) {
+    case '7d':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '30d':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case '90d':
+      return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const { searchParams } = new URL(request.url);
-    const timeframe = searchParams.get('timeframe') || '30d';
-    const riskLevel = searchParams.get('riskLevel') || 'all';
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const parsedQuery = parseQuery(CustomerRiskQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { timeframe, riskLevel: riskLevelFilter, limit } = parsedQuery.data;
 
-    // Calculate date filter
     const now = new Date();
-    let startDate: Date;
-    switch (timeframe) {
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+    const startDate = getTimeframeStartDate(timeframe, now);
 
     // Get customer risk signals
     const customerRiskData = await db
@@ -79,7 +76,7 @@ export async function GET(request: NextRequest) {
           accountAge: sql<number>`extract(epoch from (now() - ${users.createdAt})) / (24 * 60 * 60)`,
         })
         .from(users)
-        .where(sql`${users.id} IN (${customerIds.map(id => `'${id}'`).join(',')})`);
+        .where(inArray(users.id, customerIds));
 
       customers.forEach(c => {
         customerNames[c.id] = { name: c.name || 'Unknown', email: c.email || 'unknown@example.com', accountAge: c.accountAge || 0 };
@@ -141,26 +138,27 @@ export async function GET(request: NextRequest) {
     });
 
     // Filter by risk level if specified
-    const filteredCustomers = riskLevel === 'all'
+    const filteredCustomers = riskLevelFilter === 'all'
       ? enrichedCustomers
-      : enrichedCustomers.filter(c => c.riskLevel === riskLevel);
+      : enrichedCustomers.filter(c => c.riskLevel === riskLevelFilter);
 
     // Get summary statistics
+    const denom = Math.max(1, filteredCustomers.length);
     const stats = {
       totalCustomers: filteredCustomers.length,
       highRiskCustomers: filteredCustomers.filter(c => c.riskLevel === 'high').length,
       mediumRiskCustomers: filteredCustomers.filter(c => c.riskLevel === 'medium').length,
       lowRiskCustomers: filteredCustomers.filter(c => c.riskLevel === 'low').length,
-      avgCancellationRate: filteredCustomers.reduce((sum, c) => sum + (c.cancellationRate || 0), 0) / filteredCustomers.length,
+      avgCancellationRate: filteredCustomers.reduce((sum, c) => sum + (c.cancellationRate || 0), 0) / denom,
       totalDisputes: filteredCustomers.reduce((sum, c) => sum + (c.totalDisputes || 0), 0),
-      avgBookingValue: filteredCustomers.reduce((sum, c) => sum + (c.avgBookingValue || 0), 0) / filteredCustomers.length,
+      avgBookingValue: filteredCustomers.reduce((sum, c) => sum + (c.avgBookingValue || 0), 0) / denom,
     };
 
     return NextResponse.json({
       customers: filteredCustomers,
       stats,
       timeframe,
-      riskLevel,
+      riskLevel: riskLevelFilter,
     });
   } catch (error) {
     console.error('Error fetching customer risk signals:', error);

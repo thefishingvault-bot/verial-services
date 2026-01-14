@@ -1,19 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { providers, users, bookings, refunds } from '@/db/schema';
-import { eq, desc, sql } from 'drizzle-orm';
+import { eq, desc, inArray, sql } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
+import { PayoutExceptionsQuerySchema, invalidResponse, parseQuery } from '@/lib/validation/admin';
+
+export function getTimeframeStartDate(timeframe: '7d' | '30d' | '90d', now: Date) {
+  switch (timeframe) {
+    case '7d':
+      return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    case '30d':
+      return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    case '90d':
+      return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const { searchParams } = new URL(request.url);
-    const status = searchParams.get('status') || 'all';
-    const timeframe = searchParams.get('timeframe') || '30d';
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
+    const parsedQuery = parseQuery(PayoutExceptionsQuerySchema, request);
+    if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
+    const { status, timeframe, page, limit } = parsedQuery.data;
+
+    const now = new Date();
+    const startDate = getTimeframeStartDate(timeframe, now);
 
     // Get providers with payout-related issues
     const providersWithIssues = await db
@@ -27,11 +40,11 @@ export async function GET(request: NextRequest) {
         payoutsEnabled: providers.payoutsEnabled,
         isSuspended: providers.isSuspended,
         trustLevel: providers.trustLevel,
-        totalBookings: sql<number>`count(bookings.id)`,
-        completedBookings: sql<number>`count(case when bookings.status = 'completed' then 1 end)`,
-        totalRevenue: sql<number>`sum(bookings.priceAtBooking)`,
-        pendingRefunds: sql<number>`count(case when refunds.status = 'pending' then 1 end)`,
-        failedRefunds: sql<number>`count(case when refunds.status = 'failed' then 1 end)`,
+        totalBookings: sql<number>`count(case when ${bookings.createdAt} >= ${startDate} then 1 end)`,
+        completedBookings: sql<number>`count(case when ${bookings.status} = 'completed' and ${bookings.createdAt} >= ${startDate} then 1 end)`,
+        totalRevenue: sql<number>`sum(case when ${bookings.createdAt} >= ${startDate} then ${bookings.priceAtBooking} else 0 end)`,
+        pendingRefunds: sql<number>`count(case when ${refunds.status} = 'pending' and ${refunds.createdAt} >= ${startDate} then 1 end)`,
+        failedRefunds: sql<number>`count(case when ${refunds.status} = 'failed' and ${refunds.createdAt} >= ${startDate} then 1 end)`,
         createdAt: providers.createdAt,
       })
       .from(providers)
@@ -44,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     // Get provider details separately
     const providerIds = providersWithIssues.map(p => p.providerId);
-    const providerDetails = await db
+    const providerDetails = providerIds.length === 0 ? [] : await db
       .select({
         id: providers.id,
         userId: providers.userId,
@@ -53,7 +66,7 @@ export async function GET(request: NextRequest) {
       })
       .from(providers)
       .leftJoin(users, eq(users.id, providers.userId))
-      .where(sql`${providers.id} = any(${providerIds})`);
+      .where(inArray(providers.id, providerIds));
 
     const providerMap = new Map(
       providerDetails.map(p => [p.id, { name: p.name, email: p.email }])
