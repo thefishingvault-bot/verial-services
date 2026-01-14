@@ -116,7 +116,7 @@ function HomeContent() {
       </section>
 
       {/* --- NEW: Become a Provider CTA Section --- */}
-      <section className="w-full py-20 md:py-32 bg-gradient-to-r from-primary to-verial-blue-600">
+      <section className="w-full py-20 md:py-32 bg-linear-to-r from-primary to-verial-blue-600">
         <div className="container flex flex-col items-center justify-center text-center px-4">
           <h2 className="text-3xl font-extrabold tracking-tight text-white mb-4">
             Ready to grow your business?

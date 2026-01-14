@@ -365,7 +365,7 @@ export default async function AdminProviderDetailPage({
               {provider.bio && (
                 <div>
                   <div className="text-xs text-muted-foreground">Bio</div>
-                  <div className="whitespace-pre-wrap break-words text-xs">{provider.bio}</div>
+                  <div className="whitespace-pre-wrap wrap-break-word text-xs">{provider.bio}</div>
                 </div>
               )}
               <div>
@@ -551,7 +551,7 @@ export default async function AdminProviderDetailPage({
                         ? `${note.authorFirstName ?? ''} ${note.authorLastName ?? ''}`.trim()
                         : 'Unknown admin'} • {formatDate(note.createdAt)}
                     </div>
-                    <div className="text-sm whitespace-pre-wrap break-words">{note.note}</div>
+                    <div className="text-sm whitespace-pre-wrap wrap-break-word">{note.note}</div>
                   </div>
                 ))}
               </div>

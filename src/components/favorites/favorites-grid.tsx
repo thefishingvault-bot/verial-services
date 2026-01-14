@@ -49,7 +49,7 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
   }
 
   return (
-    <div className="mt-6 grid gap-6 [grid-template-columns:repeat(auto-fit,minmax(320px,1fr))]">
+    <div className="mt-6 grid gap-6 grid-cols-[repeat(auto-fit,minmax(320px,1fr))]">
       {sortedFavorites.map((fav) => {
         const { Icon, color } = getTrustBadge(fav.provider.trustLevel);
         const savedOn = new Intl.DateTimeFormat("en-NZ", { month: "short", day: "numeric" }).format(
@@ -57,7 +57,7 @@ export function FavoritesGrid({ items, sort }: FavoritesGridProps) {
         );
         return (
           <Card key={fav.id} className="overflow-hidden border bg-white shadow-sm transition hover:-translate-y-1 hover:shadow-lg">
-            <div className="relative aspect-[16/9] bg-slate-100">
+            <div className="relative aspect-video bg-slate-100">
               {fav.coverImageUrl ? (
                 <Image
                   src={fav.coverImageUrl}

@@ -86,7 +86,7 @@ export default function ServicesGrid({
           >
             <CardHeader className="p-0">
               {/* Service Image */}
-              <div className="relative aspect-[16/9] bg-gray-100 rounded-t-2xl overflow-hidden">
+              <div className="relative aspect-video bg-gray-100 rounded-t-2xl overflow-hidden">
                 {service.coverImageUrl ? (
                   <Image
                     src={service.coverImageUrl}
@@ -154,7 +154,7 @@ export default function ServicesGrid({
                       {service.provider.businessName}
                     </span>
                     {service.provider.isVerified && (
-                      <CheckCircle className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                      <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-500">

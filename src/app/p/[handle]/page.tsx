@@ -107,7 +107,7 @@ function ProviderHeader({
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col items-start gap-6 p-6 md:flex-row">
-        <div className="relative h-32 w-32 flex-shrink-0">
+        <div className="relative h-32 w-32 shrink-0">
           <Image
             src={provider.user.avatarUrl || '/default-avatar.png'}
             alt={provider.businessName}
@@ -180,7 +180,7 @@ function ServiceCard({ service }: { service: ProviderService }) {
             )}
           </div>
         </CardHeader>
-        <CardContent className="flex-grow p-4">
+        <CardContent className="grow p-4">
           <Badge variant="outline" className="mb-2 capitalize">
             {service.category}
           </Badge>

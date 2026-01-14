@@ -78,7 +78,7 @@ export function AdminProvidersFiltersBar({ searchParams, regions }: AdminProvide
                 updateQuery({ status: value === 'all' ? null : value });
               }}
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Status" />
               </SelectTrigger>
               <SelectContent>
@@ -95,7 +95,7 @@ export function AdminProvidersFiltersBar({ searchParams, regions }: AdminProvide
                 updateQuery({ region: value === 'all' ? null : value });
               }}
             >
-              <SelectTrigger className="w-[180px]">
+              <SelectTrigger className="w-45">
                 <SelectValue placeholder="Region" />
               </SelectTrigger>
               <SelectContent>
@@ -114,7 +114,7 @@ export function AdminProvidersFiltersBar({ searchParams, regions }: AdminProvide
                 updateQuery({ stripe: value === 'all' ? null : value });
               }}
             >
-              <SelectTrigger className="w-[160px]">
+              <SelectTrigger className="w-40">
                 <SelectValue placeholder="Stripe" />
               </SelectTrigger>
               <SelectContent>

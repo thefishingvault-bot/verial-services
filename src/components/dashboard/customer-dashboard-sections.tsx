@@ -313,7 +313,7 @@ function ServiceCardCompact({
 }) {
   return (
     <Card className="w-full overflow-hidden">
-      <div className="relative aspect-video max-h-[170px] w-full bg-muted">
+    <div className="relative aspect-video max-h-42 w-full bg-muted">
         {imageUrl ? (
           <Image
             src={imageUrl}
@@ -454,7 +454,7 @@ function Recommendations({ items }: { items: RecommendationCardData[] }) {
           const priceLabel = formatServicePriceLabel({ pricingType: rec.pricingType, priceInCents: rec.priceInCents });
           return (
             <Card key={rec.serviceId} className="overflow-hidden">
-              <div className="relative aspect-video max-h-[170px] w-full bg-muted">
+              <div className="relative aspect-video max-h-42 w-full bg-muted">
                 {rec.coverImageUrl ? (
                   <Image
                     src={rec.coverImageUrl}

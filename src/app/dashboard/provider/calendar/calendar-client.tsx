@@ -374,7 +374,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                           onClick={() => setSelectedDate(day.date)}
                           title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                           className={cn(
-                            "min-h-[68px] md:min-h-[92px] rounded border p-1 text-left transition",
+                            "min-h-17 md:min-h-23 rounded border p-1 text-left transition",
                             day.inCurrentMonth ? "bg-background" : "bg-muted/30",
                             isSelected && "ring-2 ring-primary",
                             hasTimeOff && "border-destructive/30 bg-destructive/5",
@@ -455,7 +455,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             </>
           ) : (
             <div className="overflow-x-auto">
-              <div className="min-w-[720px] space-y-2">
+              <div className="min-w-180 space-y-2">
                 <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
                   {Array.from({ length: 7 }).map((_, i) => {
                     const date = new Date(range.weekStart);
@@ -482,7 +482,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                         onClick={() => setSelectedDate(date)}
                         title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                         className={cn(
-                          "min-h-[120px] rounded border p-2 text-left transition",
+                          "min-h-30 rounded border p-2 text-left transition",
                           "bg-background",
                           isSelected && "ring-2 ring-primary",
                           hasTimeOff && "border-destructive/30 bg-destructive/5",

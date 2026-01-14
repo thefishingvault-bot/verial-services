@@ -92,7 +92,7 @@ export function ChatThread({
                           {displayName}
                         </p>
                       )}
-                      <p className="whitespace-pre-wrap break-words">
+                      <p className="whitespace-pre-wrap wrap-break-word">
                         {msg.content}
                       </p>
                     </div>

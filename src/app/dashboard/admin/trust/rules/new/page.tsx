@@ -118,7 +118,7 @@ export default async function NewRiskRulePage() {
                   name="autoSuspend"
                   value="true"
                   type="checkbox"
-                  className="size-4 shrink-0 rounded-[4px] border border-input bg-transparent shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+                  className="size-4 shrink-0 rounded-lg border border-input bg-transparent shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
                 />
                 <Label htmlFor="autoSuspend">Automatically suspend provider</Label>
               </div>

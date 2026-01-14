@@ -25,7 +25,7 @@ export function SimilarServicesGrid({ services }: SimilarServicesGridProps) {
         {services.map((svc) => (
           <Card key={svc.id} className="overflow-hidden border bg-white">
             <CardHeader className="p-0">
-              <div className="relative aspect-[4/3] bg-slate-100">
+            <div className="relative aspect-4/3 bg-slate-100">
                 {svc.coverImageUrl ? (
                   <Image
                     src={svc.coverImageUrl}

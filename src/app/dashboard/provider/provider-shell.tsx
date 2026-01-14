@@ -84,7 +84,7 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
                   key={link.href}
                   href={link.href}
                   className={cn(
-                    "flex flex-none items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-medium whitespace-nowrap min-w-[140px]",
+                    "flex flex-none items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-medium whitespace-nowrap min-w-35",
                     active
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-transparent bg-background text-muted-foreground",

@@ -317,7 +317,7 @@ export function FeeOverridesClient() {
 
       {/* Override Configuration Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Configure Fee Override</DialogTitle>
             <DialogDescription>

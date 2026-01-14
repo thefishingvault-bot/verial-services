@@ -489,7 +489,7 @@ export function ProviderProfileForm() {
                           aria-label={`Remove ${suburb}`}
                           title="Remove"
                         >
-                          <span className="truncate max-w-[220px]">{suburb}</span>
+                          <span className="truncate max-w-55">{suburb}</span>
                           <span className="text-muted-foreground">×</span>
                         </button>
                       ))}
@@ -598,7 +598,7 @@ export function ProviderProfileForm() {
       </Card>
 
       <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={isSaving} className="min-w-[140px]">
+    		<Button onClick={handleSave} disabled={isSaving} className="min-w-35">
           {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
           Save changes
         </Button>

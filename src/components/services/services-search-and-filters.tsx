@@ -303,7 +303,7 @@ const ServicesSearchAndFilters = ({
             >
               <SelectTrigger
                 aria-label="Sort services"
-                className="h-10 min-w-[150px] rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
+                className="h-10 min-w-37.5 rounded-lg border-slate-200 bg-white text-sm font-medium text-slate-700"
               >
                 <SelectValue placeholder="Most relevant" />
               </SelectTrigger>

@@ -65,8 +65,8 @@ export function ChatInput({ conversationId, onMessageSent }: ChatInputProps) {
 		<div className="flex items-end gap-3">
 			<div className="flex-1">
 				<div className="flex items-end gap-2 rounded-xl border bg-background px-3 py-2 shadow-sm focus-within:ring-2 focus-within:ring-sky-500">
-					<textarea
-						className="max-h-32 min-h-[44px] w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
+						<textarea
+							className="max-h-32 min-h-11 w-full resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground/70"
 						value={value}
 						onChange={(e) => setValue(e.target.value)}
 						onKeyDown={handleKeyDown}

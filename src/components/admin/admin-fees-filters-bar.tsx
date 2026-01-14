@@ -125,14 +125,14 @@ export function AdminFeesFiltersBar() {
               type="date"
               name="from"
               defaultValue={from}
-              className="w-[140px]"
+              className="w-35"
             />
             <span className="text-sm text-muted-foreground">To:</span>
             <Input
               type="date"
               name="to"
               defaultValue={to}
-              className="w-[140px]"
+              className="w-35"
             />
             <Button type="submit" size="sm" variant="outline">
               Apply

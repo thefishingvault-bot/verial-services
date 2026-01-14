@@ -572,7 +572,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		<div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
 			<Card
 				ref={listRef}
-					className={cn("border-r lg:w-96 lg:flex-shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
+					className={cn("border-r lg:w-96 lg:shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
 			>
 				<div className="flex items-center justify-between border-b px-4 py-3">
 					<div>
@@ -741,7 +741,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 														isMe ? "bg-primary text-primary-foreground" : "bg-background text-foreground",
 													)}
 												>
-													<p className="whitespace-pre-wrap break-words">{msg.content}</p>
+													<p className="whitespace-pre-wrap wrap-break-word">{msg.content}</p>
 													<div
 														className={cn(
 															"mt-1 flex items-center gap-1 text-[10px]",
@@ -774,7 +774,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 										) : (
 											<>
 												<Select value={savedReplySelectedId ?? ""} onValueChange={(v) => setSavedReplySelectedId(v)}>
-													<SelectTrigger className="h-8 w-[220px]">
+													<SelectTrigger className="h-8 w-55">
 														<SelectValue placeholder={savedRepliesStatus === "loading" ? "Loading…" : "Choose…"} />
 													</SelectTrigger>
 													<SelectContent>
@@ -822,7 +822,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 												<div className="grid gap-2">
 													<Label className="text-xs">Message</Label>
 													<textarea
-														className="min-h-[72px] w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
+														className="min-h-18 w-full resize-y rounded-md border bg-background px-3 py-2 text-sm"
 														value={newReplyBody}
 														onChange={(e) => setNewReplyBody(e.target.value)}
 														placeholder="Write the saved reply content…"
@@ -883,7 +883,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 									<Smile className="h-4 w-4" />
 								</button>
 								<textarea
-									className="max-h-32 min-h-[44px] flex-1 resize-none border-none bg-transparent text-sm shadow-none outline-none focus-visible:ring-0"
+									className="max-h-32 min-h-11 flex-1 resize-none border-none bg-transparent text-sm shadow-none outline-none focus-visible:ring-0"
 									placeholder="Type a message…"
 									value={draft}
 									onChange={(e) => setDraft(e.target.value)}

@@ -70,7 +70,7 @@ export async function ConversationList({
     return (
       <div className="flex h-full flex-col items-center justify-center px-4 text-center text-xs text-muted-foreground">
         <p className="mb-1 font-medium text-foreground">No conversations yet</p>
-        <p className="max-w-[220px] text-[11px] text-muted-foreground">
+        <p className="max-w-55 text-[11px] text-muted-foreground">
           Once you send your first message, your conversations will appear here.
         </p>
       </div>
@@ -125,7 +125,7 @@ export async function ConversationList({
               </div>
 
               {c.unreadCount > 0 && (
-                <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-sky-500 px-1 text-[11px] font-semibold text-white">
+                <span className="ml-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-sky-500 px-1 text-[11px] font-semibold text-white">
                   {c.unreadCount}
                 </span>
               )}

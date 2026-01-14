@@ -28,7 +28,7 @@ export default async function FavoritesPage({ searchParams }: PageProps) {
   return (
     <div className="w-full">
       <section className="space-y-6">
-        <div className="rounded-2xl border bg-gradient-to-r from-emerald-50 via-white to-white shadow-sm backdrop-blur supports-[backdrop-filter]:bg-white/80">
+        <div className="rounded-2xl border bg-linear-to-r from-emerald-50 via-white to-white shadow-sm backdrop-blur supports-backdrop-filter:bg-white/80">
           <div className="flex flex-col gap-4 p-4 md:p-6 md:flex-row md:items-center md:justify-between">
             <div className="space-y-2">
               <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-emerald-700">

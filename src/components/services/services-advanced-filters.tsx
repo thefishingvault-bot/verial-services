@@ -164,7 +164,7 @@ export function ServicesAdvancedFilters({ searchParams, filterCounts, onFiltersC
       </CardHeader>
 
       <CardContent className="space-y-6">
-        <ScrollArea className="h-[600px] pr-4">
+        <ScrollArea className="h-150 pr-4">
           {/* Categories */}
           <div className="space-y-3">
             <h3 className="font-medium text-gray-900">Service Categories</h3>

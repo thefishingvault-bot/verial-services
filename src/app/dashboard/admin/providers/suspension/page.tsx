@@ -324,7 +324,7 @@ export default async function AdminProviderSuspensionsPage() {
                           name="reason"
                           placeholder="Reason"
                           required
-                          className="min-w-[200px] flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
+                          className="min-w-50 flex-1 px-2 py-1 border border-gray-300 rounded text-sm"
                         />
                         <div className="flex items-center gap-2">
                           <input
@@ -388,7 +388,7 @@ export default async function AdminProviderSuspensionsPage() {
               {suspensionLog.map((log) => (
                 <div key={log.id} className="border-l-4 border-blue-400 bg-blue-50 p-4">
                   <div className="flex">
-                    <div className="flex-shrink-0">
+                    <div className="shrink-0">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         log.action === "suspend" ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"
                       }`}>

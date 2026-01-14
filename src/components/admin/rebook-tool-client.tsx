@@ -207,7 +207,7 @@ export function RebookToolClient() {
 
       {/* Rebook Dialog */}
       <Dialog open={rebookDialogOpen} onOpenChange={setRebookDialogOpen}>
-        <DialogContent className="sm:max-w-[425px]">
+        <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Rebook Cancelled Service</DialogTitle>
             <DialogDescription>
