@@ -1,68 +1,94 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { providers, services, bookings, refunds, users } from '@/db/schema';
-import { and, gte, lte, desc, sql, eq } from 'drizzle-orm';
+import { and, gte, lt, desc, sql, eq, inArray } from 'drizzle-orm';
 import { requireAdmin } from '@/lib/admin-auth';
+import { invalidResponse, parseQuery, RevenueAnalyticsQuerySchema } from '@/lib/validation/admin';
+
+const GROUP_BY_TO_DATE_TRUNC = {
+  day: 'day',
+  week: 'week',
+  month: 'month',
+} as const;
+
+const REVENUE_BOOKING_STATUSES = [
+  'paid',
+  'completed_by_provider',
+  'completed',
+  'disputed',
+  'refunded',
+] as const;
+
+const PLATFORM_FEE_BPS = Number.parseInt(process.env.PLATFORM_FEE_BPS || '1000', 10);
 
 export async function GET(request: NextRequest) {
   try {
     const admin = await requireAdmin();
     if (!admin.isAdmin) return admin.response;
 
-    const { searchParams } = new URL(request.url);
-    const timeframe = searchParams.get('timeframe') || '30d';
-    const groupBy = searchParams.get('groupBy') || 'day';
+    const queryResult = parseQuery(RevenueAnalyticsQuerySchema, request);
+    if (!queryResult.ok) return invalidResponse(queryResult.error);
+
+    const { timeframe, groupBy } = queryResult.data;
 
     // Calculate date range
     const now = new Date();
-    let startDate: Date;
-    switch (timeframe) {
-      case '7d':
-        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        break;
-      case '30d':
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        break;
-      case '90d':
-        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-        break;
-      case '1y':
-        startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
-        break;
-      default:
-        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    }
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const timeframeDays = timeframe === '7d' ? 7 : timeframe === '30d' ? 30 : timeframe === '90d' ? 90 : 365;
+    const periodMs = timeframeDays * DAY_MS;
+    const startDate = new Date(now.getTime() - periodMs);
+
+    const dateTruncUnit = GROUP_BY_TO_DATE_TRUNC[groupBy];
+    // IMPORTANT: do not pass groupBy directly into date_trunc
+    const periodExpr = sql<string>`date_trunc(${sql.raw(`'${dateTruncUnit}'`)}, ${bookings.createdAt})`;
+    const platformFeeExpr = sql<number>`sum(ceil(${bookings.priceAtBooking}::numeric * ${PLATFORM_FEE_BPS} / 10000))`;
+
+    const refundsAgg = db
+      .select({
+        bookingId: refunds.bookingId,
+        totalRefunded: sql<number>`coalesce(sum(${refunds.amount}), 0)`.as('totalRefunded'),
+      })
+      .from(refunds)
+      .groupBy(refunds.bookingId)
+      .as('refunds_agg');
+
+    const refundsExpr = sql<number>`coalesce(${refundsAgg.totalRefunded}, 0)`;
+    const baseBookingWhere = and(
+      gte(bookings.createdAt, startDate),
+      inArray(bookings.status, [...REVENUE_BOOKING_STATUSES]),
+    );
 
     // Revenue trends over time
     const revenueTrends = await db
       .select({
-        period: sql<string>`date_trunc(${groupBy}, bookings.created_at)`,
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        bookingCount: sql<number>`count(bookings.id)`,
-        avgBookingValue: sql<number>`avg(bookings.price_at_booking)`,
-        platformFees: sql<number>`sum(bookings.price_at_booking * 0.15)`, // Assuming 15% platform fee
-        refunds: sql<number>`coalesce(sum(refunds.amount), 0)`,
+        period: periodExpr,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        bookingCount: sql<number>`count(${bookings.id})`,
+        avgBookingValue: sql<number>`avg(${bookings.priceAtBooking})`,
+        platformFees: platformFeeExpr,
+        refunds: refundsExpr,
       })
       .from(bookings)
-      .leftJoin(refunds, eq(refunds.bookingId, bookings.id))
-      .where(gte(bookings.createdAt, startDate))
-      .groupBy(sql`date_trunc(${groupBy}, bookings.created_at)`)
-      .orderBy(sql`date_trunc(${groupBy}, bookings.created_at)`);
+      .leftJoin(refundsAgg, eq(refundsAgg.bookingId, bookings.id))
+      .where(baseBookingWhere)
+      .groupBy(periodExpr)
+      .orderBy(periodExpr);
 
     // Revenue by service category
     const revenueByCategory = await db
       .select({
         category: services.category,
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        bookingCount: sql<number>`count(bookings.id)`,
-        avgBookingValue: sql<number>`avg(bookings.price_at_booking)`,
-        platformFees: sql<number>`sum(bookings.price_at_booking * 0.15)`,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        bookingCount: sql<number>`count(${bookings.id})`,
+        avgBookingValue: sql<number>`avg(${bookings.priceAtBooking})`,
+        platformFees: platformFeeExpr,
       })
       .from(bookings)
       .leftJoin(services, eq(services.id, bookings.serviceId))
-      .where(gte(bookings.createdAt, startDate))
+      .where(baseBookingWhere)
       .groupBy(services.category)
-      .orderBy(desc(sql`sum(bookings.price_at_booking)`));
+      .orderBy(desc(sql`sum(${bookings.priceAtBooking})`));
 
     // Revenue by provider
     const revenueByProvider = await db
@@ -71,69 +97,64 @@ export async function GET(request: NextRequest) {
         providerName: sql<string>`concat(${users.firstName}, ' ', ${users.lastName})`,
         businessName: providers.businessName,
         trustLevel: providers.trustLevel,
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        bookingCount: sql<number>`count(bookings.id)`,
-        avgBookingValue: sql<number>`avg(bookings.price_at_booking)`,
-        platformFees: sql<number>`sum(bookings.price_at_booking * 0.15)`,
-        refunds: sql<number>`coalesce(sum(refunds.amount), 0)`,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        bookingCount: sql<number>`count(${bookings.id})`,
+        avgBookingValue: sql<number>`avg(${bookings.priceAtBooking})`,
+        platformFees: platformFeeExpr,
+        refunds: refundsExpr,
       })
       .from(bookings)
       .leftJoin(providers, eq(providers.id, bookings.providerId))
       .leftJoin(users, eq(users.id, providers.userId))
-      .leftJoin(refunds, eq(refunds.bookingId, bookings.id))
-      .where(gte(bookings.createdAt, startDate))
+      .leftJoin(refundsAgg, eq(refundsAgg.bookingId, bookings.id))
+      .where(baseBookingWhere)
       .groupBy(providers.id, users.firstName, users.lastName, providers.businessName, providers.trustLevel)
-      .orderBy(desc(sql`sum(bookings.price_at_booking)`))
+      .orderBy(desc(sql`sum(${bookings.priceAtBooking})`))
       .limit(20); // Top 20 providers
 
     // Geographic revenue distribution (by region)
     const revenueByRegion = await db
       .select({
         region: providers.baseRegion,
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        bookingCount: sql<number>`count(bookings.id)`,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        bookingCount: sql<number>`count(${bookings.id})`,
         providerCount: sql<number>`count(distinct providers.id)`,
-        avgBookingValue: sql<number>`avg(bookings.price_at_booking)`,
+        avgBookingValue: sql<number>`avg(${bookings.priceAtBooking})`,
       })
       .from(bookings)
       .leftJoin(providers, eq(providers.id, bookings.providerId))
-      .where(and(
-        gte(bookings.createdAt, startDate),
-        sql`${providers.baseRegion} is not null`
-      ))
+      .where(and(baseBookingWhere, sql`${providers.baseRegion} is not null`))
       .groupBy(providers.baseRegion)
-      .orderBy(desc(sql`sum(bookings.price_at_booking)`));
+      .orderBy(desc(sql`sum(${bookings.priceAtBooking})`));
 
     // Overall statistics
     const overallStats = await db
       .select({
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        totalBookings: sql<number>`count(bookings.id)`,
-        avgBookingValue: sql<number>`avg(bookings.price_at_booking)`,
-        totalPlatformFees: sql<number>`sum(bookings.price_at_booking * 0.15)`,
-        totalRefunds: sql<number>`coalesce(sum(refunds.amount), 0)`,
-        uniqueCustomers: sql<number>`count(distinct bookings.user_id)`,
-        uniqueProviders: sql<number>`count(distinct bookings.provider_id)`,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        totalBookings: sql<number>`count(${bookings.id})`,
+        avgBookingValue: sql<number>`avg(${bookings.priceAtBooking})`,
+        totalPlatformFees: platformFeeExpr,
+        totalRefunds: refundsExpr,
+        uniqueCustomers: sql<number>`count(distinct ${bookings.userId})`,
+        uniqueProviders: sql<number>`count(distinct ${bookings.providerId})`,
       })
       .from(bookings)
-      .leftJoin(refunds, eq(refunds.bookingId, bookings.id))
-      .where(gte(bookings.createdAt, startDate));
+      .leftJoin(refundsAgg, eq(refundsAgg.bookingId, bookings.id))
+      .where(baseBookingWhere);
 
     // Calculate growth metrics (compare with previous period)
-    const previousPeriodStart = new Date(startDate.getTime() - (startDate.getTime() - (timeframe === '7d' ? new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000).getTime() :
-      timeframe === '30d' ? new Date(now.getTime() - 60 * 24 * 60 * 60 * 1000).getTime() :
-      timeframe === '90d' ? new Date(now.getTime() - 180 * 24 * 60 * 60 * 1000).getTime() :
-      new Date(now.getTime() - 730 * 24 * 60 * 60 * 1000).getTime())));
+    const previousPeriodStart = new Date(now.getTime() - 2 * periodMs);
 
     const previousPeriodStats = await db
       .select({
-        totalRevenue: sql<number>`sum(bookings.price_at_booking)`,
-        totalBookings: sql<number>`count(bookings.id)`,
+        totalRevenue: sql<number>`sum(${bookings.priceAtBooking})`,
+        totalBookings: sql<number>`count(${bookings.id})`,
       })
       .from(bookings)
       .where(and(
         gte(bookings.createdAt, previousPeriodStart),
-        lte(bookings.createdAt, startDate)
+        lt(bookings.createdAt, startDate),
+        inArray(bookings.status, [...REVENUE_BOOKING_STATUSES]),
       ));
 
     const currentRevenue = overallStats[0]?.totalRevenue || 0;

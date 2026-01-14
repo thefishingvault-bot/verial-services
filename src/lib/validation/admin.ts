@@ -134,6 +134,11 @@ export const FeesReportQuerySchema = z.object({
   to: z.string().min(1),
 });
 
+export const RevenueAnalyticsQuerySchema = z.object({
+  timeframe: z.enum(["7d", "30d", "90d", "1y"]).optional().default("30d"),
+  groupBy: z.enum(["day", "week", "month"]).optional().default("day"),
+});
+
 export const FeesByProviderQuerySchema = z.object({
   year: z.coerce.number().int().optional(),
   from: z.string().trim().optional(),

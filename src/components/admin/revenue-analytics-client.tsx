@@ -100,9 +100,9 @@ export function RevenueAnalyticsClient() {
   }, [fetchRevenueAnalytics]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
+    return new Intl.NumberFormat('en-NZ', {
       style: 'currency',
-      currency: 'USD',
+      currency: 'NZD',
     }).format(amount / 100); // Convert cents to dollars
   };
 
@@ -143,7 +143,7 @@ export function RevenueAnalyticsClient() {
           return (
             <div key={index} className="flex items-center gap-2">
               <div className="w-16 text-xs text-muted-foreground truncate">
-                {new Date(item.period).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {new Date(item.period).toLocaleDateString('en-NZ', { month: 'short', day: 'numeric' })}
               </div>
               <div className="flex-1 bg-gray-200 rounded h-4">
                 <div
