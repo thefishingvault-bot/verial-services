@@ -55,6 +55,7 @@ export default async function AdminFeesPage({
   const range = params.range;
   const fromParam = params.from;
   const toParam = params.to;
+  const providerSearch = params.providerSearch?.trim() ?? '';
 
   const today = new Date();
   const parsedEnd = toParam ? new Date(toParam) : today;
@@ -101,7 +102,7 @@ export default async function AdminFeesPage({
   let summary: FeesSummary | null = null;
   let providersByYear: FeesByProviderRow[] = [];
   try {
-    reportData = await getAdminFeesReport({ from: fromIso, to: toIso });
+    reportData = await getAdminFeesReport({ from: fromIso, to: toIso, providerSearch });
     summary = await getFeesSummary(year);
     providersByYear = await getFeesByProvider(year);
   } catch (error) {
@@ -159,7 +160,7 @@ export default async function AdminFeesPage({
     dailyMap.set(dateKey, existingDay);
   }
   const daily = Array.from(dailyMap.values()).sort((a, b) => a.date.localeCompare(b.date));
-  const providerFilter = params.provider?.toLowerCase() ?? '';
+  const providerFilter = providerSearch.toLowerCase();
 
   const providerMap = new Map<
     string,
@@ -204,7 +205,7 @@ export default async function AdminFeesPage({
         <div className="flex gap-2">
           <Button variant="outline" asChild>
             <a
-              href={`/api/admin/fees/by-provider?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}${params.provider ? `&provider=${encodeURIComponent(params.provider)}` : ''}&format=csv`}
+              href={`/api/admin/fees/by-provider?from=${encodeURIComponent(fromIso)}&to=${encodeURIComponent(toIso)}${providerSearch ? `&providerSearch=${encodeURIComponent(providerSearch)}` : ''}&format=csv`}
             >
               <Download className="mr-2 h-4 w-4" />
               Export Providers CSV

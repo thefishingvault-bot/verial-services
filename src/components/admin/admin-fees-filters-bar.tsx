@@ -15,7 +15,7 @@ export function AdminFeesFiltersBar() {
   const range = searchParams.get('range') ?? '30d';
   const from = searchParams.get('from') ?? '';
   const to = searchParams.get('to') ?? '';
-  const providerFilter = searchParams.get('provider') ?? '';
+  const providerFilter = searchParams.get('providerSearch') ?? searchParams.get('provider') ?? '';
 
   const updateParams = (updates: Record<string, string | null>) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -43,7 +43,7 @@ export function AdminFeesFiltersBar() {
   };
 
   const clearFilters = () => {
-    updateParams({ range: null, from: null, to: null, provider: null });
+    updateParams({ range: null, from: null, to: null, providerSearch: null, provider: null });
   };
 
   const hasActiveFilters = range !== '30d' || from || to || providerFilter;
@@ -148,12 +148,15 @@ export function AdminFeesFiltersBar() {
               placeholder="Search providers..."
               defaultValue={providerFilter}
               onBlur={(event) => {
-                updateParams({ provider: event.target.value || null });
+                updateParams({ providerSearch: event.target.value || null, provider: null });
               }}
               onKeyDown={(event) => {
                 if (event.key === 'Enter') {
                   event.preventDefault();
-                  updateParams({ provider: (event.target as HTMLInputElement).value || null });
+                  updateParams({
+                    providerSearch: (event.target as HTMLInputElement).value || null,
+                    provider: null,
+                  });
                 }
               }}
             />

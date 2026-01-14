@@ -1,6 +1,6 @@
 import { db } from '@/lib/db';
 import { bookings, services, providers, users, providerEarnings } from '@/db/schema';
-import { desc, inArray, eq, gte, lte, and, between, sql } from 'drizzle-orm';
+import { desc, inArray, eq, gte, lte, and, between, sql, ilike } from 'drizzle-orm';
 
 export interface FeeReportRow {
   bookingId: string;
@@ -32,7 +32,15 @@ export interface FeesByProviderRow {
   totalNet: number;
 }
 
-export async function getAdminFeesReport({ from, to }: { from: string; to: string }): Promise<FeeReportRow[]> {
+export async function getAdminFeesReport({
+  from,
+  to,
+  providerSearch,
+}: {
+  from: string;
+  to: string;
+  providerSearch?: string;
+}): Promise<FeeReportRow[]> {
   const fromDate = new Date(from);
   const toDate = new Date(to);
   toDate.setHours(23, 59, 59, 999); // End of day
@@ -43,6 +51,11 @@ export async function getAdminFeesReport({ from, to }: { from: string; to: strin
   // Add date conditions if specified
   baseConditions.push(gte(bookings.updatedAt, fromDate));
   baseConditions.push(lte(bookings.updatedAt, toDate));
+
+  const trimmedSearch = providerSearch?.trim();
+  if (trimmedSearch) {
+    baseConditions.push(ilike(providers.businessName, `%${trimmedSearch}%`));
+  }
 
   // Fetch all bookings that have been paid or completed with manual joins
   const paidBookings = await db

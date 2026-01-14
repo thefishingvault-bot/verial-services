@@ -113,5 +113,10 @@ export const AdminFeesSearchSchema = z.object({
   range: z.enum(["7d", "30d", "month", "ytd", "all", "custom"]).default("30d"),
   from: z.string().trim().optional(),
   to: z.string().trim().optional(),
-  provider: z.string().trim().optional().default(""),
-});
+  providerSearch: z.string().trim().optional().default(""),
+  // Backwards-compat alias: historically `provider` was a free-text search.
+  provider: z.string().trim().optional(),
+}).transform(({ providerSearch, provider, ...rest }) => ({
+  ...rest,
+  providerSearch: providerSearch || provider || "",
+}));

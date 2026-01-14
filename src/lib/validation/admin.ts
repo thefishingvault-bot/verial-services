@@ -138,6 +138,8 @@ export const FeesByProviderQuerySchema = z.object({
   year: z.coerce.number().int().optional(),
   from: z.string().trim().optional(),
   to: z.string().trim().optional(),
+  providerSearch: z.string().trim().optional(),
+  // Backwards-compat alias: historically `provider` was a free-text search.
   provider: z.string().trim().optional(),
   format: z.enum(["csv"]).optional(),
 }).superRefine((data, ctx) => {
@@ -150,7 +152,10 @@ export const FeesByProviderQuerySchema = z.object({
       message: "Both from and to are required",
     });
   }
-});
+}).transform(({ providerSearch, provider, ...rest }) => ({
+  ...rest,
+  providerSearch: providerSearch || provider || undefined,
+}));
 
 export const BroadcastQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),

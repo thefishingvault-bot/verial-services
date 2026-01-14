@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { bookings, providers } from '@/db/schema';
-import { and, between, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, between, desc, eq, ilike, inArray, sql } from 'drizzle-orm';
 import { getFeesByProvider } from '@/server/admin/fees';
 import { requireAdmin } from '@/lib/admin-auth';
 import { FeesByProviderQuerySchema, invalidResponse, parseQuery } from '@/lib/validation/admin';
@@ -15,7 +15,7 @@ export async function GET(request: Request) {
 
     const parsedQuery = parseQuery(FeesByProviderQuerySchema, request);
     if (!parsedQuery.ok) return invalidResponse(parsedQuery.error);
-    const { year: yearParam, format, from, to, provider } = parsedQuery.data;
+    const { year: yearParam, format, from, to, providerSearch } = parsedQuery.data;
 
     // If a date range is provided, compute from live bookings to keep exports aligned
     // with the selected period even if providerEarnings is unavailable.
@@ -34,8 +34,9 @@ export async function GET(request: Request) {
         between(bookings.updatedAt, start, end),
         sql`(${bookings.status})::text in ('paid','completed')`,
       ];
-      if (provider) {
-        baseConditions.push(eq(bookings.providerId, provider));
+      const trimmedSearch = providerSearch?.trim();
+      if (trimmedSearch) {
+        baseConditions.push(ilike(providers.businessName, `%${trimmedSearch}%`));
       }
 
       const rows = await db
