@@ -68,6 +68,7 @@ vi.mock("@/lib/db", () => ({
 describe("POST /api/bookings/[bookingId]/confirm-completion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.DISABLE_PAYOUTS;
     dbMocks.findService.mockResolvedValue({ chargesGst: true });
   });
 
@@ -109,6 +110,7 @@ describe("POST /api/bookings/[bookingId]/confirm-completion", () => {
   });
 
   it("creates a transfer when needed", async () => {
+    process.env.DISABLE_PAYOUTS = "false";
     dbMocks.findBooking.mockResolvedValue({ id: "bk_1", status: "completed_by_provider", providerId: "prov_1" });
     dbMocks.findProvider.mockResolvedValue({
       id: "prov_1",

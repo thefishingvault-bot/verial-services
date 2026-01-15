@@ -30,7 +30,7 @@ function HomeContent() {
   return (
     <>
       {/* Hero Section */}
-      <section className="w-full py-20 md:py-32 lg:py-40 bg-gradient-to-br from-verial-blue-50 to-verial-blue-100">
+      <section className="w-full py-20 md:py-32 lg:py-40 bg-linear-to-br from-verial-blue-50 to-verial-blue-100">
         <div className="container flex flex-col items-center justify-center text-center px-4">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight text-verial-dark mb-4">
             Find Trusted Local Services in New Zealand

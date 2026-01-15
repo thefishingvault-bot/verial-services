@@ -110,6 +110,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	}, [activeState]);
 
 	const fetchPresence = useCallback(async (userIds: string[]) => {
+		if (!viewerId) return;
 		if (!userIds.length) return;
 		const params = new URLSearchParams();
 		userIds.forEach((id) => params.append("userId", id));
@@ -117,15 +118,16 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		if (!res.ok) return;
 		const data = (await res.json()) as { presence: Record<string, PresenceRecord> };
 		setPresence((prev) => ({ ...prev, ...(data.presence || {}) }));
-	}, []);
+	}, [viewerId]);
 
 	const heartbeat = useCallback(async () => {
+		if (!viewerId) return;
 		await fetch("/api/presence", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ status: "online" }),
 		});
-	}, []);
+	}, [viewerId]);
 
 	const loadThreads = useCallback(async () => {
 		setIsLoadingThreads(true);
