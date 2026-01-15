@@ -74,6 +74,9 @@ function getStripeErrorMeta(error: unknown): {
 
 export async function POST(req: Request, { params }: { params: Promise<{ bookingId: string }> }) {
   try {
+    const disablePayoutsForTestKeyBeta =
+      process.env.NODE_ENV === "production" && (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_");
+
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -117,7 +120,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
     }
 
-    if (!provider.payoutsEnabled) {
+    if (!provider.payoutsEnabled && !disablePayoutsForTestKeyBeta) {
       return new NextResponse("Provider payouts are not enabled", { status: 400 });
     }
 
@@ -274,6 +277,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     }
 
     // 3) Ensure earnings are queued for payout.
+    if (disablePayoutsForTestKeyBeta) {
+      console.info("[API_BOOKING_CONFIRM_COMPLETION] Payouts disabled for test-key beta", {
+        bookingId: booking.id,
+        providerId: provider.id,
+        earningsId: effectiveEarning.id,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        bookingStatus: "completed",
+        payout: "queued",
+        reason: "beta_test_mode_payouts_disabled",
+      });
+    }
+
     await db
       .update(providerEarnings)
       .set({ status: "awaiting_payout", updatedAt: new Date() })
