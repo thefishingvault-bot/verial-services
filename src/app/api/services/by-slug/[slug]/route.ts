@@ -30,13 +30,6 @@ export async function GET(
             baseRegion: true,
             serviceRadiusKm: true,
           },
-          with: {
-            user: {
-              columns: {
-                email: true,
-              },
-            },
-          },
         },
       },
     });
