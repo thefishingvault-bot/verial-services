@@ -180,32 +180,58 @@ export async function POST(req: Request) {
 
   const secretConfigured = !!process.env.SUMSUB_WEBHOOK_SECRET;
   const isProd = process.env.NODE_ENV === "production";
+  const allowInsecureBypass =
+    !isProd && process.env.ALLOW_INSECURE_SUMSUB_WEBHOOK === "true";
 
-  if (!secretConfigured) {
-    if (isProd) {
+  // Production must always verify signatures. No implicit bypass.
+  if (isProd) {
+    if (!secretConfigured) {
       console.warn("[API_SUMSUB_WEBHOOK] Missing SUMSUB_WEBHOOK_SECRET in production");
-      return new NextResponse("Webhook not configured", { status: 500 });
+      return new NextResponse("Webhook signature not configured", { status: 401 });
     }
-    console.warn("[API_SUMSUB_WEBHOOK] Dev bypass: no SUMSUB_WEBHOOK_SECRET configured", {
-      ...headerPresence,
-      alg: payloadDigestAlg,
-    });
-  } else {
+
     if (!payloadDigest) {
-      if (isProd) {
-        console.warn("[API_SUMSUB_WEBHOOK] Missing x-payload-digest header", {
-          ...headerPresence,
-          alg: payloadDigestAlg,
-        });
-        return new NextResponse("Missing signature", { status: 401 });
-      }
-      console.warn("[API_SUMSUB_WEBHOOK] Dev bypass: missing x-payload-digest", {
+      console.warn("[API_SUMSUB_WEBHOOK] Missing x-payload-digest header", {
         ...headerPresence,
         alg: payloadDigestAlg,
       });
+      return new NextResponse("Missing signature", { status: 401 });
+    }
+
+    const verification = verifySumsubWebhook(rawBody, payloadDigest, payloadDigestAlg);
+    if (!verification.ok) {
+      console.warn("[API_SUMSUB_WEBHOOK] Webhook signature verification failed", {
+        ...headerPresence,
+        alg: verification.algHeader,
+        algUsed: verification.algUsed,
+      });
+      return new NextResponse("Invalid signature", { status: 401 });
+    }
+
+    console.info("[API_SUMSUB_WEBHOOK] Webhook signature verified", {
+      ...headerPresence,
+      alg: verification.algHeader,
+      algUsed: verification.algUsed,
+    });
+  } else {
+    // Non-production: require signatures by default; allow bypass only with explicit flag.
+    if (!secretConfigured || !payloadDigest) {
+      if (!allowInsecureBypass) {
+        console.warn("[API_SUMSUB_WEBHOOK] Missing signature configuration/headers", {
+          ...headerPresence,
+          alg: payloadDigestAlg,
+          secretConfigured,
+        });
+        return new NextResponse("Missing signature", { status: 401 });
+      }
+
+      console.warn("[API_SUMSUB_WEBHOOK] Insecure dev bypass enabled", {
+        ...headerPresence,
+        alg: payloadDigestAlg,
+        secretConfigured,
+      });
     } else {
       const verification = verifySumsubWebhook(rawBody, payloadDigest, payloadDigestAlg);
-
       if (!verification.ok) {
         console.warn("[API_SUMSUB_WEBHOOK] Webhook signature verification failed", {
           ...headerPresence,
