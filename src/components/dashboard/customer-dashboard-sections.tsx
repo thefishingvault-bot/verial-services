@@ -226,7 +226,7 @@ function BookingsCard({ upcoming, past }: { upcoming: BookingCardData[]; past: B
             {upcoming.length === 0 ? (
               <div className="rounded-md border border-dashed p-4">
                 <p className="text-sm font-medium">No upcoming bookings</p>
-                <p className="text-sm text-muted-foreground">Browse services when you're ready.</p>
+                <p className="text-sm text-muted-foreground">Browse services when you&apos;re ready.</p>
                 <Button asChild size="sm" variant="link" className="mt-2 px-0">
                   <Link href="/services">Browse Services</Link>
                 </Button>

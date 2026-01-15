@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -24,18 +24,36 @@ export function AdminBulkOperationsFiltersBar({
   searchParams,
   regionOptions,
 }: AdminBulkOperationsFiltersBarProps) {
+  const stateKey = [
+    operationType,
+    searchParams.status ?? 'all',
+    searchParams.region ?? 'all',
+    searchParams.q ?? '',
+    typeof searchParams.page === 'number' ? String(searchParams.page) : '',
+    typeof searchParams.pageSize === 'number' ? String(searchParams.pageSize) : '',
+  ].join('|');
+
+  return (
+    <AdminBulkOperationsFiltersBarInner
+      key={stateKey}
+      operationType={operationType}
+      searchParams={searchParams}
+      regionOptions={regionOptions}
+    />
+  );
+}
+
+function AdminBulkOperationsFiltersBarInner({
+  operationType,
+  searchParams,
+  regionOptions,
+}: AdminBulkOperationsFiltersBarProps) {
   const router = useRouter();
   const currentParams = useSearchParams();
 
   const [status, setStatus] = useState(searchParams.status || 'all');
   const [region, setRegion] = useState(searchParams.region || 'all');
   const [q, setQ] = useState(searchParams.q || '');
-
-  useEffect(() => {
-    setStatus(searchParams.status || 'all');
-    setRegion(searchParams.region || 'all');
-    setQ(searchParams.q || '');
-  }, [searchParams.q, searchParams.region, searchParams.status, operationType]);
 
   const buildParams = (nextType: 'providers' | 'bookings') => {
     const params = new URLSearchParams(currentParams.toString());

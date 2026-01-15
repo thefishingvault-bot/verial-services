@@ -31,9 +31,11 @@ function looksLikeJsonText(text: string) {
 
 function toUserMessage(status: number, body: unknown) {
   if (body && typeof body === "object") {
-    const rec = body as any;
-    if (typeof rec.message === "string" && rec.message.trim()) return rec.message;
-    if (typeof rec.error === "string" && rec.error.trim()) return rec.error;
+    const rec = body as Record<string, unknown>;
+    const message = rec["message"];
+    if (typeof message === "string" && message.trim()) return message;
+    const error = rec["error"];
+    if (typeof error === "string" && error.trim()) return error;
   }
   if (typeof body === "string") {
     const text = body.trim();

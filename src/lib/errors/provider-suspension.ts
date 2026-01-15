@@ -43,12 +43,13 @@ function extractCandidatePayload(err: unknown): unknown {
   // - our fetch wrapper throws { payload }
   // - axios throws { response: { data } }
   // - some libs throw { data }
-  if ("payload" in rec) return (rec as any).payload;
-  if ("data" in rec) return (rec as any).data;
+  if ("payload" in rec) return rec["payload"];
+  if ("data" in rec) return rec["data"];
 
-  const response = (rec as any).response;
+  const response = rec["response"];
   if (response && typeof response === "object") {
-    if ("data" in response) return (response as any).data;
+    const responseRec = response as Record<string, unknown>;
+    if ("data" in responseRec) return responseRec["data"];
   }
 
   return err;
