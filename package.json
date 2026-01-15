@@ -15,9 +15,9 @@
     "drizzle:studio": "drizzle-kit studio",
     "backfill:quoted-price": "node scripts/backfill-quoted-price.mjs",
     "data:nz": "node scripts/generate-nz-regions.mjs",
-    "test": "pnpm exec vitest run",
-    "test:watch": "pnpm exec vitest",
-    "test:unit": "pnpm exec vitest run",
+    "test": "pnpm exec vitest --config vitest.config.ts run",
+    "test:watch": "pnpm exec vitest --config vitest.config.ts",
+    "test:unit": "pnpm exec vitest --config vitest.config.ts run",
     "test:e2e": "playwright test",
     "payouts:retry": "node scripts/retry-booking-payouts.mjs"
   },

@@ -1,6 +1,13 @@
 import "@testing-library/jest-dom";
 import { vi } from "vitest";
 
+// Ensure React uses test/dev builds so React.act exists (React 19 hides it in production).
+process.env.NODE_ENV = "test";
+// Helps React Testing Library + React act warnings.
+// See: https://react.dev/reference/react/act
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
+vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+
 // Default env values used by modules that throw when missing
 process.env.DATABASE_URL ??= "postgresql://user:pass@localhost:5432/db";
 

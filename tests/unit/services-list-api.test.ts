@@ -16,8 +16,8 @@ vi.mock("@/lib/rate-limit", () => ({
 
 describe("services list API", () => {
   const mockSelect = vi.fn();
-  const mockFrom = vi.fn();
   const baseQuery = {
+    innerJoin: vi.fn().mockReturnThis(),
     leftJoin: vi.fn().mockReturnThis(),
     where: vi.fn().mockReturnThis(),
     orderBy: vi.fn().mockReturnThis(),
@@ -25,11 +25,23 @@ describe("services list API", () => {
     offset: vi.fn(),
   } as any;
 
+  const countQuery = {
+    innerJoin: vi.fn().mockReturnThis(),
+    where: vi.fn(),
+  } as any;
+
   beforeEach(() => {
     vi.clearAllMocks();
 
     vi.spyOn(dbMod, "db", "get").mockReturnValue({
-      select: mockSelect.mockReturnValue({ from: mockFrom }),
+      select: mockSelect.mockImplementation((shape: any) => ({
+        from: () => {
+          if (shape && typeof shape === "object" && Object.keys(shape).includes("count")) {
+            return countQuery;
+          }
+          return baseQuery;
+        },
+      })),
     } as any);
 
     vi.mocked(enforceRateLimit).mockResolvedValue({ success: true, retryAfter: 0 } as any);
@@ -82,7 +94,7 @@ describe("services list API", () => {
     ];
 
     baseQuery.offset.mockResolvedValue(fakeRows);
-    mockFrom.mockReturnValue(baseQuery);
+    countQuery.where.mockResolvedValue([{ count: fakeRows.length }]);
 
     const req = new NextRequest("http://localhost/api/services/list?sort=rating_desc");
     const res = await listServices(req);
@@ -96,7 +108,7 @@ describe("services list API", () => {
 
   it("handles text query and suburb filter without errors", async () => {
     baseQuery.offset.mockResolvedValue([]);
-    mockFrom.mockReturnValue(baseQuery);
+    countQuery.where.mockResolvedValue([{ count: 0 }]);
 
     const req = new NextRequest(
       "http://localhost/api/services/list?q=clean&suburb=ponsonby&region=auckland",
