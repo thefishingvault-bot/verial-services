@@ -23,6 +23,7 @@ const dbMocks = vi.hoisted(() => {
   const findBooking = vi.fn();
   const findProvider = vi.fn();
   const findEarning = vi.fn();
+  const findService = vi.fn();
 
   const updateProviderEarnings = vi.fn(() => ({
     set: vi.fn(() => ({
@@ -42,6 +43,7 @@ const dbMocks = vi.hoisted(() => {
     findBooking,
     findProvider,
     findEarning,
+    findService,
     updateProviderEarnings,
     updateBookings,
   };
@@ -53,6 +55,7 @@ vi.mock("@/lib/db", () => ({
       bookings: { findFirst: dbMocks.findBooking },
       providers: { findFirst: dbMocks.findProvider },
       providerEarnings: { findFirst: dbMocks.findEarning },
+      services: { findFirst: dbMocks.findService },
     },
     update: (table: any) => {
       if (table === providerEarnings) return dbMocks.updateProviderEarnings();
@@ -65,20 +68,28 @@ vi.mock("@/lib/db", () => ({
 describe("POST /api/bookings/[bookingId]/confirm-completion", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    delete process.env.DISABLE_PAYOUTS;
+    dbMocks.findService.mockResolvedValue({ chargesGst: true });
   });
 
-  it("returns 400 when booking status is not completed_by_provider", async () => {
+  it("returns 409 when booking status is not completed_by_provider", async () => {
     dbMocks.findBooking.mockResolvedValue({ id: "bk_1", status: "paid", providerId: "prov_1" });
 
     const req = new Request("http://localhost/api/bookings/bk_1/confirm-completion", { method: "POST" });
     const res = await confirmCompletion(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(409);
   });
 
   it("is idempotent when transfer already exists", async () => {
     dbMocks.findBooking.mockResolvedValue({ id: "bk_1", status: "completed_by_provider", providerId: "prov_1" });
-    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findProvider.mockResolvedValue({
+      id: "prov_1",
+      stripeConnectId: "acct_123",
+      chargesGst: true,
+      plan: "free",
+      payoutsEnabled: true,
+    });
     dbMocks.findEarning.mockResolvedValue({
       id: "earn_1",
       providerId: "prov_1",
@@ -99,8 +110,15 @@ describe("POST /api/bookings/[bookingId]/confirm-completion", () => {
   });
 
   it("creates a transfer when needed", async () => {
+    process.env.DISABLE_PAYOUTS = "false";
     dbMocks.findBooking.mockResolvedValue({ id: "bk_1", status: "completed_by_provider", providerId: "prov_1" });
-    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findProvider.mockResolvedValue({
+      id: "prov_1",
+      stripeConnectId: "acct_123",
+      chargesGst: true,
+      plan: "free",
+      payoutsEnabled: true,
+    });
     dbMocks.findEarning.mockResolvedValue({
       id: "earn_1",
       providerId: "prov_1",

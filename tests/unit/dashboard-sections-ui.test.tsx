@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
 import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { render, screen, act } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { CustomerDashboardSections } from "@/components/dashboard/customer-dashboard-sections";
 import type { CustomerDashboardData } from "@/lib/dashboard/customer-dashboard";
-
-const user = userEvent.setup();
 
 const baseData: CustomerDashboardData = {
   user: { id: "user_1", name: "Test" },
@@ -133,17 +130,15 @@ describe("CustomerDashboardSections", () => {
   it("renders all sections and actions", async () => {
     render(<CustomerDashboardSections data={baseData} />);
 
-    expect(screen.getByText(/Upcoming bookings/i)).toBeInTheDocument();
-    expect(screen.getByText(/Past bookings/i)).toBeInTheDocument();
+		expect(screen.getByRole("heading", { name: "Bookings" })).toBeInTheDocument();
+    expect(screen.getByText(/Upcoming \(1\)/i)).toBeInTheDocument();
+    expect(screen.getByText(/Past \(1\)/i)).toBeInTheDocument();
     expect(screen.getByText(/Review reminders/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Favorites/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Recommended for you/i)).toBeInTheDocument();
 
-    // Cancel button removes upcoming booking optimistically
-    await act(async () => {
-      await user.click(screen.getByRole("button", { name: /Cancel booking/i }));
-    });
-    expect(screen.queryByText(/Clean/)).not.toBeInTheDocument();
+    // Upcoming booking title is visible in the section.
+    expect(screen.getAllByText(/Clean/).length).toBeGreaterThan(0);
   });
 
   it("shows empty states when no data", () => {
@@ -160,10 +155,12 @@ describe("CustomerDashboardSections", () => {
 
     render(<CustomerDashboardSections data={emptyData} />);
 
-    expect(screen.getByText(/You have no upcoming bookings/i)).toBeInTheDocument();
+    expect(screen.getByText(/No upcoming bookings right now\./i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Past \(0\)/i }));
     expect(screen.getByText(/No past bookings yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/Review reminders/i)).not.toBeInTheDocument();
     expect(screen.getByText(/No favorites yet/i)).toBeInTheDocument();
-    expect(screen.queryByText(/Recommended for you/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Recommended for you/i)).toBeInTheDocument();
+    expect(screen.getByText(/No recommendations yet/i)).toBeInTheDocument();
   });
 });

@@ -4,6 +4,10 @@ import * as Sentry from "@sentry/nextjs";
 // This route is for testing Sentry error capturing.
 // It will only be active when a SENTRY_DSN is configured.
 export async function GET() {
+  if (process.env.NODE_ENV === "production") {
+    return new NextResponse("Not Found", { status: 404 });
+  }
+
   try {
     // Intentionally throw an error
     throw new Error(`Sentry Test Error - ${new Date().toISOString()}`);

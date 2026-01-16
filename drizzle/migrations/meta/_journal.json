@@ -309,6 +309,13 @@
       "when": 1768390172864,
       "tag": "0038_reviews_booking_user_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1768548094795,
+      "tag": "0039_provider_payout_requests",
+      "breakpoints": true
     }
   ]
 }

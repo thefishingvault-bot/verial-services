@@ -184,4 +184,30 @@ describe("POST /api/webhooks/stripe-bookings", () => {
     expect(res.status).toBe(200);
     expect(dbMocks.updateBookings).not.toHaveBeenCalled();
   });
+
+  it("returns 500 on unexpected handler errors (so Stripe retries)", async () => {
+    stripeMocks.constructEvent.mockReturnValue({
+      id: "evt_500",
+      type: "payment_intent.succeeded",
+      data: {
+        object: {
+          id: "pi_500",
+          metadata: { bookingId: "bk_1" },
+        },
+      },
+    });
+
+    dbMocks.updateBookings.mockImplementationOnce(() => {
+      throw new Error("db down");
+    });
+
+    const req = new Request("http://localhost/api/webhooks/stripe-bookings", {
+      method: "POST",
+      headers: { "stripe-signature": "sig" },
+      body: "{}",
+    });
+
+    const res = await webhook(req);
+    expect(res.status).toBe(500);
+  });
 });

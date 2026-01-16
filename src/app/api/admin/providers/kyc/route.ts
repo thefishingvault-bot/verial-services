@@ -23,10 +23,18 @@ const parseOptionalDate = (value: string | undefined) => {
   return date;
 };
 
-const lowerLike = (col: unknown, needle: string) => {
+type SearchColumn =
+  | typeof providers.id
+  | typeof providers.businessName
+  | typeof providers.handle
+  | typeof users.email
+  | typeof users.firstName
+  | typeof users.lastName;
+
+const lowerLike = (col: SearchColumn, needle: string) => {
   // Postgres: lower(col) LIKE %lower(needle)%
   const pattern = `%${needle.toLowerCase()}%`;
-  return sql<boolean>`LOWER(${col as any}) LIKE ${pattern}`;
+  return sql<boolean>`LOWER(${col}) LIKE ${pattern}`;
 };
 
 export async function GET(request: NextRequest) {
@@ -173,7 +181,7 @@ export async function GET(request: NextRequest) {
     `;
 
     const whereParts: Array<ReturnType<typeof and>> = [];
-    const conditions: any[] = [];
+    const conditions: Array<Parameters<typeof and>[number]> = [];
 
     if (search) {
       const needle = search.toLowerCase();
@@ -190,7 +198,8 @@ export async function GET(request: NextRequest) {
     }
 
     if (kycStatus?.length) {
-      conditions.push(inArray(providers.kycStatus, kycStatus as any));
+      // Cast enum-like column to text for flexible filtering via query params.
+      conditions.push(inArray(sql<string>`(${providers.kycStatus})::text`, kycStatus));
     }
 
     if (parsedFrom) {

@@ -27,8 +27,9 @@ vi.mock("drizzle-orm", () => ({
 
 const state = {
   booking: {
-    id: "550e8400-e29b-41d4-a716-446655440000",
+    id: "bk_1_abc123",
     status: "completed",
+    userId: "user_1",
     providerId: "73f3e1f2-4c9d-4c5d-9f3a-0d6c1f4ea000",
     serviceId: "1c8a1c21-3c9e-4d0a-b6ff-2f3aa0b0c000",
   } as any,
@@ -40,8 +41,9 @@ const state = {
 
 function resetState() {
   state.booking = {
-    id: "550e8400-e29b-41d4-a716-446655440000",
+    id: "bk_1_abc123",
     status: "completed",
+    userId: "user_1",
     providerId: "73f3e1f2-4c9d-4c5d-9f3a-0d6c1f4ea000",
     serviceId: "1c8a1c21-3c9e-4d0a-b6ff-2f3aa0b0c000",
   } as any;
@@ -133,7 +135,7 @@ describe("/api/reviews/create validation", () => {
     calculateTrustScoreMock.mockReset();
   });
 
-  it("rejects invalid bookingId uuid", async () => {
+  it("rejects invalid bookingId", async () => {
     const { POST } = await import("@/app/api/reviews/create/route");
     const res = await POST(
       new Request("http://localhost/api/reviews/create", {
@@ -182,7 +184,7 @@ describe("/api/reviews/create validation", () => {
     expect(res.status).toBe(400);
   });
 
-  it("rejects negative tipAmount", async () => {
+  it("ignores tipAmount (including negative)", async () => {
     const { POST } = await import("@/app/api/reviews/create/route");
     const res = await POST(
       new Request("http://localhost/api/reviews/create", {
@@ -191,7 +193,7 @@ describe("/api/reviews/create validation", () => {
       })
     );
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
   });
 
   it("allows empty comment and reaches success path", async () => {

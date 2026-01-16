@@ -60,6 +60,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     columns: { title: true, pricingType: true },
   });
 
+  // Quote-priced services must have an explicit provider quote before the customer can pay.
+  if (service?.pricingType === "quote" && !booking.providerQuotedPrice) {
+    return new NextResponse("Waiting for provider quote", { status: 400 });
+  }
+
   const amount = getFinalBookingAmountCents({
     providerQuotedPrice: booking.providerQuotedPrice,
     priceAtBooking: booking.priceAtBooking,

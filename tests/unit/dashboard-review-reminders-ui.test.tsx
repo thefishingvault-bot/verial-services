@@ -17,6 +17,8 @@ const dashboardDataMock = vi.fn();
 
 const baseData = {
   user: { id: "user_1", name: "Tester" },
+  favorites: [],
+  unreadNotifications: 0,
   upcomingBookings: [],
   pastBookings: [],
   favoritesPreview: [],

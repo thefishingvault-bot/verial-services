@@ -15,6 +15,8 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 const mockData = {
   user: { id: "user_1", name: "Tester" },
+  favorites: [],
+  unreadNotifications: 0,
   upcomingBookings: [
     {
       id: "bk1",
@@ -108,8 +110,8 @@ describe("/dashboard page", () => {
 
     expect(screen.getByText(/Dashboard/i)).toBeInTheDocument();
     expect(screen.getByText(/Browse Services/i)).toBeInTheDocument();
-    expect(screen.getByText(/My Bookings/i)).toBeInTheDocument();
-    expect(screen.getByText(/Upcoming bookings/i)).toBeInTheDocument();
+    expect(screen.getByText(/View Bookings/i)).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Bookings" })).toBeInTheDocument();
     expect(screen.getAllByText(/Favorites/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/Recommended for you/i)).toBeInTheDocument();
   }, 15000);

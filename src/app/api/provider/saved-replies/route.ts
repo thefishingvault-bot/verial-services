@@ -74,8 +74,9 @@ export async function POST(request: Request) {
     }
 
     const body = (await request.json().catch(() => null)) as unknown;
-    const title = typeof (body as any)?.title === "string" ? (body as any).title.trim() : "";
-    const replyBody = typeof (body as any)?.body === "string" ? (body as any).body.trim() : "";
+    const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+    const title = typeof rec?.title === "string" ? rec.title.trim() : "";
+    const replyBody = typeof rec?.body === "string" ? rec.body.trim() : "";
 
     if (!title || title.length > 120) {
       return NextResponse.json({ error: "invalid_title" }, { status: 400 });

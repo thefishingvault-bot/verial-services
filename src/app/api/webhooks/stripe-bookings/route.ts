@@ -446,11 +446,11 @@ export async function POST(req: Request) {
         break;
     }
   } catch (error: unknown) {
-    // Always return 200 to acknowledge receipt; log failures so Stripe doesn't retry forever.
+    // Unexpected/unhandled errors must return 500 so Stripe retries.
     console.error("[API_STRIPE_BOOKINGS_WEBHOOK] Unexpected handler error", {
       error: error instanceof Error ? error.message : String(error),
     });
-    return new NextResponse(null, { status: 200 });
+    return new NextResponse("Unhandled webhook error", { status: 500 });
   }
 
   return new NextResponse(null, { status: 200 });

@@ -187,6 +187,12 @@ export const payoutStatusEnum = pgEnum("payout_status", [
   "failed"         // Failed payout
 ]);
 
+export const providerPayoutRequestStatusEnum = pgEnum("provider_payout_request_status", [
+  "queued",
+  "processed",
+  "failed",
+]);
+
 // --- NEW TABLES ---
 
 /**
@@ -297,6 +303,42 @@ export const providerPayouts = pgTable("provider_payouts", {
     stripeAccountPayoutUnique: uniqueIndex("provider_payouts_stripe_account_payout_unique").on(
       table.stripeAccountId,
       table.stripePayoutId,
+    ),
+  }),
+);
+
+/**
+ * Provider Payout Requests
+ * Records a provider-initiated request to pay out pending earnings.
+ * (Does not necessarily imply a Stripe payout was created.)
+ */
+export const providerPayoutRequests = pgTable(
+  "provider_payout_requests",
+  {
+    id: varchar("id", { length: 255 }).primaryKey(), // e.g., preq_...
+    providerId: varchar("provider_id", { length: 255 })
+      .notNull()
+      .references(() => providers.id, { onDelete: "cascade" }),
+
+    amount: integer("amount").notNull(), // cents
+    currency: varchar("currency", { length: 10 }).default("nzd").notNull(),
+    status: providerPayoutRequestStatusEnum("status").default("queued").notNull(),
+
+    // App-level idempotency key supplied by client.
+    idempotencyKey: varchar("idempotency_key", { length: 255 }).notNull(),
+
+    // Captures whether payouts were disabled when the request was created.
+    payoutsDisabled: boolean("payouts_disabled").default(false).notNull(),
+    note: text("note"),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    providerIdx: index("provider_payout_requests_provider_idx").on(table.providerId),
+    providerIdempotencyUnique: uniqueIndex("provider_payout_requests_provider_idempotency_unique").on(
+      table.providerId,
+      table.idempotencyKey,
     ),
   }),
 );

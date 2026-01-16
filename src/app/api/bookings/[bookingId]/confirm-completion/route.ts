@@ -11,6 +11,16 @@ import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-
 
 export const runtime = "nodejs";
 
+function payoutsDisabledByEnv(): boolean {
+  const raw = process.env.DISABLE_PAYOUTS;
+
+  // Safety default: if the flag is missing, disable payouts.
+  if (raw == null || raw === "") return true;
+
+  const normalized = raw.trim().toLowerCase();
+  return ["1", "true", "yes", "y", "on"].includes(normalized);
+}
+
 function isBalanceInsufficientStripeError(error: unknown): boolean {
   const err = error as
     | {
@@ -74,6 +84,8 @@ function getStripeErrorMeta(error: unknown): {
 
 export async function POST(req: Request, { params }: { params: Promise<{ bookingId: string }> }) {
   try {
+    const payoutsDisabled = payoutsDisabledByEnv();
+
     const { userId } = await auth();
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
@@ -113,11 +125,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       columns: { id: true, stripeConnectId: true, chargesGst: true, plan: true, payoutsEnabled: true },
     });
 
-    if (!provider?.stripeConnectId) {
+    if (!provider) {
+      return new NextResponse("Provider not found", { status: 404 });
+    }
+
+    if (!provider?.stripeConnectId && !payoutsDisabled) {
       return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
     }
 
-    if (!provider.payoutsEnabled) {
+    if (provider && !provider.payoutsEnabled && !payoutsDisabled) {
       return new NextResponse("Provider payouts are not enabled", { status: 400 });
     }
 
@@ -221,6 +237,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       stripeTransferId: effectiveEarning.stripeTransferId,
       connectId: provider.stripeConnectId,
       payoutsEnabled: provider.payoutsEnabled,
+      payoutsDisabled,
     });
 
     if (!Number.isFinite(effectiveEarning.netAmount) || effectiveEarning.netAmount <= 0) {
@@ -274,10 +291,43 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     }
 
     // 3) Ensure earnings are queued for payout.
+    if (payoutsDisabled) {
+      console.info("[API_BOOKING_CONFIRM_COMPLETION] Payouts disabled", {
+        bookingId: booking.id,
+        providerId: provider.id,
+        earningsId: effectiveEarning.id,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        bookingStatus: "completed",
+        payout: "queued",
+        reason: "payouts disabled",
+      });
+    }
+
     await db
       .update(providerEarnings)
       .set({ status: "awaiting_payout", updatedAt: new Date() })
       .where(eq(providerEarnings.id, effectiveEarning.id));
+
+    const destination = provider.stripeConnectId;
+    if (!destination) {
+      console.error("[API_BOOKING_CONFIRM_COMPLETION] Missing stripeConnectId when payouts are enabled", {
+        bookingId: booking.id,
+        providerId: provider.id,
+        earningsId: effectiveEarning.id,
+      });
+
+      return NextResponse.json({
+        ok: true,
+        booking: completedBooking ?? { id: booking.id, status: "completed" },
+        bookingStatus: "completed",
+        payout: "queued",
+        reason: "missing_stripe_connect_id",
+      });
+    }
 
     // 4) Best-effort transfer attempt; do not block customer on Stripe balance availability.
     try {
@@ -285,7 +335,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         {
           amount: effectiveEarning.netAmount,
           currency: "nzd",
-          destination: provider.stripeConnectId,
+          destination,
           transfer_group: booking.id,
           metadata: {
             bookingId: booking.id,

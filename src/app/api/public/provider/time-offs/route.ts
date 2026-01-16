@@ -1,10 +1,21 @@
 import { db } from '@/lib/db';
 import { NextResponse } from 'next/server';
+import { enforceRateLimit, rateLimitResponse } from '@/lib/rate-limit';
 
 export const runtime = 'nodejs';
 
 export async function GET(req: Request) {
   try {
+    const rate = await enforceRateLimit(req, {
+      resource: 'public:provider-time-offs',
+      limit: 120,
+      windowSeconds: 60,
+    });
+
+    if (!rate.success) {
+      return rateLimitResponse(rate.retryAfter);
+    }
+
     const { searchParams } = new URL(req.url);
     const providerId = searchParams.get('providerId');
 

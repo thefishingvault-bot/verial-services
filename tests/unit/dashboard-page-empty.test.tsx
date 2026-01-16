@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import React from "react";
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 
 vi.mock("@clerk/nextjs/server", () => ({
   auth: () => ({ userId: "user_1" }),
@@ -15,6 +15,8 @@ vi.mock("@clerk/nextjs/server", () => ({
 
 const emptyData = {
   user: { id: "user_1", name: "Tester" },
+  favorites: [],
+  unreadNotifications: 0,
   upcomingBookings: [],
   pastBookings: [],
   reviewsDue: [],
@@ -27,15 +29,17 @@ vi.mock("@/lib/dashboard/customer-dashboard", () => ({
 }));
 
 describe("/dashboard page empty states", () => {
-  it("shows empty booking and favorites states and hides optional sections", async () => {
+  it("shows empty booking/favorites states and review reminders stays hidden", async () => {
     const Page = (await import("@/app/dashboard/(customer)/page")).default;
     const ui = await Page();
     render(ui as any);
 
-    expect(screen.getByText(/You have no upcoming bookings/i)).toBeInTheDocument();
-    expect(screen.getByText(/No past bookings yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/No upcoming bookings right now\./i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /Past \(0\)/i }));
+    expect(await screen.findByText(/No past bookings yet/i)).toBeInTheDocument();
     expect(screen.getByText(/No favorites yet/i)).toBeInTheDocument();
     expect(screen.queryByText(/Review reminders/i)).not.toBeInTheDocument();
-    expect(screen.queryByText(/Recommended for you/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/Recommended for you/i)).toBeInTheDocument();
+    expect(screen.getByText(/No recommendations yet/i)).toBeInTheDocument();
   }, 15000);
 });

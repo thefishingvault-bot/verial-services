@@ -133,9 +133,13 @@ export function useRealTimeUpdates(
     if (!finalConfig.enabled) return;
 
     // Start connection (simulation only, unless a real transport is implemented later).
-    connectWebSocket();
+    // Defer to avoid synchronous setState calls directly within effect.
+    const startId = setTimeout(() => {
+      connectWebSocket();
+    }, 0);
 
     return () => {
+      clearTimeout(startId);
       disconnect();
     };
   }, [finalConfig.enabled, connectWebSocket, disconnect]);

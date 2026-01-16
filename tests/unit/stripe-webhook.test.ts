@@ -26,7 +26,10 @@ vi.mock("@/lib/stripe", () => {
 });
 
 vi.mock("@/lib/email", () => ({ sendEmail: vi.fn() }));
-vi.mock("@/lib/notifications", () => ({ createNotification: vi.fn() }));
+vi.mock("@/lib/notifications", () => ({
+  createNotification: vi.fn(),
+  createNotificationOnce: vi.fn(),
+}));
 
 vi.mock("@clerk/nextjs/server", () => ({
   clerkClient: vi.fn(() =>

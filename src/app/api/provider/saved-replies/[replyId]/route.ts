@@ -35,8 +35,9 @@ export async function PATCH(request: Request, ctx: { params: Promise<{ replyId: 
     }
 
     const body = (await request.json().catch(() => null)) as unknown;
-    const titleRaw = typeof (body as any)?.title === "string" ? (body as any).title.trim() : null;
-    const bodyRaw = typeof (body as any)?.body === "string" ? (body as any).body.trim() : null;
+  const rec = body && typeof body === "object" ? (body as Record<string, unknown>) : null;
+  const titleRaw = typeof rec?.title === "string" ? rec.title.trim() : null;
+  const bodyRaw = typeof rec?.body === "string" ? rec.body.trim() : null;
 
     if (titleRaw !== null && (!titleRaw || titleRaw.length > 120)) {
       return NextResponse.json({ error: "invalid_title" }, { status: 400 });

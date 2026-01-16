@@ -4,7 +4,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 const nextConfig: NextConfig = {
   typedRoutes: false,
   typescript: {
-    ignoreBuildErrors: true,
+    // Never ship with TypeScript errors.
+    // If you need temporary local lenience, set ALLOW_BUILD_ERRORS=true in non-production only.
+    ignoreBuildErrors:
+      process.env.NODE_ENV !== "production" && process.env.ALLOW_BUILD_ERRORS === "true",
   },
   images: {
     remotePatterns: [

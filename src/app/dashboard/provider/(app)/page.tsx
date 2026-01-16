@@ -8,6 +8,7 @@ import { bookings, providers } from "@/db/schema";
 import { and, eq, gte, inArray, sql } from "drizzle-orm";
 import { getProviderMoneySummary } from "@/server/providers/earnings";
 import { normalizeProviderPlan } from "@/lib/provider-subscription";
+import { RequestPayoutButton } from "@/components/dashboard/request-payout-button";
 
 type ProviderOverviewMetrics = {
   newRequestsCount: number;
@@ -211,6 +212,9 @@ export default async function ProviderDashboardPage() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
+            <div className="flex items-center justify-end">
+              <RequestPayoutButton pendingAmountCents={metrics.pendingTransferNetCents} />
+            </div>
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div>
                 <p className="text-sm font-semibold">{formatPrice(metrics.totalEarnedNetCents)}</p>

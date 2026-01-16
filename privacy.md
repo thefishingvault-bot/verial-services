@@ -1,168 +1,125 @@
-# Privacy Policy
-﻿# Privacy Policy
+# PRIVACY POLICY
 
-**Last Updated:** November 23, 2025
+Verial Services Ltd
 
-Verial Services Ltd ("we," "our," or "us") respects your privacy. This policy explains how we collect and use your data.
-
-## 1. Information We Collect
-- **Account Data:** Name, email, and profile picture (via Clerk).
-- **Provider Data:** Business name, bio, and bank account details (via Stripe).
-- **Usage Data:** Information about how you use the site (via Sentry).
-
-## 2. How We Use Your Data
-- To facilitate bookings and payments.
-- To send transactional emails (via Resend).
-- To improve our platform and prevent fraud.
-
-## 3. Data Sharing
-We share data with trusted third parties only when necessary:
-- **Stripe:** For payment processing.
-- **Clerk:** For authentication.
-- **Cloudflare R2:** For image storage.
-
-We do **not** sell your personal data to advertisers.
-
-## 4. Your Rights
-You have the right to access, correct, or delete your personal data. You can delete your account at any time via the Dashboard.
-
-## 5. Contact
-For privacy concerns, contact `privacy@verial.co.nz`.
-
-**Last Updated:** January 2025
+**Last Updated:** January 2026
 
 ## 1. Introduction
 
-Verial Services ("we," "our," or "us") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Platform.
+Verial Services Ltd ("we", "our", or "us") respects your privacy.
+This Privacy Policy explains how we collect, use, store, and share personal information.
 
 ## 2. Information We Collect
 
 ### 2.1 Information You Provide
 
-- **Account Information:** Name, email address, phone number
-- **Profile Information:** Business name, description, location (for providers)
-- **Payment Information:** Processed securely through Stripe (we do not store card details)
-- **Service Information:** Service listings, descriptions, pricing
-- **Booking Information:** Booking details, dates, times, messages
+- Name, email, phone number
+- Account and profile details
+- Service listings and messages
+- Booking and transaction details
 
-### 2.2 Information Collected Automatically
+### 2.2 Payments
 
-- **Usage Data:** Pages viewed, features used, time spent on Platform
-- **Device Information:** IP address, browser type, operating system
-- **Cookies:** We use cookies to enhance your experience (see Cookie Policy)
-- **Analytics:** We use analytics tools to understand Platform usage
+- Payments are processed via Stripe
+- Verial does not store card details
+- Bank details are handled securely by Stripe
 
-### 2.3 Information from Third Parties
+### 2.3 Automatically Collected Data
 
-- **Authentication:** We use Clerk for authentication
-- **Payment Processing:** We use Stripe for payment processing
-- **Error Tracking:** We use Sentry for error monitoring
+- IP address, browser, device info
+- Usage and interaction data
+- Error and performance logs (via Sentry)
 
-## 3. How We Use Your Information
+### 2.4 Third-Party Services
+
+We use:
+
+- Clerk - authentication
+- Stripe - payments
+- Cloudflare R2 - image storage
+- Sentry - error monitoring
+- Neon / Vercel - hosting & infrastructure
+
+## 3. How We Use Information
 
 We use your information to:
 
-- **Provide Services:** Facilitate bookings, payments, and communication
-- **Improve Platform:** Analyze usage and improve features
-- **Communication:** Send booking confirmations, updates, and notifications
-- **Security:** Detect and prevent fraud and abuse
-- **Compliance:** Comply with legal obligations
-- **Marketing:** Send promotional emails (with your consent)
+- Operate the Platform
+- Process bookings and payments
+- Communicate updates and confirmations
+- Prevent fraud and abuse
+- Improve platform performance
 
-## 4. How We Share Your Information
+## 4. Sharing Information
 
-### 4.1 With Other Users
+### 4.1 Between Users
 
-- **Providers:** Customers' names and contact information for bookings
-- **Customers:** Providers' business names and service information
+- Customers see provider business information
+- Providers see customer details necessary for bookings
 
-### 4.2 With Service Providers
+### 4.2 Service Providers
 
-- **Clerk:** Authentication and user management
-- **Stripe:** Payment processing
-- **Sentry:** Error tracking and monitoring
-- **Cloudflare R2:** Image storage
-- **Neon:** Database hosting
-- **Vercel:** Platform hosting
+We share data only as required to operate the Platform.
 
-### 4.3 Legal Requirements
+### 4.3 Legal Obligations
 
-We may disclose information if required by law or to:
-
-- Comply with legal processes
-- Protect our rights and property
-- Prevent fraud or abuse
-- Protect user safety
-
-### 4.4 Business Transfers
-
-If we are acquired or merged, your information may be transferred to the new entity.
+We may disclose information to comply with legal requirements or protect users and the Platform.
 
 ## 5. Data Security
 
-We implement security measures to protect your information:
+We use:
 
-- **Encryption:** Data is encrypted in transit (HTTPS/TLS)
-- **Access Controls:** Limited access to personal information
-- **Secure Storage:** Data stored in secure, compliant facilities
-- **Regular Audits:** Security practices reviewed regularly
+- HTTPS/TLS encryption
+- Restricted access controls
+- Secure third-party infrastructure
 
-However, no method of transmission over the internet is 100% secure.
+No system is 100% secure, but we take reasonable precautions.
 
 ## 6. Data Retention
 
-- **Active Accounts:** We retain data while your account is active
-- **Closed Accounts:** Data may be retained for legal and business purposes
-- **Deletion Requests:** You can request deletion of your data (subject to legal requirements)
+- Active accounts: retained while in use
+- Closed accounts: retained only as required by law
+- You may request deletion, subject to legal obligations
 
 ## 7. Your Rights
 
-You have the right to:
+You may:
 
-- **Access:** Request a copy of your personal information
-- **Correction:** Update or correct your information
-- **Deletion:** Request deletion of your information
-- **Objection:** Object to certain processing of your information
-- **Portability:** Request transfer of your data to another service
-- **Withdraw Consent:** Withdraw consent for marketing communications
+- Access your data
+- Correct inaccuracies
+- Request deletion
+- Withdraw marketing consent
 
-To exercise these rights, contact us at privacy@verialservices.nz.
+Contact privacy@verialservices.nz to exercise your rights.
 
-## 8. Cookies and Tracking
+## 8. Cookies
 
-We use cookies and similar technologies to:
+Cookies are used for:
 
-- **Authentication:** Keep you logged in
-- **Preferences:** Remember your settings
-- **Analytics:** Understand Platform usage
-- **Security:** Detect and prevent fraud
+- Authentication
+- Preferences
+- Analytics
+- Security
 
-You can control cookies through your browser settings.
+You can control cookies via your browser.
 
-## 9. Third-Party Links
+## 9. Children's Privacy
 
-The Platform may contain links to third-party websites. We are not responsible for the privacy practices of these websites.
+Verial Services is not intended for users under 18.
 
-## 10. Children's Privacy
+## 10. International Data Transfers
 
-The Platform is not intended for users under 18. We do not knowingly collect information from children.
+Your data may be processed outside New Zealand.
+We ensure appropriate safeguards are in place.
 
-## 11. International Data Transfers
+## 11. Changes to This Policy
 
-Your information may be transferred to and processed in countries outside New Zealand. We ensure appropriate safeguards are in place.
+We may update this Privacy Policy periodically.
+Material changes will be communicated.
 
-## 12. Changes to This Policy
+## 12. Contact
 
-We may update this Privacy Policy from time to time. We will notify you of material changes via email or Platform notification.
+Email: privacy@verialservices.nz
 
-## 13. Contact Us
-
-For questions about this Privacy Policy or to exercise your rights, contact us at:
-
-**Email:** privacy@verialservices.nz  
-**Address:** Auckland, New Zealand
-
----
-
-**By using Verial Services, you acknowledge that you have read and understood this Privacy Policy.**
+Location: Auckland, New Zealand
 

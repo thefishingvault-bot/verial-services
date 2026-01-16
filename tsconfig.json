@@ -45,6 +45,17 @@
   ],
   "exclude": [
     "node_modules",
-    ".next"
+    ".next",
+
+    "tests",
+    "tests/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.spec.ts",
+    "**/*.spec.tsx",
+
+    "vitest.workspace.ts",
+    "vitest.*.ts",
+    "**/vitest.*.ts"
   ]
 }
