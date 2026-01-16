@@ -207,14 +207,14 @@ export default async function ProviderDashboardPage() {
         <Card>
           <CardHeader className="flex-row items-center justify-between space-y-0">
             <CardTitle className="text-base">Earnings &amp; payouts</CardTitle>
-            <Button asChild size="sm" variant="ghost">
-              <Link href="/dashboard/provider/earnings">Net totals</Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <RequestPayoutButton pendingAmountCents={metrics.pendingTransferNetCents} />
+              <Button asChild size="sm" variant="ghost">
+                <Link href="/dashboard/provider/earnings">Net totals</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-center justify-end">
-              <RequestPayoutButton pendingAmountCents={metrics.pendingTransferNetCents} />
-            </div>
             <div className="flex items-center justify-between rounded-md border bg-background px-3 py-2">
               <div>
                 <p className="text-sm font-semibold">{formatPrice(metrics.totalEarnedNetCents)}</p>
