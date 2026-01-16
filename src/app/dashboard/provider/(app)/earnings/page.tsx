@@ -108,10 +108,8 @@ export default async function ProviderEarningsPage() {
       <StripeConnectStatusBanner />
 
       <div className="space-y-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Earnings</h1>
-        <p className="text-sm text-muted-foreground">
-          See what you&apos;ve earned (net), what&apos;s pending, and what&apos;s been paid out.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">Earnings &amp; payouts</h1>
+        <p className="text-sm text-muted-foreground">Net totals</p>
       </div>
 
       <EarningsSummaryCards
@@ -123,8 +121,9 @@ export default async function ProviderEarningsPage() {
       />
 
       <p className="text-xs text-muted-foreground">
-        Earned (net) updates when a job is completed and payment is confirmed. Paid out updates when
-        a transfer is made.
+        Total earned (net) includes pending + paid out. Updates when a job is completed and paid.
+        Total earned = Pending transfer + Paid out. Upcoming jobs don&apos;t count until payment is
+        received and the job is marked completed.
       </p>
 
       <Card>
