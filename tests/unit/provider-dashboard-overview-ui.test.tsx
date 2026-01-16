@@ -4,6 +4,11 @@ import React from "react";
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import ProviderDashboardPage from "@/app/dashboard/provider/(app)/page";
+import { ToastProvider } from "@/components/ui/use-toast";
+
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ refresh: vi.fn() }),
+}));
 
 vi.mock("@/lib/auth-guards", () => ({
   requireProvider: vi.fn().mockResolvedValue({ userId: "user_1" }),
@@ -58,7 +63,7 @@ describe("ProviderDashboardPage", () => {
   });
 
   it("renders metrics cards with data", async () => {
-    render(await ProviderDashboardPage());
+    render(<ToastProvider>{await ProviderDashboardPage()}</ToastProvider>);
 
     await waitFor(() => {
       const labels = screen.getAllByText(/New requests/i);
