@@ -12,9 +12,11 @@ export function RequestPayoutButton({ pendingAmountCents }: { pendingAmountCents
   const { toast } = useToast();
 
   const [isLoading, setIsLoading] = React.useState(false);
+  const [isRequested, setIsRequested] = React.useState(false);
   const lastIdempotencyKeyRef = React.useRef<string | null>(null);
 
-  const disabled = !Number.isFinite(pendingAmountCents) || pendingAmountCents <= 0 || isLoading;
+  const hasPendingAmount = Number.isFinite(pendingAmountCents) && pendingAmountCents > 0;
+  const disabled = !hasPendingAmount || isLoading || isRequested;
 
   const onClick = async () => {
     if (disabled) return;
@@ -47,6 +49,8 @@ export function RequestPayoutButton({ pendingAmountCents }: { pendingAmountCents
           : "Request queued. We'll process it as soon as possible.",
       });
 
+      setIsRequested(true);
+
       router.refresh();
     } catch (err) {
       const msg = getErrorMessage(err, "Unable to request payout");
@@ -59,8 +63,13 @@ export function RequestPayoutButton({ pendingAmountCents }: { pendingAmountCents
   };
 
   return (
-    <Button size="sm" variant="outline" onClick={onClick} disabled={disabled}>
-      {isLoading ? "Requesting…" : "Request payout"}
-    </Button>
+    <div className="flex flex-col items-end gap-1">
+      <Button size="sm" variant="outline" onClick={onClick} disabled={disabled}>
+        {isLoading ? "Requesting…" : isRequested ? "Requested" : "Request payout"}
+      </Button>
+      {!hasPendingAmount ? (
+        <p className="text-xs text-muted-foreground">No pending payout available yet.</p>
+      ) : null}
+    </div>
   );
 }
