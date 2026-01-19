@@ -104,12 +104,11 @@ const PLAN_COPY: Record<ProviderPlan, {
   elite: {
     headline: "Best for top providers",
     description:
-      "Maximize earnings with zero platform fees and premium visibility. Built for high-performing providers who want priority placement and full access.",
+      "Maximize earnings with zero platform fees and the highest search ranking boost. Built for high-performing providers who want priority placement.",
     includes: [
       "Everything in Pro",
-      "Priority search placement & featured exposure",
-      "Advanced analytics",
-      "Priority support",
+      "0% platform fee",
+      "Highest search ranking boost (priority placement)",
     ],
     feeLine: "0% platform fee per completed booking",
   },
