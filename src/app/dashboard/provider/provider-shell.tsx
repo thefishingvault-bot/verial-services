@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 import { NotificationBell } from "@/components/nav/notification-bell";
 import { cn } from "@/lib/utils";
 import { UserButton } from "@clerk/nextjs";
-import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare, CreditCard, Store, ShieldCheck } from "lucide-react";
+import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
+import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare, CreditCard, Store, ShieldCheck, MoreHorizontal } from "lucide-react";
 
 const providerNav = [
   { href: "/dashboard/provider", label: "Overview", icon: Home },
@@ -74,32 +75,100 @@ export function ProviderShell({ children }: { children: React.ReactNode }) {
           </nav>
         </aside>
 
-        <div className="flex-1 space-y-4">
-          <nav className="flex gap-2 overflow-x-auto pb-1 md:hidden">
-            {providerNav.map((link) => {
-              const Icon = link.icon;
-              const active = isActive(link.href);
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    "flex flex-none items-center justify-center gap-1 rounded-md border px-3 py-2 text-xs font-medium whitespace-nowrap min-w-35",
-                    active
-                      ? "border-primary bg-primary/10 text-primary"
-                      : "border-transparent bg-background text-muted-foreground",
-                  )}
-                >
-                  <Icon className="h-4 w-4" />
-                  <span>{link.label}</span>
-                </Link>
-              );
-            })}
-          </nav>
-
+        <div className="flex-1 space-y-4 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-0">
           <main className="rounded-lg bg-background p-4 shadow-sm md:p-6">{children}</main>
         </div>
       </div>
+
+      {/* Mobile Provider Bottom Navigation (replaces wrapping top nav) */}
+      <Sheet>
+        <nav className="fixed bottom-0 z-50 w-full border-t bg-background md:hidden">
+          <div className="mx-auto grid h-16 max-w-7xl grid-cols-5">
+            {(() => {
+              const primaryHrefs = [
+                "/dashboard/provider",
+                "/dashboard/provider/bookings",
+                "/dashboard/provider/calendar",
+                "/dashboard/provider/earnings",
+              ] as const;
+
+              const primaryLinks = primaryHrefs
+                .map((href) => providerNav.find((l) => l.href === href))
+                .filter(Boolean) as typeof providerNav;
+
+              const moreLinks = providerNav.filter((l) => !primaryHrefs.includes(l.href as (typeof primaryHrefs)[number]));
+
+              const moreActive = providerNav.some((l) => isActive(l.href)) && !primaryHrefs.some((href) => isActive(href));
+
+              return (
+                <>
+                  {primaryLinks.map((link) => {
+                    const Icon = link.icon;
+                    const active = isActive(link.href);
+                    return (
+                      <Link
+                        key={link.href}
+                        href={link.href}
+                        className={cn(
+                          "flex h-16 flex-col items-center justify-center gap-1 px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+                          active ? "text-primary" : "text-muted-foreground",
+                        )}
+                        aria-current={active ? "page" : undefined}
+                      >
+                        <Icon className="h-5 w-5" />
+                        <span className="truncate">{link.label}</span>
+                      </Link>
+                    );
+                  })}
+
+                  <SheetTrigger asChild>
+                    <button
+                      type="button"
+                      className={cn(
+                        "flex h-16 flex-col items-center justify-center gap-1 px-2 text-xs font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+                        moreActive ? "text-primary" : "text-muted-foreground",
+                      )}
+                      aria-current={moreActive ? "page" : undefined}
+                    >
+                      <MoreHorizontal className="h-5 w-5" />
+                      <span className="truncate">More</span>
+                    </button>
+                  </SheetTrigger>
+
+                  <SheetContent side="bottom" className="pb-[env(safe-area-inset-bottom)]">
+                    <SheetHeader>
+                      <SheetTitle>More</SheetTitle>
+                    </SheetHeader>
+                    <div className="grid gap-1 px-4 pb-4">
+                      {moreLinks.map((link) => {
+                        const Icon = link.icon;
+                        const active = isActive(link.href);
+                        return (
+                          <SheetClose key={link.href} asChild>
+                            <Link
+                              href={link.href}
+                              className={cn(
+                                "flex items-center gap-3 rounded-md px-3 py-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+                                active
+                                  ? "bg-primary/10 text-primary"
+                                  : "text-foreground hover:bg-muted",
+                              )}
+                              aria-current={active ? "page" : undefined}
+                            >
+                              <Icon className="h-5 w-5" />
+                              <span>{link.label}</span>
+                            </Link>
+                          </SheetClose>
+                        );
+                      })}
+                    </div>
+                  </SheetContent>
+                </>
+              );
+            })()}
+          </div>
+        </nav>
+      </Sheet>
     </div>
   );
 }
