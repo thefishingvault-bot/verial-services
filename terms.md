@@ -4,140 +4,174 @@ Verial Services Ltd
 
 **Last Updated:** January 2026
 
-## 1. Acceptance of Terms
+These Terms apply to your use of the Verial platform (the **Platform**).
 
-By accessing or using Verial Services ("Verial", "we", "our", or "us"), including our website at verial.co.nz (the "Platform"), you agree to be bound by these Terms of Service ("Terms").
-If you do not agree, you must not use the Platform.
+## 1. Key points (plain English)
 
-## 2. The Platform
+- Verial is a marketplace platform. Verial is **not** the service provider.
+- Providers are independent contractors. Providers are **not** Verial employees, agents, or partners.
+- Payments flow through Verial via Stripe as the platform intermediary.
+- Refunds, cancellations, no-shows, and disputes are governed by Verial’s platform-wide rules in section 6.
 
-Verial Services is an online marketplace that connects customers with independent service providers in New Zealand.
+## 2. Acceptance
 
-- Verial does not provide services itself
-- Providers are not employees, contractors, or agents of Verial
-- Verial facilitates listings, bookings, payments, and communication
+By accessing or using the Platform, you agree to these Terms.
+If you do not agree, do not use the Platform.
 
-## 3. Eligibility & Accounts
+## 3. Definitions
+
+- **Customer**: a person who books services.
+- **Provider**: a person or business that lists and delivers services.
+- **Booking**: a confirmed request for a service through the Platform.
+- **Booking start time**: the scheduled start time shown for a Booking.
+- **Completion**: the point at which the Booking is treated as completed in the Platform.
+
+## 4. Verial’s role (marketplace)
+
+The Platform connects Customers with Providers.
+
+- The contract for the service is between the Customer and the Provider.
+- Providers are responsible for delivering the service, including quality and compliance.
+- Verial provides the Platform features (listings, booking workflow, payments, and communications) and support processes.
+
+## 5. Accounts and eligibility
 
 You must be 18 years or older to use the Platform.
 
 You agree to:
 
-- Provide accurate and up-to-date information
-- Keep your login credentials secure
-- Be responsible for all activity on your account
+- provide accurate information (and keep it up to date);
+- keep your login credentials secure; and
+- be responsible for activity on your account.
 
-Account types:
+Verial uses third-party authentication providers (see our Privacy Policy).
 
-- Customers - browse and book services
-- Providers - list and deliver services (subject to approval)
-- Admins - manage platform operations
+## 6. Payments, refunds, cancellations, no-shows, and disputes
 
-## 4. Provider Terms
+### 6.1 Payments and Stripe
 
-### 4.1 Provider Eligibility
+- Payments are processed via Stripe.
+- Verial does not store card numbers or full payment card details.
+- Verial collects payment from the Customer through Stripe and facilitates payout to the Provider via Stripe Connect.
 
-By listing services, you confirm that:
+### 6.2 Platform-wide refunds and cancellations (locked policy)
 
-- You are legally permitted to work in New Zealand
-- You comply with all relevant laws and regulations
-- You hold any required licenses or insurance
+These rules apply to all Bookings on Verial.
 
-### 4.2 Verification
+**Free cancellation (Customer or Provider)**
 
-Providers may be required to complete identity or business verification.
-Verial may approve, reject, suspend, or revoke provider access at its discretion.
+- Free cancellation is available up to **24 hours before the Booking start time**.
 
-### 4.3 Listings & Services
+**Late cancellation**
+
+- Cancellations made within **24 hours of the Booking start time** are **non-refundable**, unless the cancellation is due to **Provider fault**.
+
+**Provider fault** includes (at a minimum):
+
+- the Provider does not show up for the Booking;
+- the Provider cancels late; or
+- the Provider fails to deliver the booked service.
+
+**Stripe fees**
+
+- Stripe processing fees are **non-refundable**.
+- The Platform does **not** absorb Stripe processing fees.
+
+This means that where a refund is approved, the refunded amount will exclude Stripe processing fees.
+
+### 6.3 No-shows (locked policy)
+
+- **Customer no-show:** no refund.
+- **Provider no-show:** full refund (excluding non-refundable Stripe fees).
+
+### 6.4 Disputes (locked policy)
+
+- Both Customers and Providers may initiate a dispute.
+- Disputes must be raised within **7 days of Booking completion**.
+- All disputes are **admin-reviewed**.
+- Payouts may be **paused during an investigation**.
+- Verial does not guarantee any particular outcome.
+
+### 6.5 How refunds and disputes are handled today (implementation honesty)
+
+Some parts of the refund/dispute process are not yet fully automated.
+At this stage:
+
+- cancellation/refund eligibility (including the 24-hour window and Provider fault assessment) is reviewed and processed by Verial administrators; and
+- disputes are reviewed and processed by Verial administrators.
+
+Verial may request information from both parties (for example, messages, photos, receipts, and other evidence) to assess eligibility and outcomes.
+
+### 6.6 Chargebacks
+
+If a Customer initiates a chargeback through their bank/card provider:
+
+- the chargeback will be handled through Stripe’s chargeback process;
+- Verial may request information from the Customer and Provider;
+- Verial may pause payouts and/or take account risk actions while the chargeback is investigated.
+
+## 7. Provider obligations (including taxes)
 
 Providers must:
 
-- Accurately describe services and pricing
-- Deliver services as agreed
-- Communicate honestly with customers
+- accurately describe services, pricing, and availability;
+- deliver services with reasonable care and skill; and
+- comply with all applicable New Zealand laws.
 
-### 4.4 Fees & Payments
+Providers are responsible for their own taxes, including GST if applicable.
 
-- Verial charges a platform fee on completed bookings
-- Fees are deducted automatically before payout
-- Providers are responsible for their own taxes, including GST if applicable
+## 8. Platform controls, verification, and risk
 
-## 5. Customer Terms
+To protect users and the Platform, Verial may:
 
-### 5.1 Bookings & Payments
+- require verification for Providers (including identity verification);
+- suspend or restrict accounts or listings;
+- pause payouts where required for disputes, fraud prevention, or compliance checks;
+- refuse or reverse transactions where required by law or Stripe rules.
 
-- Payments are processed securely via Stripe
-- Verial does not store payment card details
-- Bookings are confirmed once payment is successful
+## 9. Prohibited conduct
 
-### 5.2 Cancellations & Refunds
+You must not:
 
-- Cancellation policies are set by providers
-- Refund eligibility depends on provider terms and booking status
-- Verial may assist with disputes but does not guarantee outcomes
+- use the Platform for unlawful, fraudulent, or harmful activity;
+- attempt to circumvent platform payments or fees;
+- harass, abuse, impersonate, or mislead others;
+- upload malware or harmful content; or
+- misuse the Platform (including scraping or reverse engineering where prohibited by law).
 
-## 6. Payments & Payouts
+## 10. Intellectual property
 
-- Customer payments are made to Verial via Stripe
-- Provider payouts are released after service completion
-- Delays may occur due to verification, disputes, or compliance checks
+Verial owns the Platform and its software.
+Users retain ownership of their content, but grant Verial a licence to host, display, and process it for Platform operation.
 
-## 7. Disputes
-
-Users should first attempt to resolve disputes directly.
-
-Verial may:
-
-- Review disputes at its discretion
-- Pause payouts during investigations
-- Take reasonable actions to protect platform integrity
-
-Verial is not obligated to resolve disputes in favor of either party.
-
-## 8. Prohibited Activities
-
-You may not:
-
-- Use the Platform for illegal or fraudulent activity
-- Circumvent platform fees or payments
-- Harass, abuse, or impersonate others
-- Scrape, reverse-engineer, or misuse Platform data
-- Upload malware or harmful content
-
-## 9. Intellectual Property
-
-- Verial owns the Platform and its software
-- Users retain ownership of their content
-- You grant Verial a non-exclusive license to display and use content for platform operation
-
-## 10. Limitation of Liability
+## 11. Liability and consumer law
 
 To the maximum extent permitted by law:
 
-- Verial provides the Platform "as is"
-- We do not guarantee service quality, availability, or outcomes
-- Verial is not liable for acts or omissions of users
+- the Platform is provided “as is”; and
+- Verial is not responsible for the acts or omissions of Providers or Customers.
 
-## 11. Suspension & Termination
+Nothing in these Terms is intended to exclude or limit any rights you may have under New Zealand consumer law that cannot be excluded.
 
-Verial may suspend or terminate accounts if:
+## 12. Suspension and termination
 
-- These Terms are violated
-- Fraud, abuse, or risk is detected
+Verial may suspend or terminate access if:
 
-You may close your account at any time.
-Termination does not affect existing payment or legal obligations.
+- these Terms are breached;
+- fraud, abuse, or risk is detected; or
+- it is required for safety, compliance, or legal reasons.
 
-## 12. Changes to Terms
+Termination does not affect existing payment obligations, dispute processes, or legal rights.
 
-We may update these Terms from time to time.
-Continued use of the Platform means acceptance of the updated Terms.
+## 13. Changes
 
-## 13. Governing Law
+We may update these Terms from time to time. If you continue to use the Platform, you accept the updated Terms.
 
-These Terms are governed by the laws of New Zealand.
+## 14. Governing law
 
-## 14. Contact
+These Terms are governed by the laws of New Zealand, and the New Zealand courts have non-exclusive jurisdiction.
+
+## 15. Contact
 
 Email: legal@verialservices.nz
 

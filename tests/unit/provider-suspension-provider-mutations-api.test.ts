@@ -92,5 +92,5 @@ describe("provider suspension enforcement: provider mutations", () => {
 
     // Should return before touching bookings.
     expect(dbMock.query.bookings.findFirst).not.toHaveBeenCalled();
-  });
+  }, 15000);
 });

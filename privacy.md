@@ -4,120 +4,128 @@ Verial Services Ltd
 
 **Last Updated:** January 2026
 
-## 1. Introduction
+This Privacy Policy explains how Verial Services Ltd (**Verial**, **we**, **us**) collects, uses, stores, and discloses personal information when you use the Verial platform.
 
-Verial Services Ltd ("we", "our", or "us") respects your privacy.
-This Privacy Policy explains how we collect, use, store, and share personal information.
+This policy is written for New Zealand and is intended to align with the Privacy Act 2020.
 
-## 2. Information We Collect
+## 1. Personal information we collect
 
-### 2.1 Information You Provide
+We collect personal information that you provide directly, that is generated through your use of the Platform, and that we receive from our service providers.
 
-- Name, email, phone number
-- Account and profile details
-- Service listings and messages
-- Booking and transaction details
+### 1.1 Account identifiers and contact details (Clerk)
 
-### 2.2 Payments
+- Account identifiers from our authentication provider (for example, a user ID).
+- Contact details such as name and email address.
+- Any other profile details you choose to provide.
 
-- Payments are processed via Stripe
-- Verial does not store card details
-- Bank details are handled securely by Stripe
+### 1.2 Booking and transaction information
 
-### 2.3 Automatically Collected Data
+- Booking details (service, schedule, status, notes).
+- Transaction records relating to bookings, refunds, disputes, earnings, and payouts.
 
-- IP address, browser, device info
-- Usage and interaction data
-- Error and performance logs (via Sentry)
+### 1.3 Payment references (Stripe)
 
-### 2.4 Third-Party Services
+- Stripe identifiers such as payment IDs, refund IDs, and payout/transfer references.
 
-We use:
+We do **not** store full payment card details. Payment card information is handled by Stripe.
 
-- Clerk - authentication
-- Stripe - payments
-- Cloudflare R2 - image storage
-- Sentry - error monitoring
-- Neon / Vercel - hosting & infrastructure
+### 1.4 KYC / identity verification (Sumsub)
 
-## 3. How We Use Information
+- Identity verification status and related verification metadata.
+- Identity documents and related verification data you submit for verification.
 
-We use your information to:
+### 1.5 Messages and attachments
 
-- Operate the Platform
-- Process bookings and payments
-- Communicate updates and confirmations
-- Prevent fraud and abuse
-- Improve platform performance
+- Messages sent through the Platform.
+- Attachments you upload through the Platform (for example, images or documents).
 
-## 4. Sharing Information
+### 1.6 Logs, analytics, and error data (including Sentry)
 
-### 4.1 Between Users
+- Device and browser information.
+- IP address and approximate location information derived from IP address.
+- Platform usage and diagnostic data.
+- Error and performance monitoring data.
 
-- Customers see provider business information
-- Providers see customer details necessary for bookings
+## 2. How we use personal information
 
-### 4.2 Service Providers
+We use personal information to:
 
-We share data only as required to operate the Platform.
+- operate the Platform (accounts, listings, bookings, messaging);
+- process payments, refunds, and payouts through Stripe and Stripe Connect;
+- provide customer support and administer disputes;
+- verify Providers and manage platform risk and safety;
+- detect and prevent fraud, abuse, and security incidents; and
+- monitor performance and maintain the reliability of the Platform.
 
-### 4.3 Legal Obligations
+## 3. How we share personal information
 
-We may disclose information to comply with legal requirements or protect users and the Platform.
+### 3.1 Sharing between Customers and Providers
 
-## 5. Data Security
+We share information between Customers and Providers only to the extent necessary to complete bookings and provide services (for example, booking details and communications).
 
-We use:
+### 3.2 Third-party processors
 
-- HTTPS/TLS encryption
-- Restricted access controls
-- Secure third-party infrastructure
+We use the following service providers to operate the Platform. These providers may process personal information on our behalf:
 
-No system is 100% secure, but we take reasonable precautions.
+- **Clerk** (authentication)
+- **Stripe** and **Stripe Connect** (payments, refunds, transfers, and payouts)
+- **Sumsub** (KYC / identity verification)
+- **Cloudflare R2** (file storage)
+- **Neon** (database hosting)
+- **Vercel** (hosting and runtime infrastructure)
+- **Resend** (email delivery)
+- **Sentry** (monitoring, error tracking, performance)
 
-## 6. Data Retention
+### 3.3 Legal and safety disclosures
 
-- Active accounts: retained while in use
-- Closed accounts: retained only as required by law
-- You may request deletion, subject to legal obligations
+We may disclose personal information where required by law, or where reasonably necessary to protect users, the public, or the Platform.
 
-## 7. Your Rights
+## 4. Cross-border processing
 
-You may:
+Some of our third-party processors operate internationally. Personal information may be stored or processed outside New Zealand (for example, in the United States, the European Union, Australia, or other locations depending on the provider configuration).
 
-- Access your data
-- Correct inaccuracies
-- Request deletion
-- Withdraw marketing consent
+## 5. Data retention (locked policy)
 
-Contact privacy@verialservices.nz to exercise your rights.
+We retain personal information for the periods below, unless we are required or permitted to retain it longer (for example, to comply with law, resolve disputes, or enforce our terms).
+
+| Category | Retention period |
+|---|---|
+| Financial and transaction records (including bookings, payments, earnings, payouts, refunds, and related audit) | 7 years |
+| KYC / identity verification data | Active account duration + 12 months |
+| Messages and in-platform communications (including attachments metadata/URLs) | 2 years |
+| Logs / analytics / error tracking | 30–90 days |
+
+## 6. Your rights (NZ Privacy Act 2020)
+
+You can request:
+
+- **Access** to personal information we hold about you.
+- **Correction** of personal information if you believe it is inaccurate.
+- **Deletion** of personal information, subject to our retention obligations (for example, financial record retention).
+
+### 6.1 How requests are handled (implementation honesty)
+
+Some privacy requests are handled manually by platform administrators at this stage. We may need to verify your identity before processing a request.
+
+To make a request, email: privacy@verialservices.nz
+
+## 7. Security
+
+We use reasonable safeguards designed to protect personal information, including access controls and encryption in transit. No method of transmission or storage is completely secure.
 
 ## 8. Cookies
 
-Cookies are used for:
+We use cookies and similar technologies for authentication, security, and basic site functionality. Some providers may also set cookies (for example, for security and performance).
 
-- Authentication
-- Preferences
-- Analytics
-- Security
+## 9. Children
 
-You can control cookies via your browser.
+The Platform is not intended for people under 18.
 
-## 9. Children's Privacy
+## 10. Changes
 
-Verial Services is not intended for users under 18.
+We may update this Privacy Policy from time to time. We will update the “Last Updated” date when changes are made.
 
-## 10. International Data Transfers
-
-Your data may be processed outside New Zealand.
-We ensure appropriate safeguards are in place.
-
-## 11. Changes to This Policy
-
-We may update this Privacy Policy periodically.
-Material changes will be communicated.
-
-## 12. Contact
+## 11. Contact
 
 Email: privacy@verialservices.nz
 

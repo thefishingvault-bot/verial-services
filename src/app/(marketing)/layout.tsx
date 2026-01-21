@@ -20,6 +20,7 @@ export default function MarketingLayout({
           <nav className="flex space-x-4 text-sm">
             <Link href="/legal/terms" className="hover:underline hover:text-white">Terms of Service</Link>
             <Link href="/legal/privacy" className="hover:underline hover:text-white">Privacy Policy</Link>
+            <Link href="/legal/refunds" className="hover:underline hover:text-white">Refund Policy</Link>
           </nav>
         </div>
       </footer>
