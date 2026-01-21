@@ -84,16 +84,30 @@ We may disclose personal information where required by law, or where reasonably 
 
 Some of our third-party processors operate internationally. Personal information may be stored or processed outside New Zealand (for example, in the United States, the European Union, Australia, or other locations depending on the provider configuration).
 
-## 5. Data retention (locked policy)
+## 5. How long we keep your information
 
-We retain personal information for the periods below, unless we are required or permitted to retain it longer (for example, to comply with law, resolve disputes, or enforce our terms).
+We only keep personal information for as long as it's needed to run the platform, meet legal obligations, and resolve issues like payments or disputes.
 
-| Category | Retention period |
-|---|---|
-| Financial and transaction records (including bookings, payments, earnings, payouts, refunds, and related audit) | 7 years |
-| KYC / identity verification data | Active account duration + 12 months |
-| Messages and in-platform communications (including attachments metadata/URLs) | 2 years |
-| Logs / analytics / error tracking | 30–90 days |
+Here's a simple breakdown:
+
+### Financial & booking records
+
+We keep records of bookings, payments, refunds, earnings, and payouts for 7 years.
+This is required for legal, tax, and accounting purposes.
+
+### Identity verification (KYC)
+
+Identity verification information is kept while your account is active, and for up to 12 months after your account is closed, unless we're required to keep it longer by law.
+
+### Messages and in-platform communications
+
+Messages and related attachment references are kept for up to 2 years to support dispute resolution, safety, and platform integrity.
+
+### Logs, analytics, and error tracking
+
+Technical logs and error data are kept for 30 to 90 days, depending on the system, and are used only for security, diagnostics, and performance monitoring.
+
+We may retain information for longer periods where required or permitted by law, or where reasonably necessary to enforce our terms or resolve disputes.
 
 ## 6. Your rights (NZ Privacy Act 2020)
 
