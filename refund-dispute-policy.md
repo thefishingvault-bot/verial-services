@@ -79,4 +79,4 @@ If a Customer initiates a chargeback:
 
 ## 9. Contact
 
-For refund or dispute support, contact: legal@verialservices.nz
+For refund or dispute support, contact: refunds@verialservices.nz
