@@ -31,7 +31,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, Loader2, PlusCircle, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Clock, KeyRound, Loader2, PlusCircle, Trash2 } from "lucide-react";
 import { buildCalendarGrid, type CalendarEvent } from "@/lib/provider-calendar-shared";
 import { cn } from "@/lib/utils";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
@@ -299,6 +299,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [timeOffs, setTimeOffs] = useState<CalendarEvent[]>(initialTimeOffs.map(normalizeEvent));
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [dayDetailsOpen, setDayDetailsOpen] = useState(false);
+  const [legendOpen, setLegendOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
@@ -440,6 +441,12 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
     }
   }, [isDesktop, dayDetailsOpen]);
 
+  useEffect(() => {
+    if (isDesktop && legendOpen) {
+      setLegendOpen(false);
+    }
+  }, [isDesktop, legendOpen]);
+
   const handleSelectDay = (day: Date) => {
     setSelectedDate(day);
     if (!isDesktop) {
@@ -578,7 +585,8 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             </div>
           </>
 
-          <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+          {/* Desktop legend */}
+          <div className="hidden lg:flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
               <span className="h-2 w-2 rounded-full bg-yellow-500" /> Pending
             </span>
@@ -594,6 +602,13 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             <span className="flex items-center gap-1">
               <span className="h-2 w-3 rounded-sm bg-destructive/20 border border-destructive/30" /> Time off
             </span>
+          </div>
+
+          {/* Mobile legend: compact Key control */}
+          <div className="lg:hidden">
+            <Button type="button" variant="outline" size="sm" className="h-8" onClick={() => setLegendOpen(true)}>
+              <KeyRound className="mr-2 h-4 w-4" /> Key
+            </Button>
           </div>
         </div>
 
@@ -617,6 +632,39 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             </SheetHeader>
             <div className="px-4 pb-4 overflow-y-auto">
               <DayDetailsContent events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
+            </div>
+          </SheetContent>
+        </Sheet>
+
+        <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
+          <SheetContent side="bottom" className="lg:hidden rounded-t-lg pb-[env(safe-area-inset-bottom)]">
+            <SheetHeader>
+              <SheetTitle>Key</SheetTitle>
+              <SheetDescription>Statuses shown on the calendar.</SheetDescription>
+            </SheetHeader>
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                  <span>Pending</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                  <span>Accepted</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-green-500" />
+                  <span>Paid</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full bg-muted-foreground" />
+                  <span>Completed</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-3 rounded-sm bg-destructive/20 border border-destructive/30" />
+                  <span>Time off</span>
+                </div>
+              </div>
             </div>
           </SheetContent>
         </Sheet>
