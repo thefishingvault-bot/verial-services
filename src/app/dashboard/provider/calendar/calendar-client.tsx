@@ -174,49 +174,164 @@ function buildDaySummary(events: CalendarEvent[]) {
   return `${events.length} event${events.length === 1 ? "" : "s"}: ${parts.join(", ")}`;
 }
 
-function DayIndicators({ events }: { events: CalendarEvent[] }) {
+function getStatusKey(event: CalendarEvent) {
+  if (event.type === "time_off") return "time_off";
+  switch (event.status) {
+    case "pending":
+    case "accepted":
+    case "paid":
+    case "completed":
+      return event.status;
+    default:
+      return "other";
+  }
+}
+
+function getStatusPriority(status: string) {
+  switch (status) {
+    case "time_off":
+      return 0;
+    case "pending":
+      return 1;
+    case "accepted":
+      return 2;
+    case "paid":
+      return 3;
+    case "completed":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function DayDots({ events }: { events: CalendarEvent[] }) {
   if (events.length === 0) return null;
 
-  const sorted = [...events].sort((a, b) => {
-    const priority = getEventPriority(a) - getEventPriority(b);
-    if (priority !== 0) return priority;
-    return a.start.getTime() - b.start.getTime();
-  });
+  const distinctStatuses = Array.from(new Set(events.map(getStatusKey)))
+    .sort((a, b) => getStatusPriority(a) - getStatusPriority(b))
+    .slice(0, 3);
 
-  const visibleDots = sorted.slice(0, 3);
-  const remaining = Math.max(0, sorted.length - visibleDots.length);
-  const countLabel = events.length > 9 ? "9+" : String(events.length);
+  const dotsShown = distinctStatuses.length;
+  const hasMore = events.length > dotsShown || new Set(events.map(getStatusKey)).size > dotsShown;
 
   return (
     <>
       <span className="sr-only">{buildDaySummary(events)}</span>
 
-      <span
-        aria-hidden="true"
-        className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium leading-none text-secondary-foreground"
-      >
-        {countLabel}
-      </span>
-
       <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
-        {visibleDots.map((event) => (
-          <span
-            key={`${event.type}-${event.id}`}
-            className={cn("h-1.5 w-1.5 rounded-full opacity-80", getEventDotClass(event))}
-            title={
-              event.type === "time_off"
-                ? event.title
-                  ? `Time off • ${event.title}`
-                  : "Time off"
-                : `${getBookingStatusLabel(event.status)} • ${event.title}`
-            }
-          />
-        ))}
-        {remaining > 0 && (
-          <span className="text-[10px] font-medium leading-none text-muted-foreground">+{remaining}</span>
-        )}
+        {distinctStatuses.map((status) => {
+          const exampleEvent = events.find((e) => getStatusKey(e) === status);
+          if (!exampleEvent) return null;
+          return (
+            <span
+              key={status}
+              className={cn("h-1.5 w-1.5 rounded-full opacity-80", getEventDotClass(exampleEvent))}
+              title={
+                status === "time_off"
+                  ? "Time off"
+                  : status === "other"
+                    ? "Other"
+                    : getBookingStatusLabel(status as BookingEvent["status"])
+              }
+            />
+          );
+        })}
+        {hasMore && <span className="text-[10px] font-medium leading-none text-muted-foreground">…</span>}
       </span>
     </>
+  );
+}
+
+function formatEventTime(event: CalendarEvent) {
+  const startLabel = event.start ? format(event.start, "HH:mm") : null;
+  const endLabel = event.end ? format(event.end, "HH:mm") : null;
+
+  if (!startLabel && !endLabel) return null;
+
+  if (event.type === "time_off") {
+    if (startLabel && endLabel) return `${startLabel}–${endLabel}`;
+    return startLabel ?? endLabel;
+  }
+
+  if (startLabel && endLabel && startLabel !== endLabel) return `${startLabel}–${endLabel}`;
+  return startLabel ?? endLabel;
+}
+
+function DayAgenda({ selectedDate, events, onDeleteTimeOff }: { selectedDate: Date; events: CalendarEvent[]; onDeleteTimeOff: (id: string) => void }) {
+  const today = useMemo(() => new Date(), []);
+  const isToday = isSameDay(selectedDate, today);
+
+  const sorted = useMemo(() => {
+    return [...events].sort((a, b) => {
+      const priority = getEventPriority(a) - getEventPriority(b);
+      if (priority !== 0) return priority;
+      return a.start.getTime() - b.start.getTime();
+    });
+  }, [events]);
+
+  return (
+    <Card className="lg:hidden">
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base">Day agenda</CardTitle>
+        <CardDescription>{isToday ? "Today" : format(selectedDate, "EEEE, MMM d")}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {sorted.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing scheduled.</p>
+        ) : (
+          <div className="max-h-64 overflow-y-auto">
+            <div className="divide-y">
+              {sorted.map((event) => {
+                const timeLabel = formatEventTime(event);
+                const statusLabel = event.type === "time_off" ? "Time off" : getBookingStatusLabel(event.status);
+
+                return (
+                  <div key={`${event.type}-${event.id}`} className="flex items-center gap-3 py-3">
+                    <span className={cn("h-2 w-2 rounded-full shrink-0", getEventDotClass(event))} aria-hidden="true" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium truncate">
+                        {event.type === "time_off" ? event.title || "Time off" : event.title || "Booking"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {timeLabel ? `${timeLabel} • ${statusLabel}` : statusLabel}
+                      </p>
+                    </div>
+
+                    {event.type === "booking" ? (
+                      <Button asChild variant="outline" size="sm" className="shrink-0">
+                        <Link href={`/dashboard/provider/bookings/${event.id}`}>View</Link>
+                      </Button>
+                    ) : (
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="icon" className="shrink-0" title="Delete time off">
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Delete time off?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              This will remove the block from your calendar.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancel</AlertDialogCancel>
+                            <AlertDialogAction onClick={() => onDeleteTimeOff(event.id)}>
+                              Delete
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -299,7 +414,6 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents.map(normalizeEvent));
   const [timeOffs, setTimeOffs] = useState<CalendarEvent[]>(initialTimeOffs.map(normalizeEvent));
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [dayDetailsOpen, setDayDetailsOpen] = useState(false);
   const [legendOpen, setLegendOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [startTime, setStartTime] = useState("09:00");
@@ -437,12 +551,6 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   };
 
   useEffect(() => {
-    if (isDesktop && dayDetailsOpen) {
-      setDayDetailsOpen(false);
-    }
-  }, [isDesktop, dayDetailsOpen]);
-
-  useEffect(() => {
     if (isDesktop && legendOpen) {
       setLegendOpen(false);
     }
@@ -450,21 +558,18 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
   const handleSelectDay = (day: Date) => {
     setSelectedDate(day);
-    if (!isDesktop) {
-      setDayDetailsOpen(true);
-    }
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center justify-between gap-2">
           <Button variant="outline" size="icon" onClick={() => setCursor(addMonths(cursor, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="min-w-0 font-semibold flex items-center gap-2">
+          <div className="font-semibold flex items-center gap-2">
             <CalendarDays className="h-4 w-4 shrink-0" />
-            <span className="truncate">{range.headerLabel}</span>
+            <span className="text-sm sm:text-base">{range.headerLabel}</span>
             {isRangeLoading && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
           </div>
           <Button variant="outline" size="icon" onClick={() => setCursor(addMonths(cursor, 1))}>
@@ -561,7 +666,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                           title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                           aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
                           className={cn(
-                            "relative min-h-16 sm:min-h-23 rounded-md border p-2 text-left transition-colors",
+                            "relative h-16 sm:h-23 rounded-md border border-border/60 p-2 text-left transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             day.inCurrentMonth ? "bg-background" : "bg-muted/30",
                             isToday && !isSelected && "border-primary/40 bg-primary/5",
@@ -575,7 +680,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                             </span>
                           </div>
 
-                          <DayIndicators events={dayEventsForDate} />
+                          <DayDots events={dayEventsForDate} />
                         </button>
                       );
                     })}
@@ -584,6 +689,8 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
               </div>
             </CardContent>
           </Card>
+
+          <DayAgenda selectedDate={selectedDate} events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
 
           {/* Desktop legend */}
           <div className="hidden lg:flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -622,19 +729,6 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             <DayDetailsContent events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
           </CardContent>
         </Card>
-
-        {/* Mobile: bottom sheet opened by tapping a day */}
-        <Sheet open={dayDetailsOpen} onOpenChange={setDayDetailsOpen}>
-          <SheetContent side="bottom" className="lg:hidden rounded-t-lg pb-[env(safe-area-inset-bottom)]">
-            <SheetHeader>
-              <SheetTitle>Day details</SheetTitle>
-              <SheetDescription>{format(selectedDate, "EEEE, dd MMM yyyy")}</SheetDescription>
-            </SheetHeader>
-            <div className="px-4 pb-4 overflow-y-auto">
-              <DayDetailsContent events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
-            </div>
-          </SheetContent>
-        </Sheet>
 
         <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
           <SheetContent side="bottom" className="lg:hidden rounded-t-lg pb-[env(safe-area-inset-bottom)]">
