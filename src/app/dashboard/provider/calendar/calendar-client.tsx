@@ -4,16 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   addMonths,
-  addWeeks,
   differenceInMinutes,
   endOfDay,
   endOfMonth,
-  endOfWeek,
   format,
   isWithinInterval,
   startOfDay,
   startOfMonth,
-  startOfWeek,
 } from "date-fns";
 import type { DateRange } from "react-day-picker";
 import { Badge } from "@/components/ui/badge";
@@ -21,7 +18,6 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar";
 import {
   AlertDialog,
@@ -46,19 +42,6 @@ type ApiEvent = (Omit<BookingEvent, "start" | "end"> | Omit<TimeOffEvent, "start
   end: string | Date;
 };
 type CalendarApiResponse = { bookings?: ApiEvent[]; timeOffs?: ApiEvent[] };
-
-const statusPillClasses: Record<string, string> = {
-  pending: "bg-yellow-500/15 text-yellow-800 dark:text-yellow-200",
-  accepted: "bg-blue-500/15 text-blue-800 dark:text-blue-200",
-  paid: "bg-green-500/15 text-green-800 dark:text-green-200",
-  completed: "bg-muted text-foreground",
-  time_off: "bg-destructive/10 text-destructive",
-};
-
-function getEventLabel(event: CalendarEvent) {
-  if (event.type === "time_off") return "Time off";
-  return getBookingStatusLabel(event.status);
-}
 
 function getEventDotClass(event: CalendarEvent) {
   if (event.type === "time_off") return "bg-destructive";
@@ -113,8 +96,115 @@ function isSameDay(a: Date, b: Date) {
   return a.toDateString() === b.toDateString();
 }
 
+function getEventPriority(event: CalendarEvent) {
+  if (event.type === "time_off") return 0;
+  switch (event.status) {
+    case "pending":
+      return 1;
+    case "accepted":
+      return 2;
+    case "paid":
+      return 3;
+    case "completed":
+      return 4;
+    default:
+      return 5;
+  }
+}
+
+function buildDaySummary(events: CalendarEvent[]) {
+  if (events.length === 0) return "No events";
+
+  const counts = {
+    pending: 0,
+    accepted: 0,
+    paid: 0,
+    completed: 0,
+    time_off: 0,
+    other: 0,
+  };
+
+  for (const event of events) {
+    if (event.type === "time_off") {
+      counts.time_off += 1;
+      continue;
+    }
+    switch (event.status) {
+      case "pending":
+        counts.pending += 1;
+        break;
+      case "accepted":
+        counts.accepted += 1;
+        break;
+      case "paid":
+        counts.paid += 1;
+        break;
+      case "completed":
+        counts.completed += 1;
+        break;
+      default:
+        counts.other += 1;
+        break;
+    }
+  }
+
+  const parts: string[] = [];
+  if (counts.pending) parts.push(`${counts.pending} pending`);
+  if (counts.accepted) parts.push(`${counts.accepted} accepted`);
+  if (counts.paid) parts.push(`${counts.paid} paid`);
+  if (counts.completed) parts.push(`${counts.completed} completed`);
+  if (counts.time_off) parts.push(`${counts.time_off} time off`);
+  if (counts.other) parts.push(`${counts.other} other`);
+
+  return `${events.length} event${events.length === 1 ? "" : "s"}: ${parts.join(", ")}`;
+}
+
+function DayIndicators({ events }: { events: CalendarEvent[] }) {
+  if (events.length === 0) return null;
+
+  const sorted = [...events].sort((a, b) => {
+    const priority = getEventPriority(a) - getEventPriority(b);
+    if (priority !== 0) return priority;
+    return a.start.getTime() - b.start.getTime();
+  });
+
+  const visibleDots = sorted.slice(0, 3);
+  const remaining = Math.max(0, sorted.length - visibleDots.length);
+
+  return (
+    <>
+      <span className="sr-only">{buildDaySummary(events)}</span>
+
+      <span
+        aria-hidden="true"
+        className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium leading-none text-secondary-foreground"
+      >
+        {events.length}
+      </span>
+
+      <span aria-hidden="true" className="absolute bottom-2 left-2 flex items-center gap-1">
+        {visibleDots.map((event) => (
+          <span
+            key={`${event.type}-${event.id}`}
+            className={cn("h-2 w-2 rounded-full", getEventDotClass(event))}
+            title={
+              event.type === "time_off"
+                ? event.title
+                  ? `Time off • ${event.title}`
+                  : "Time off"
+                : `${getBookingStatusLabel(event.status)} • ${event.title}`
+            }
+          />
+        ))}
+        {remaining > 0 && (
+          <span className="text-[10px] font-medium leading-none text-muted-foreground">+{remaining}</span>
+        )}
+      </span>
+    </>
+  );
+}
+
 export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { initialEvents: CalendarEvent[]; initialTimeOffs: CalendarEvent[] }) {
-  const [view, setView] = useState<"month" | "week">("month");
   const [cursor, setCursor] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents.map(normalizeEvent));
   const [timeOffs, setTimeOffs] = useState<CalendarEvent[]>(initialTimeOffs.map(normalizeEvent));
@@ -131,15 +221,12 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   // NOTE: startOfMonth/startOfWeek etc return new Date objects each call.
   // Memoize them so effects don't re-trigger on every render.
   const range = useMemo(() => {
-    const weekStart = startOfWeek(cursor);
-    const weekEnd = endOfWeek(cursor);
-    const monthLabel = format(cursor, "MMMM yyyy");
-    const rangeStart = view === "month" ? startOfMonth(cursor) : weekStart;
-    const rangeEnd = view === "month" ? endOfMonth(cursor) : weekEnd;
-    const headerLabel = view === "month" ? monthLabel : `Week of ${format(weekStart, "dd MMM yyyy")}`;
+    const rangeStart = startOfMonth(cursor);
+    const rangeEnd = endOfMonth(cursor);
+    const headerLabel = format(cursor, "MMMM yyyy");
 
-    return { weekStart, weekEnd, rangeStart, rangeEnd, headerLabel };
-  }, [cursor, view]);
+    return { rangeStart, rangeEnd, headerLabel };
+  }, [cursor]);
 
   const weeks = useMemo(() => buildCalendarGrid(cursor), [cursor]);
   const allEvents = useMemo(() => [...events, ...timeOffs], [events, timeOffs]);
@@ -264,9 +351,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
           <Button
             variant="outline"
             size="icon"
-            onClick={() =>
-              setCursor(view === "month" ? addMonths(cursor, -1) : addWeeks(cursor, -1))
-            }
+            onClick={() => setCursor(addMonths(cursor, -1))}
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
@@ -277,20 +362,12 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
           <Button
             variant="outline"
             size="icon"
-            onClick={() =>
-              setCursor(view === "month" ? addMonths(cursor, 1) : addWeeks(cursor, 1))
-            }
+            onClick={() => setCursor(addMonths(cursor, 1))}
           >
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
         <div className="flex items-center gap-2">
-          <Tabs value={view} onValueChange={(v) => setView(v as "month" | "week")}>
-            <TabsList>
-              <TabsTrigger value="month">Month</TabsTrigger>
-              <TabsTrigger value="week">Week</TabsTrigger>
-            </TabsList>
-          </Tabs>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button>
@@ -351,186 +428,52 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-3">
-          {view === "month" ? (
-            <>
-              <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
-                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                  <div key={d} className="text-center">
-                    {d}
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-2">
-                {weeks.map((week, idx) => (
-                  <div key={idx} className="grid grid-cols-7 gap-2">
-                    {week.map((day) => {
-                      const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
-                      const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
-                      const isSelected = isSameDay(day.date, selectedDate);
-                      const maxBadges = 2;
-                      return (
-                        <button
-                          key={day.date.toISOString()}
-                          onClick={() => setSelectedDate(day.date)}
-                          title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
-                          className={cn(
-                            "min-h-17 md:min-h-23 rounded border p-1 text-left transition",
-                            day.inCurrentMonth ? "bg-background" : "bg-muted/30",
-                            isSelected && "ring-2 ring-primary",
-                            hasTimeOff && "border-destructive/30 bg-destructive/5",
-                          )}
-                        >
-                          <div className="flex justify-between text-xs">
-                            <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
-                              {format(day.date, "d")}
-                            </span>
-                            {dayEventsForDate.length > 0 && (
-                              <Badge variant="secondary" className="text-[10px] px-1.5">
-                                {dayEventsForDate.length}
-                              </Badge>
-                            )}
-                          </div>
-                          {/* Mobile: compact dots (avoid unreadable truncated pills) */}
-                          <div className="mt-2 flex flex-wrap items-center gap-1 sm:hidden">
-                            {dayEventsForDate.slice(0, 4).map((event) => (
-                              <span
-                                key={`${event.type}-${event.id}`}
-                                className={cn("h-2 w-2 rounded-full", getEventDotClass(event))}
-                                aria-label={
-                                  event.type === "time_off"
-                                    ? "Time off"
-                                    : getBookingStatusLabel(event.status)
-                                }
-                                title={
-                                  event.type === "time_off"
-                                    ? event.title
-                                      ? `Time off • ${event.title}`
-                                      : "Time off"
-                                    : `${getBookingStatusLabel(event.status)} • ${event.title}`
-                                }
-                              />
-                            ))}
-                            {dayEventsForDate.length > 4 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                +{dayEventsForDate.length - 4}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Desktop/tablet: show readable pills */}
-                          <div className="mt-1 hidden space-y-1 sm:block">
-                            {dayEventsForDate.slice(0, maxBadges).map((event) => (
-                              <div
-                                key={`${event.type}-${event.id}`}
-                                title={
-                                  event.type === "time_off"
-                                    ? event.title
-                                      ? `Time off • ${event.title}`
-                                      : "Time off"
-                                    : `${getBookingStatusLabel(event.status)} • ${event.title}`
-                                }
-                                className={cn(
-                                  "flex items-center gap-1 text-[11px] rounded px-1 py-0.5",
-                                  statusPillClasses[event.status] ?? "bg-secondary text-secondary-foreground",
-                                )}
-                              >
-                                <span className={cn("h-1.5 w-1.5 rounded-full", getEventDotClass(event))} />
-                                <span className="truncate">
-                                  {event.type === "time_off" ? "Time off" : event.title || getEventLabel(event)}
-                                </span>
-                              </div>
-                            ))}
-                            {dayEventsForDate.length > maxBadges && (
-                              <div className="text-[10px] text-muted-foreground">
-                                +{dayEventsForDate.length - maxBadges} more
-                              </div>
-                            )}
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="overflow-x-auto">
-              <div className="min-w-180 space-y-2">
-                <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
-                  {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date(range.weekStart);
-                    date.setDate(range.weekStart.getDate() + i);
-                    const label = format(date, "EEE d");
-                    return (
-                      <div key={label} className="text-center">
-                        {label}
-                      </div>
-                    );
-                  })}
+          <>
+            <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                <div key={d} className="text-center">
+                  {d}
                 </div>
-                <div className="grid grid-cols-7 gap-2">
-                  {Array.from({ length: 7 }).map((_, i) => {
-                    const date = new Date(range.weekStart);
-                    date.setDate(range.weekStart.getDate() + i);
-                    const dayEventsForDate = allEvents.filter((e) => isOnDay(e, date));
-                    const hasTimeOff = timeOffs.some((t) => isOnDay(t, date));
-                    const isSelected = isSameDay(date, selectedDate);
-                    const maxBadges = 4;
+              ))}
+            </div>
+            <div className="space-y-2">
+              {weeks.map((week, idx) => (
+                <div key={idx} className="grid grid-cols-7 gap-2">
+                  {week.map((day) => {
+                    const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
+                    const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
+                    const isSelected = isSameDay(day.date, selectedDate);
+                    const isToday = isSameDay(day.date, new Date());
+
                     return (
                       <button
-                        key={date.toISOString()}
-                        onClick={() => setSelectedDate(date)}
+                        key={day.date.toISOString()}
+                        onClick={() => setSelectedDate(day.date)}
                         title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
+                        aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
                         className={cn(
-                          "min-h-30 rounded border p-2 text-left transition",
-                          "bg-background",
-                          isSelected && "ring-2 ring-primary",
+                          "relative min-h-16 sm:min-h-23 rounded-md border p-2 text-left transition-colors",
+                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                          day.inCurrentMonth ? "bg-background" : "bg-muted/30",
+                          isToday && !isSelected && "border-primary/40 bg-primary/5",
+                          isSelected && "ring-2 ring-primary bg-primary/5",
                           hasTimeOff && "border-destructive/30 bg-destructive/5",
                         )}
                       >
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-medium text-foreground">{format(date, "d")}</span>
-                          {dayEventsForDate.length > 0 && (
-                            <Badge variant="secondary" className="text-[10px]">
-                              {dayEventsForDate.length}
-                            </Badge>
-                          )}
+                        <div className="text-xs font-medium">
+                          <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
+                            {format(day.date, "d")}
+                          </span>
                         </div>
-                        <div className="mt-2 space-y-1">
-                          {dayEventsForDate.slice(0, maxBadges).map((event) => (
-                            <div
-                              key={`${event.type}-${event.id}`}
-                              title={
-                                event.type === "time_off"
-                                  ? event.title
-                                    ? `Time off • ${event.title}`
-                                    : "Time off"
-                                  : `${getBookingStatusLabel(event.status)} • ${event.title}`
-                              }
-                              className={cn(
-                                "flex items-center gap-1 text-[11px] rounded px-1 py-0.5",
-                                statusPillClasses[event.status] ?? "bg-secondary text-secondary-foreground",
-                              )}
-                            >
-                              <span className={cn("h-1.5 w-1.5 rounded-full", getEventDotClass(event))} />
-                              <span className="truncate">
-                                {event.type === "time_off" ? "Time off" : event.title || getEventLabel(event)}
-                              </span>
-                            </div>
-                          ))}
-                          {dayEventsForDate.length > maxBadges && (
-                            <div className="text-[10px] text-muted-foreground">
-                              +{dayEventsForDate.length - maxBadges} more
-                            </div>
-                          )}
-                        </div>
+
+                        <DayIndicators events={dayEventsForDate} />
                       </button>
                     );
                   })}
                 </div>
-              </div>
+              ))}
             </div>
-          )}
+          </>
 
           <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span className="flex items-center gap-1">
