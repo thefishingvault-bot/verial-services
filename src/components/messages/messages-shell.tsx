@@ -1,10 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useUser } from "@clerk/nextjs";
-import { ArrowLeft, Check, CheckCheck, Clock, Loader2, Paperclip, Send, Smile } from "lucide-react";
+import { ArrowLeft, Check, CheckCheck, ChevronDown, Clock, Loader2, Paperclip, Send, Smile } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -96,6 +96,11 @@ const getAttachments = (value: unknown): MessageAttachment[] => {
 
 const EMOJI_SET = ["😀", "😁", "😂", "😊", "😍", "😘", "😅", "😎", "🤔", "😢", "😡", "👍", "🙏", "👏", "🔥", "🎉", "💯", "❤️", "✨", "✅", "📅", "📌", "📎", "🚀"];
 
+const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+const SAVED_REPLIES_COLLAPSED_KEY_MOBILE = "verial:savedRepliesCollapsed:provider:mobile";
+const SAVED_REPLIES_COLLAPSED_KEY_DESKTOP = "verial:savedRepliesCollapsed:provider:desktop";
+
 type SavedReply = {
 	id: string;
 	title: string;
@@ -127,6 +132,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const [savedRepliesStatus, setSavedRepliesStatus] = useState<"idle" | "loading" | "available" | "upgrade" | "error">("idle");
 	const [savedReplySelectedId, setSavedReplySelectedId] = useState<string | null>(null);
 	const [showSavedRepliesManager, setShowSavedRepliesManager] = useState(false);
+	const [savedRepliesCollapsed, setSavedRepliesCollapsed] = useState(false);
 	const [newReplyTitle, setNewReplyTitle] = useState("");
 	const [newReplyBody, setNewReplyBody] = useState("");
 	const [isSavingReply, setIsSavingReply] = useState(false);
@@ -578,12 +584,35 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		void loadSavedReplies();
 	}, [loadSavedReplies]);
 
-	useEffect(() => {
+	useIsomorphicLayoutEffect(() => {
 		const check = () => setIsMobile(typeof window !== "undefined" && window.innerWidth < 1024);
 		check();
 		window.addEventListener("resize", check);
 		return () => window.removeEventListener("resize", check);
 	}, []);
+
+	const savedRepliesCollapsedStorageKey = useMemo(
+		() => (isMobile ? SAVED_REPLIES_COLLAPSED_KEY_MOBILE : SAVED_REPLIES_COLLAPSED_KEY_DESKTOP),
+		[isMobile],
+	);
+
+	useIsomorphicLayoutEffect(() => {
+		if (!isProviderView) return;
+		try {
+			const raw = window.localStorage.getItem(savedRepliesCollapsedStorageKey);
+			if (raw === null) {
+				setSavedRepliesCollapsed(isMobile);
+				return;
+			}
+			setSavedRepliesCollapsed(raw === "1" || raw === "true");
+		} catch {
+			setSavedRepliesCollapsed(isMobile);
+		}
+	}, [isProviderView, isMobile, savedRepliesCollapsedStorageKey]);
+
+	useEffect(() => {
+		if (savedRepliesCollapsed) setShowSavedRepliesManager(false);
+	}, [savedRepliesCollapsed]);
 
 	useEffect(() => {
 		if (activeId) void loadThread(activeId);
@@ -598,6 +627,19 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 			return `${prev.trimEnd()}\n\n${found.body}`;
 		});
 	}, [savedReplySelectedId, savedReplies]);
+
+	const toggleSavedRepliesCollapsed = useCallback(() => {
+		setSavedRepliesCollapsed((prev) => {
+			const next = !prev;
+			if (next) setShowSavedRepliesManager(false);
+			try {
+				window.localStorage.setItem(savedRepliesCollapsedStorageKey, next ? "1" : "0");
+			} catch {
+				// ignore
+			}
+			return next;
+		});
+	}, [savedRepliesCollapsedStorageKey]);
 
 	const createSavedReply = useCallback(async () => {
 		if (!isProviderView) return;
@@ -932,50 +974,66 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 							{isProviderView && (
 								<div className="mb-3 space-y-2">
 									<div className="flex flex-wrap items-center gap-2">
+										<Button
+											size="icon"
+											variant="ghost"
+											className="h-8 w-8"
+											onClick={toggleSavedRepliesCollapsed}
+											aria-expanded={!savedRepliesCollapsed}
+											aria-controls="saved-replies-panel"
+										>
+											<ChevronDown className={cn("h-4 w-4 transition-transform", !savedRepliesCollapsed && "rotate-180")} />
+											<span className="sr-only">{savedRepliesCollapsed ? "Show saved replies" : "Hide saved replies"}</span>
+										</Button>
 										<span className="text-xs text-muted-foreground">Saved replies</span>
-										{savedRepliesStatus === "upgrade" ? (
-											<div className="flex items-center gap-2 text-xs">
-												<span className="text-muted-foreground">Pro/Elite feature</span>
-												<Button asChild size="sm" variant="outline">
-													<Link href="/dashboard/provider/billing">Upgrade</Link>
-												</Button>
-											</div>
-										) : (
-											<>
-												<Select value={savedReplySelectedId ?? ""} onValueChange={(v) => setSavedReplySelectedId(v)}>
-													<SelectTrigger className="h-8 w-55">
-														<SelectValue placeholder={savedRepliesStatus === "loading" ? "Loading…" : "Choose…"} />
-													</SelectTrigger>
-													<SelectContent>
-														{savedReplies.length === 0
-															? (
-																<SelectItem value="__none" disabled>
-																	No saved replies yet
-																</SelectItem>
-															)
-															: savedReplies.map((r) => (
-																<SelectItem key={r.id} value={r.id}>
-																	{r.title}
-																</SelectItem>
-															))}
-												</SelectContent>
-											</Select>
-											<Button
-												size="sm"
-												variant="outline"
-												disabled={!savedReplySelectedId || savedReplySelectedId === "__none"}
-												onClick={insertSavedReply}
-											>
-												Insert
-											</Button>
-											<Button size="sm" variant="ghost" onClick={() => setShowSavedRepliesManager((v) => !v)}>
-												{showSavedRepliesManager ? "Hide" : "Manage"}
-											</Button>
-										</>
-									)}
-								</div>
+									</div>
 
-								{showSavedRepliesManager && savedRepliesStatus !== "upgrade" && (
+									{!savedRepliesCollapsed && (
+										<div id="saved-replies-panel" className="space-y-2">
+											<div className="flex flex-wrap items-center gap-2">
+												{savedRepliesStatus === "upgrade" ? (
+													<div className="flex items-center gap-2 text-xs">
+														<span className="text-muted-foreground">Pro/Elite feature</span>
+														<Button asChild size="sm" variant="outline">
+															<Link href="/dashboard/provider/billing">Upgrade</Link>
+														</Button>
+													</div>
+												) : (
+													<>
+														<Select value={savedReplySelectedId ?? ""} onValueChange={(v) => setSavedReplySelectedId(v)}>
+															<SelectTrigger className="h-8 w-55">
+																<SelectValue placeholder={savedRepliesStatus === "loading" ? "Loading…" : "Choose…"} />
+															</SelectTrigger>
+															<SelectContent>
+																{savedReplies.length === 0
+																	? (
+																		<SelectItem value="__none" disabled>
+																			No saved replies yet
+																		</SelectItem>
+																	)
+																	: savedReplies.map((r) => (
+																		<SelectItem key={r.id} value={r.id}>
+																			{r.title}
+																		</SelectItem>
+																	))}
+															</SelectContent>
+														</Select>
+														<Button
+															size="sm"
+															variant="outline"
+															disabled={!savedReplySelectedId || savedReplySelectedId === "__none"}
+															onClick={insertSavedReply}
+														>
+															Insert
+														</Button>
+														<Button size="sm" variant="ghost" onClick={() => setShowSavedRepliesManager((v) => !v)}>
+															{showSavedRepliesManager ? "Hide" : "Manage"}
+														</Button>
+													</>
+												)}
+											</div>
+
+											{showSavedRepliesManager && savedRepliesStatus !== "upgrade" && (
 									<Card className="p-3">
 										<div className="space-y-3">
 											<div className="space-y-2">
@@ -1033,6 +1091,8 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 										)}
 									</div>
 								</Card>
+									)}
+								</div>
 							)}
 						</div>
 					)}
