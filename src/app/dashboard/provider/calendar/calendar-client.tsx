@@ -12,6 +12,7 @@ import {
   startOfDay,
   startOfMonth,
 } from "date-fns";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import type { DateRange } from "react-day-picker";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -43,6 +44,17 @@ type ApiEvent = (Omit<BookingEvent, "start" | "end"> | Omit<TimeOffEvent, "start
   end: string | Date;
 };
 type CalendarApiResponse = { bookings?: ApiEvent[]; timeOffs?: ApiEvent[] };
+
+const NZ_TIME_ZONE = "Pacific/Auckland";
+
+function toNzDayKey(date: Date) {
+  return formatInTimeZone(date, NZ_TIME_ZONE, "yyyy-MM-dd");
+}
+
+function fromNzDayKey(dayKey: string) {
+  // Use midday to avoid edge cases around DST transitions.
+  return fromZonedTime(`${dayKey}T12:00:00`, NZ_TIME_ZONE);
+}
 
 function getEventDotClass(event: CalendarEvent) {
   if (event.type === "time_off") return "bg-destructive";
@@ -220,7 +232,7 @@ function DayDots({ events }: { events: CalendarEvent[] }) {
     <>
       <span className="sr-only">{buildDaySummary(events)}</span>
 
-      <span aria-hidden="true" className="mt-1 flex items-center gap-1 overflow-hidden">
+      <span aria-hidden="true" className="mt-1 flex flex-nowrap items-center justify-center gap-1 overflow-hidden">
         {distinctStatuses.map((status) => {
           const exampleEvent = events.find((e) => getStatusKey(e) === status);
           if (!exampleEvent) return null;
@@ -421,7 +433,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [cursor, setCursor] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents.map(normalizeEvent));
   const [timeOffs, setTimeOffs] = useState<CalendarEvent[]>(initialTimeOffs.map(normalizeEvent));
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedDayKey, setSelectedDayKey] = useState(() => toNzDayKey(new Date()));
   const [legendOpen, setLegendOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [startTime, setStartTime] = useState("09:00");
@@ -444,6 +456,15 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
   const rows = useMemo(() => buildCalendarGrid(cursor), [cursor]);
   const allEvents = useMemo(() => [...events, ...timeOffs], [events, timeOffs]);
+
+  const selectedDate = useMemo(() => {
+    for (const row of rows) {
+      for (const day of row) {
+        if (toNzDayKey(day.date) === selectedDayKey) return day.date;
+      }
+    }
+    return fromNzDayKey(selectedDayKey);
+  }, [rows, selectedDayKey]);
 
   const dayEvents = useMemo(() => allEvents.filter((e) => isOnDay(e, selectedDate)), [allEvents, selectedDate]);
 
@@ -468,7 +489,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
   useEffect(() => {
     if (!isWithinInterval(selectedDate, { start: startOfDay(range.rangeStart), end: endOfDay(range.rangeEnd) })) {
-      setSelectedDate(range.rangeStart);
+      setSelectedDayKey(toNzDayKey(range.rangeStart));
     }
   }, [range, selectedDate]);
 
@@ -565,7 +586,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   }, [isDesktop, legendOpen]);
 
   const handleSelectDay = (day: Date) => {
-    setSelectedDate(day);
+    setSelectedDayKey(toNzDayKey(day));
   };
 
   return (
@@ -663,26 +684,28 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                   <div key={idx} className="grid grid-cols-7 gap-2">
                     {row.map((day) => {
                       const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
+                      const dayKey = toNzDayKey(day.date);
                       const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
-                      const isSelected = isSameDay(day.date, selectedDate);
-                      const isToday = isSameDay(day.date, new Date());
+                      const isSelected = dayKey === selectedDayKey;
+                      const isToday = dayKey === toNzDayKey(new Date());
 
                       return (
                         <button
-                          key={day.date.toISOString()}
+                          key={dayKey}
                           onClick={() => handleSelectDay(day.date)}
                           title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                           aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
                           className={cn(
-                            "relative h-16 sm:h-23 rounded-md border border-border/60 p-2 text-left transition-colors",
+                            "relative h-16 sm:h-23 rounded-md border border-border/60 p-2 text-center transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             day.inCurrentMonth ? "bg-background" : "bg-muted/30",
-                            isToday && !isSelected && "border-primary/40 bg-primary/5",
+                            // Keep "today" visible but avoid a second outline that looks like another selection.
+                            isToday && !isSelected && "bg-primary/5",
                             isSelected && "ring-1 ring-primary bg-primary/5",
                             hasTimeOff && "border-destructive/30 bg-destructive/5",
                           )}
                         >
-                          <div className="flex h-full flex-col">
+                          <div className="flex h-full flex-col items-center">
                             <div className="text-[12px] font-medium leading-none">
                               <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
                                 {format(day.date, "d")}
