@@ -41,7 +41,7 @@ export default async function ProviderCalendarPage() {
   const data = await loadProviderCalendar({ providerId: provider.id });
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8 space-y-4">
+    <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Availability Calendar</h1>

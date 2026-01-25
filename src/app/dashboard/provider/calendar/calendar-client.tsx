@@ -456,32 +456,27 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setCursor(addMonths(cursor, -1))}
-          >
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <Button variant="outline" size="icon" onClick={() => setCursor(addMonths(cursor, -1))}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="font-semibold flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" /> {range.headerLabel}
-            {isRangeLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+          <div className="min-w-0 font-semibold flex items-center gap-2">
+            <CalendarDays className="h-4 w-4 shrink-0" />
+            <span className="truncate">{range.headerLabel}</span>
+            {isRangeLoading && <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />}
           </div>
-          <Button
-            variant="outline"
-            size="icon"
-            onClick={() => setCursor(addMonths(cursor, 1))}
-          >
+          <Button variant="outline" size="icon" onClick={() => setCursor(addMonths(cursor, 1))}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="shrink-0">
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button>
-                <PlusCircle className="mr-2 h-4 w-4" /> Add Time Off
+              <Button size="sm" className="h-9">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                <span className="sm:hidden">Time off</span>
+                <span className="hidden sm:inline">Add Time Off</span>
               </Button>
             </DialogTrigger>
             <DialogContent>
@@ -538,52 +533,56 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <div className="space-y-3">
-          <>
-            <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
-              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-                <div key={d} className="text-center">
-                  {d}
-                </div>
-              ))}
-            </div>
-            <div className="space-y-2">
-              {weeks.map((week, idx) => (
-                <div key={idx} className="grid grid-cols-7 gap-2">
-                  {week.map((day) => {
-                    const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
-                    const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
-                    const isSelected = isSameDay(day.date, selectedDate);
-                    const isToday = isSameDay(day.date, new Date());
+          <Card>
+            <CardHeader className="pb-2">
+              <div className="grid grid-cols-7 gap-2 text-xs font-medium text-muted-foreground">
+                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                  <div key={d} className="text-center">
+                    {d}
+                  </div>
+                ))}
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                {weeks.map((week, idx) => (
+                  <div key={idx} className="grid grid-cols-7 gap-2">
+                    {week.map((day) => {
+                      const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
+                      const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
+                      const isSelected = isSameDay(day.date, selectedDate);
+                      const isToday = isSameDay(day.date, new Date());
 
-                    return (
-                      <button
-                        key={day.date.toISOString()}
-                        onClick={() => handleSelectDay(day.date)}
-                        title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
-                        aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
-                        className={cn(
-                          "relative min-h-16 sm:min-h-23 rounded-md border p-2 text-left transition-colors",
-                          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                          day.inCurrentMonth ? "bg-background" : "bg-muted/30",
-                          isToday && !isSelected && "border-primary/40 bg-primary/5",
-                          isSelected && "ring-2 ring-primary bg-primary/5",
-                          hasTimeOff && "border-destructive/30 bg-destructive/5",
-                        )}
-                      >
-                        <div className="text-xs font-medium">
-                          <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
-                            {format(day.date, "d")}
-                          </span>
-                        </div>
+                      return (
+                        <button
+                          key={day.date.toISOString()}
+                          onClick={() => handleSelectDay(day.date)}
+                          title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
+                          aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
+                          className={cn(
+                            "relative min-h-16 sm:min-h-23 rounded-md border p-2 text-left transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            day.inCurrentMonth ? "bg-background" : "bg-muted/30",
+                            isToday && !isSelected && "border-primary/40 bg-primary/5",
+                            isSelected && "ring-2 ring-primary bg-primary/5",
+                            hasTimeOff && "border-destructive/30 bg-destructive/5",
+                          )}
+                        >
+                          <div className="text-xs font-medium">
+                            <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
+                              {format(day.date, "d")}
+                            </span>
+                          </div>
 
-                        <DayIndicators events={dayEventsForDate} />
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </div>
-          </>
+                          <DayIndicators events={dayEventsForDate} />
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Desktop legend */}
           <div className="hidden lg:flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
