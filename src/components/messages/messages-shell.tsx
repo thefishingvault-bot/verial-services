@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
 	Select,
 	SelectContent,
@@ -68,6 +69,33 @@ interface Props {
 const PAGE_SIZE = 50;
 const HEARTBEAT_MS = 25000;
 
+type MessageAttachment = {
+	type: "image";
+	url: string;
+	name?: string;
+	size?: number;
+};
+
+const getAttachments = (value: unknown): MessageAttachment[] => {
+	if (!Array.isArray(value)) return [];
+	const out: MessageAttachment[] = [];
+	for (const item of value) {
+		if (!item || typeof item !== "object") continue;
+		const obj = item as { type?: unknown; url?: unknown; name?: unknown; size?: unknown };
+		if (obj.type !== "image") continue;
+		if (typeof obj.url !== "string" || !obj.url) continue;
+		out.push({
+			type: "image",
+			url: obj.url,
+			name: typeof obj.name === "string" ? obj.name : undefined,
+			size: typeof obj.size === "number" ? obj.size : undefined,
+		});
+	}
+	return out;
+};
+
+const EMOJI_SET = ["😀", "😁", "😂", "😊", "😍", "😘", "😅", "😎", "🤔", "😢", "😡", "👍", "🙏", "👏", "🔥", "🎉", "💯", "❤️", "✨", "✅", "📅", "📌", "📎", "🚀"];
+
 type SavedReply = {
 	id: string;
 	title: string;
@@ -92,6 +120,8 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const [presence, setPresence] = useState<Record<string, PresenceRecord>>({});
 	const [typing, setTyping] = useState<Record<string, boolean>>({});
 	const [draft, setDraft] = useState("");
+	const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
+	const [composerError, setComposerError] = useState<string | null>(null);
 	const isProviderView = basePath.startsWith("/dashboard/provider/messages");
 	const [savedReplies, setSavedReplies] = useState<SavedReply[]>([]);
 	const [savedRepliesStatus, setSavedRepliesStatus] = useState<"idle" | "loading" | "available" | "upgrade" | "error">("idle");
@@ -102,6 +132,8 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const [isSavingReply, setIsSavingReply] = useState(false);
 	const listRef = useRef<HTMLDivElement | null>(null);
 	const scrollRef = useRef<HTMLDivElement | null>(null);
+	const fileInputRef = useRef<HTMLInputElement | null>(null);
+	const composerRef = useRef<HTMLTextAreaElement | null>(null);
 
 	const activeState = activeId ? threadState[activeId] : undefined;
 	const orderedMessages = useMemo(() => {
@@ -264,10 +296,67 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 		});
 	}, []);
 
+	const insertIntoComposer = useCallback((text: string) => {
+		const el = composerRef.current;
+		if (!el) {
+			setDraft((prev) => `${prev}${text}`);
+			return;
+		}
+
+		const start = el.selectionStart ?? el.value.length;
+		const end = el.selectionEnd ?? el.value.length;
+		setDraft((prev) => {
+			const before = prev.slice(0, start);
+			const after = prev.slice(end);
+			return `${before}${text}${after}`;
+		});
+		requestAnimationFrame(() => {
+			el.focus();
+			const next = start + text.length;
+			el.setSelectionRange(next, next);
+		});
+	}, []);
+
+	const presignAndUploadAttachment = useCallback(async (file: File): Promise<MessageAttachment> => {
+		setComposerError(null);
+		const maxBytes = 5 * 1024 * 1024;
+		if (!file.type.startsWith("image/")) {
+			throw new Error("Only image attachments are supported.");
+		}
+		if (file.size > maxBytes) {
+			throw new Error("Image exceeds 5MB limit.");
+		}
+
+		const presignRes = await fetch("/api/uploads/presign-message-attachment", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ fileType: file.type, fileSize: file.size }),
+		});
+		if (!presignRes.ok) {
+			throw new Error("Failed to prepare upload.");
+		}
+		const data = (await presignRes.json()) as { uploadUrl?: string; publicUrl?: string };
+		if (!data.uploadUrl || !data.publicUrl) {
+			throw new Error("Upload configuration missing.");
+		}
+
+		const putRes = await fetch(data.uploadUrl, {
+			method: "PUT",
+			headers: { "Content-Type": file.type },
+			body: file,
+		});
+		if (!putRes.ok) {
+			throw new Error("Upload failed.");
+		}
+
+		return { type: "image", url: data.publicUrl, name: file.name, size: file.size };
+	}, []);
+
 	const sendMessage = useCallback(
-		async (content: string) => {
+		async (params: { content: string; attachments?: MessageAttachment[] }) => {
 			if (!activeId) return false;
-			const trimmed = content.trim();
+			const trimmed = params.content.trim();
+			const attachments = params.attachments?.length ? params.attachments : undefined;
 			if (!trimmed) return false;
 			let success = false;
 			const tempId = `temp-${crypto.randomUUID()}`;
@@ -280,6 +369,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 					senderId: viewerId ?? "me",
 					recipientId: "counterpart",
 					content: trimmed,
+					attachments,
 					createdAt: new Date().toISOString(),
 				},
 				viewerId ?? "me",
@@ -303,7 +393,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 				const res = await fetch("/api/messages/send", {
 					method: "POST",
 					headers: { "Content-Type": "application/json" },
-					body: JSON.stringify({ threadId: activeId, content: trimmed, tempId }),
+					body: JSON.stringify({ threadId: activeId, content: trimmed, tempId, attachments }),
 				});
 				if (!res.ok) throw new Error("Failed to send message");
 				const serverMsg = await res.json();
@@ -345,9 +435,39 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	);
 
 	const handleSendAction = useCallback(async () => {
-		const ok = await sendMessage(draft);
+		setComposerError(null);
+		const ok = await sendMessage({ content: draft });
 		if (ok) setDraft("");
 	}, [draft, sendMessage]);
+
+	const handleAttachmentClick = useCallback(() => {
+		setComposerError(null);
+		fileInputRef.current?.click();
+	}, []);
+
+	const handleAttachmentChange = useCallback(
+		async (e: React.ChangeEvent<HTMLInputElement>) => {
+			if (!activeId) return;
+			const file = e.target.files?.[0] ?? null;
+			e.target.value = "";
+			if (!file) return;
+
+			setIsUploadingAttachment(true);
+			try {
+				const attachment = await presignAndUploadAttachment(file);
+				const content = draft.trim() ? draft : file.name || "Image attachment";
+				const ok = await sendMessage({ content, attachments: [attachment] });
+				if (ok) setDraft("");
+			} catch (error) {
+				const message = error instanceof Error ? error.message : "Attachment failed.";
+				setComposerError(message);
+				console.error("[MESSAGE_ATTACHMENT]", error);
+			} finally {
+				setIsUploadingAttachment(false);
+			}
+		},
+		[activeId, draft, presignAndUploadAttachment, sendMessage],
+	);
 
 	const handleIncoming = useCallback(
 		(threadId: string, payload: ServerMessage) => {
@@ -571,10 +691,13 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const counterpartPresence = counterpartId ? presence[counterpartId] : null;
 
 	return (
-		<div className="flex h-[calc(100vh-4rem)] flex-col lg:flex-row">
+		<div className="flex min-h-0 flex-1 flex-col lg:flex-row">
 			<Card
 				ref={listRef}
-					className={cn("border-r lg:w-96 lg:shrink-0", activeId && isMobile ? "hidden" : "block w-full")}
+				className={cn(
+					"flex min-h-0 flex-col border-r lg:w-96 lg:shrink-0",
+					activeId && isMobile ? "hidden" : "block w-full",
+				)}
 			>
 				<div className="flex items-center justify-between border-b px-4 py-3">
 					<div>
@@ -582,7 +705,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 						<h2 className="text-lg font-semibold">Messages</h2>
 					</div>
 				</div>
-				<div className="h-full overflow-y-auto">
+				<div className="min-h-0 flex-1 overflow-y-auto">
 					{isLoadingThreads ? (
 						<div className="space-y-3 p-4">
 							{Array.from({ length: 5 }).map((_, i) => (
@@ -661,7 +784,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 				) : !activeState ? (
 					<div className="flex h-full items-center justify-center text-red-500 text-sm">Unable to load conversation.</div>
 				) : (
-					<div className="flex h-full flex-col">
+					<div className="flex min-h-0 flex-1 flex-col">
 						<div className="flex items-center gap-3 border-b px-4 py-3">
 							{isMobile && (
 								<Button variant="ghost" size="icon" onClick={() => setActiveId(null)}>
@@ -744,6 +867,35 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 													)}
 												>
 													<p className="whitespace-pre-wrap wrap-break-word">{msg.content}</p>
+													{(() => {
+														const attachments = getAttachments(msg.attachments);
+														if (!attachments.length) return null;
+														return (
+															<div className="mt-2 space-y-2">
+																{attachments.map((att) => (
+																	<a
+																		key={att.url}
+																		href={att.url}
+																		target="_blank"
+																		rel="noreferrer"
+																		className="block"
+																	>
+																		<img
+																			src={att.url}
+																			alt={att.name ?? "Attachment"}
+																			className="max-h-48 w-auto max-w-full rounded-lg bg-background/20"
+																			loading="lazy"
+																		/>
+																		{att.name && (
+																			<p className={cn("mt-1 truncate text-[11px]", isMe ? "text-primary-foreground/80" : "text-muted-foreground")}>
+																				{att.name}
+																			</p>
+																		)}
+																	</a>
+																))}
+															</div>
+														);
+													})()}
 													<div
 														className={cn(
 															"mt-1 flex items-center gap-1 text-[10px]",
@@ -870,21 +1022,58 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 						</div>
 					)}
 							<div className="flex items-end gap-2 rounded-xl border bg-muted/40 px-3 py-2">
+								<input
+									ref={fileInputRef}
+									type="file"
+									accept="image/*"
+									hidden
+									onChange={handleAttachmentChange}
+								/>
 								<button
-									className="rounded-md p-1 text-muted-foreground hover:text-foreground"
-									title="Add attachment (coming soon)"
-									disabled
+									type="button"
+									className={cn(
+										"rounded-md p-1 text-muted-foreground hover:text-foreground disabled:opacity-50",
+										"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+									)}
+									title="Add attachment"
+									disabled={!activeId || isSending || isUploadingAttachment}
+									onClick={handleAttachmentClick}
 								>
-									<Paperclip className="h-4 w-4" />
+									{isUploadingAttachment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
 								</button>
-								<button
-									className="rounded-md p-1 text-muted-foreground hover:text-foreground"
-									title="Emoji (coming soon)"
-									disabled
-								>
-									<Smile className="h-4 w-4" />
-								</button>
+
+								<Popover>
+									<PopoverTrigger asChild>
+										<button
+											type="button"
+											className={cn(
+												"rounded-md p-1 text-muted-foreground hover:text-foreground disabled:opacity-50",
+												"focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ring-offset-background",
+											)}
+											title="Emoji"
+											disabled={!activeId || isSending}
+										>
+											<Smile className="h-4 w-4" />
+										</button>
+									</PopoverTrigger>
+									<PopoverContent align="start" className="w-64 p-2">
+										<div className="grid grid-cols-8 gap-1">
+											{EMOJI_SET.map((emoji) => (
+												<button
+													type="button"
+													key={emoji}
+													className="rounded-md p-1 text-lg hover:bg-muted"
+													onClick={() => insertIntoComposer(emoji)}
+												>
+													{emoji}
+												</button>
+											))}
+										</div>
+									</PopoverContent>
+								</Popover>
+
 								<textarea
+									ref={composerRef}
 									className="max-h-32 min-h-11 flex-1 resize-none border-none bg-transparent text-sm shadow-none outline-none focus-visible:ring-0"
 									placeholder="Type a message…"
 									value={draft}
@@ -895,19 +1084,20 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 											void handleSendAction();
 										}
 									}}
-									disabled={isSending}
+									disabled={isSending || isUploadingAttachment}
 								/>
 								<Button
 									size="sm"
 									onClick={() => void handleSendAction()}
-									disabled={isSending || !activeId || !draft.trim()}
+									disabled={isSending || isUploadingAttachment || !activeId || !draft.trim()}
 								>
 									{isSending ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <Send className="mr-1 h-4 w-4" />}
 									Send
 								</Button>
 							</div>
+							{composerError && <p className="mt-2 text-xs text-red-500">{composerError}</p>}
 							<p className="mt-1 text-[11px] text-muted-foreground">
-								Messaging is limited to users with an active or completed booking. Attachments and emoji coming soon.
+								Messaging is limited to users with an active or completed booking.
 							</p>
 						</div>
 					</div>
