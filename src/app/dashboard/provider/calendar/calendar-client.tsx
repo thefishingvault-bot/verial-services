@@ -185,6 +185,7 @@ function DayIndicators({ events }: { events: CalendarEvent[] }) {
 
   const visibleDots = sorted.slice(0, 3);
   const remaining = Math.max(0, sorted.length - visibleDots.length);
+  const countLabel = events.length > 9 ? "9+" : String(events.length);
 
   return (
     <>
@@ -192,16 +193,16 @@ function DayIndicators({ events }: { events: CalendarEvent[] }) {
 
       <span
         aria-hidden="true"
-        className="absolute right-2 top-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium leading-none text-secondary-foreground"
+        className="absolute right-1.5 top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-secondary px-1 text-[10px] font-medium leading-none text-secondary-foreground"
       >
-        {events.length}
+        {countLabel}
       </span>
 
-      <span aria-hidden="true" className="absolute bottom-2 left-2 flex items-center gap-1">
+      <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
         {visibleDots.map((event) => (
           <span
             key={`${event.type}-${event.id}`}
-            className={cn("h-2 w-2 rounded-full", getEventDotClass(event))}
+            className={cn("h-1.5 w-1.5 rounded-full opacity-80", getEventDotClass(event))}
             title={
               event.type === "time_off"
                 ? event.title
@@ -564,11 +565,11 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
                             day.inCurrentMonth ? "bg-background" : "bg-muted/30",
                             isToday && !isSelected && "border-primary/40 bg-primary/5",
-                            isSelected && "ring-2 ring-primary bg-primary/5",
+                            isSelected && "ring-1 ring-primary bg-primary/5",
                             hasTimeOff && "border-destructive/30 bg-destructive/5",
                           )}
                         >
-                          <div className="text-xs font-medium">
+                          <div className="text-[12px] font-medium">
                             <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
                               {format(day.date, "d")}
                             </span>
