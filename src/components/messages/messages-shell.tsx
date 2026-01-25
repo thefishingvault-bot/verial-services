@@ -690,8 +690,23 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 	const counterpartId = activeState?.counterpart?.id || activeThread?.counterpart.id;
 	const counterpartPresence = counterpartId ? presence[counterpartId] : null;
 
+	// Mobile: make this page a self-contained viewport between the sticky top header and fixed bottom nav.
+	// This prevents page-level scrolling and ensures the message list can flex + scroll internally.
+	const mobileTopPx = isProviderView ? 56 : 64; // provider header: h-14, customer SiteHeader: h-16
+	const mobileBottomOffset = "calc(64px + env(safe-area-inset-bottom))"; // bottom nav: h-16 + safe-area
+
 	return (
-		<div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+		<div
+			className={cn(
+				"flex flex-col overflow-hidden bg-muted/10 lg:flex-row",
+				isMobile ? "fixed inset-x-0 z-40" : "min-h-0 flex-1",
+			)}
+			style={
+				isMobile
+					? { top: `${mobileTopPx}px`, bottom: mobileBottomOffset }
+					: undefined
+			}
+		>
 			<Card
 				ref={listRef}
 				className={cn(
