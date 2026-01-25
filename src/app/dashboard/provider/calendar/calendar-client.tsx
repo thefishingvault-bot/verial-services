@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Calendar } from "@/components/ui/calendar";
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -94,6 +95,20 @@ function isOnDay(event: CalendarEvent, day: Date) {
 
 function isSameDay(a: Date, b: Date) {
   return a.toDateString() === b.toDateString();
+}
+
+function useMediaQuery(query: string) {
+  const [matches, setMatches] = useState(false);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setMatches(media.matches);
+    onChange();
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, [query]);
+
+  return matches;
 }
 
 function getEventPriority(event: CalendarEvent) {
@@ -204,11 +219,86 @@ function DayIndicators({ events }: { events: CalendarEvent[] }) {
   );
 }
 
+function DayDetailsContent({ events, onDeleteTimeOff }: { events: CalendarEvent[]; onDeleteTimeOff: (id: string) => void }) {
+  if (events.length === 0) {
+    return <p className="text-sm text-muted-foreground">No events.</p>;
+  }
+
+  return (
+    <div className="space-y-3">
+      {events.map((event) => {
+        const startLabel = event.start ? format(event.start, "HH:mm") : null;
+        const endLabel = event.end ? format(event.end, "HH:mm") : null;
+        const timeLabel = (() => {
+          if (event.type === "time_off") {
+            if (startLabel && endLabel) return `${startLabel}–${endLabel}`;
+            if (startLabel) return startLabel;
+            return null;
+          }
+          if (startLabel && endLabel && startLabel !== endLabel) return `${startLabel}–${endLabel}`;
+          return startLabel;
+        })();
+
+        return (
+          <div key={`${event.id}-${event.type}`} className="flex items-start justify-between gap-3 rounded border p-3">
+            <div className="min-w-0 space-y-1">
+              {event.type === "time_off" ? (
+                <Badge variant="destructive">Time off</Badge>
+              ) : (
+                <Badge variant={getBookingStatusVariant(event.status)}>{getBookingStatusLabel(event.status)}</Badge>
+              )}
+              <div className="text-sm font-medium flex items-center gap-2">
+                <span className="truncate">{event.type === "time_off" ? event.title || "Time off" : event.title || "Booking"}</span>
+                {event.type === "booking" && <Clock className="h-3 w-3 text-muted-foreground" />}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {timeLabel ? timeLabel : null}
+                {event.type === "time_off" && event.title ? ` • ${event.title}` : null}
+              </div>
+            </div>
+
+            {event.type === "booking" ? (
+              <Button asChild variant="outline" size="sm" className="shrink-0">
+                <Link href={`/dashboard/provider/bookings/${event.id}`}>View</Link>
+              </Button>
+            ) : (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" className="shrink-0" title="Delete time off">
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete time off?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will remove the block from your calendar.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDeleteTimeOff(event.id)}>
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { initialEvents: CalendarEvent[]; initialTimeOffs: CalendarEvent[] }) {
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+
   const [cursor, setCursor] = useState(new Date());
   const [events, setEvents] = useState<CalendarEvent[]>(initialEvents.map(normalizeEvent));
   const [timeOffs, setTimeOffs] = useState<CalendarEvent[]>(initialTimeOffs.map(normalizeEvent));
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [dayDetailsOpen, setDayDetailsOpen] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>({ from: new Date(), to: new Date() });
   const [startTime, setStartTime] = useState("09:00");
   const [endTime, setEndTime] = useState("17:00");
@@ -344,6 +434,19 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
     }
   };
 
+  useEffect(() => {
+    if (isDesktop && dayDetailsOpen) {
+      setDayDetailsOpen(false);
+    }
+  }, [isDesktop, dayDetailsOpen]);
+
+  const handleSelectDay = (day: Date) => {
+    setSelectedDate(day);
+    if (!isDesktop) {
+      setDayDetailsOpen(true);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -448,7 +551,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                     return (
                       <button
                         key={day.date.toISOString()}
-                        onClick={() => setSelectedDate(day.date)}
+                        onClick={() => handleSelectDay(day.date)}
                         title={hasTimeOff ? "Time off (you are unavailable)" : undefined}
                         aria-label={`${format(day.date, "EEEE, MMM d")}. ${buildDaySummary(dayEventsForDate)}`}
                         className={cn(
@@ -494,76 +597,29 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
           </div>
         </div>
 
-        <Card>
+        {/* Desktop: persistent side panel */}
+        <Card className="hidden lg:block">
           <CardHeader>
             <CardTitle>Day details</CardTitle>
             <CardDescription>{format(selectedDate, "EEEE, dd MMM yyyy")}</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {dayEvents.length === 0 && <p className="text-sm text-muted-foreground">No events.</p>}
-            {dayEvents.map((event) => {
-              const startLabel = event.start ? format(event.start, "HH:mm") : null;
-              const endLabel = event.end ? format(event.end, "HH:mm") : null;
-              const timeLabel = (() => {
-                if (event.type === "time_off") {
-                  if (startLabel && endLabel) return `${startLabel}–${endLabel}`;
-                  if (startLabel) return startLabel;
-                  return null;
-                }
-                if (startLabel && endLabel && startLabel !== endLabel) return `${startLabel}–${endLabel}`;
-                return startLabel;
-              })();
-
-              return (
-                <div key={`${event.id}-${event.type}`} className="flex items-start justify-between gap-3 rounded border p-3">
-                  <div className="min-w-0 space-y-1">
-                    {event.type === "time_off" ? (
-                      <Badge variant="destructive">Time off</Badge>
-                    ) : (
-                      <Badge variant={getBookingStatusVariant(event.status)}>{getBookingStatusLabel(event.status)}</Badge>
-                    )}
-                    <div className="text-sm font-medium flex items-center gap-2">
-                      <span className="truncate">{event.type === "time_off" ? event.title || "Time off" : event.title || "Booking"}</span>
-                      {event.type === "booking" && <Clock className="h-3 w-3 text-muted-foreground" />}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {timeLabel ? timeLabel : null}
-                      {event.type === "time_off" && event.title ? ` • ${event.title}` : null}
-                    </div>
-                  </div>
-
-                  {event.type === "booking" ? (
-                    <Button asChild variant="outline" size="sm" className="shrink-0">
-                      <Link href={`/dashboard/provider/bookings/${event.id}`}>View</Link>
-                    </Button>
-                  ) : (
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="shrink-0" title="Delete time off">
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Delete time off?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This will remove the block from your calendar.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction onClick={() => deleteTimeOff(event.id)}>
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  )}
-                </div>
-              );
-            })}
+          <CardContent>
+            <DayDetailsContent events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
           </CardContent>
         </Card>
+
+        {/* Mobile: bottom sheet opened by tapping a day */}
+        <Sheet open={dayDetailsOpen} onOpenChange={setDayDetailsOpen}>
+          <SheetContent side="bottom" className="lg:hidden rounded-t-lg pb-[env(safe-area-inset-bottom)]">
+            <SheetHeader>
+              <SheetTitle>Day details</SheetTitle>
+              <SheetDescription>{format(selectedDate, "EEEE, dd MMM yyyy")}</SheetDescription>
+            </SheetHeader>
+            <div className="px-4 pb-4 overflow-y-auto">
+              <DayDetailsContent events={dayEvents} onDeleteTimeOff={deleteTimeOff} />
+            </div>
+          </SheetContent>
+        </Sheet>
       </div>
     </div>
   );
