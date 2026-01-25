@@ -711,7 +711,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 				ref={listRef}
 				className={cn(
 					"flex min-h-0 flex-col border-r lg:w-96 lg:shrink-0",
-					activeId && isMobile ? "hidden" : "block w-full",
+					activeId && isMobile ? "hidden" : "w-full",
 				)}
 			>
 				<div className="flex items-center justify-between border-b px-4 py-3">
@@ -784,7 +784,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 				</div>
 			</Card>
 
-			<div className={cn("flex min-h-0 flex-1 flex-col", activeId || !isMobile ? "block" : "hidden")}>
+			<div className={cn("flex min-h-0 flex-1 flex-col", activeId || !isMobile ? "" : "hidden")}>
 				{!activeId ? (
 					<div className="flex h-full flex-col items-center justify-center text-center text-sm text-muted-foreground">
 						<p className="mb-2 text-base font-semibold text-foreground">Select a conversation</p>
@@ -837,7 +837,7 @@ export function MessagesShell({ initialConversationId = null, basePath = "/dashb
 							{typing[activeId] && <span className="text-[11px] text-muted-foreground">Typing…</span>}
 						</div>
 
-						<div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto bg-muted/10 px-4 py-4">
+						<div ref={scrollRef} className="flex-1 min-h-0 space-y-3 overflow-y-auto bg-muted/10 px-4 py-4">
 							{activeState.isAppending && (
 								<div className="flex justify-center py-2 text-xs text-muted-foreground">
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading older messages…
