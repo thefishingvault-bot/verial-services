@@ -207,9 +207,11 @@ function getStatusPriority(status: string) {
 function DayDots({ events }: { events: CalendarEvent[] }) {
   if (events.length === 0) return null;
 
+  const MAX_DOTS = 4;
+
   const distinctStatuses = Array.from(new Set(events.map(getStatusKey)))
     .sort((a, b) => getStatusPriority(a) - getStatusPriority(b))
-    .slice(0, 3);
+    .slice(0, MAX_DOTS);
 
   const dotsShown = distinctStatuses.length;
   const hasMore = events.length > dotsShown || new Set(events.map(getStatusKey)).size > dotsShown;
@@ -218,7 +220,7 @@ function DayDots({ events }: { events: CalendarEvent[] }) {
     <>
       <span className="sr-only">{buildDaySummary(events)}</span>
 
-      <span aria-hidden="true" className="absolute bottom-1.5 left-1.5 flex items-center gap-1">
+      <span aria-hidden="true" className="mt-1 flex items-center gap-1 overflow-hidden">
         {distinctStatuses.map((status) => {
           const exampleEvent = events.find((e) => getStatusKey(e) === status);
           if (!exampleEvent) return null;
@@ -236,7 +238,13 @@ function DayDots({ events }: { events: CalendarEvent[] }) {
             />
           );
         })}
-        {hasMore && <span className="text-[10px] font-medium leading-none text-muted-foreground">…</span>}
+
+        {hasMore && (
+          <span
+            title="More"
+            className="h-1.5 w-1.5 rounded-full bg-muted-foreground/50"
+          />
+        )}
       </span>
     </>
   );
@@ -424,7 +432,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isRangeLoading, setIsRangeLoading] = useState(false);
 
-  // NOTE: startOfMonth/startOfWeek etc return new Date objects each call.
+  // NOTE: date-fns helpers return new Date objects each call.
   // Memoize them so effects don't re-trigger on every render.
   const range = useMemo(() => {
     const rangeStart = startOfMonth(cursor);
@@ -434,7 +442,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
     return { rangeStart, rangeEnd, headerLabel };
   }, [cursor]);
 
-  const weeks = useMemo(() => buildCalendarGrid(cursor), [cursor]);
+  const rows = useMemo(() => buildCalendarGrid(cursor), [cursor]);
   const allEvents = useMemo(() => [...events, ...timeOffs], [events, timeOffs]);
 
   const dayEvents = useMemo(() => allEvents.filter((e) => isOnDay(e, selectedDate)), [allEvents, selectedDate]);
@@ -651,9 +659,9 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
             </CardHeader>
             <CardContent className="pt-0">
               <div className="space-y-2">
-                {weeks.map((week, idx) => (
+                {rows.map((row, idx) => (
                   <div key={idx} className="grid grid-cols-7 gap-2">
-                    {week.map((day) => {
+                    {row.map((day) => {
                       const dayEventsForDate = allEvents.filter((e) => isOnDay(e, day.date));
                       const hasTimeOff = timeOffs.some((t) => isOnDay(t, day.date));
                       const isSelected = isSameDay(day.date, selectedDate);
@@ -674,13 +682,15 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                             hasTimeOff && "border-destructive/30 bg-destructive/5",
                           )}
                         >
-                          <div className="text-[12px] font-medium">
-                            <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
-                              {format(day.date, "d")}
-                            </span>
-                          </div>
+                          <div className="flex h-full flex-col">
+                            <div className="text-[12px] font-medium leading-none">
+                              <span className={day.inCurrentMonth ? "text-foreground" : "text-muted-foreground"}>
+                                {format(day.date, "d")}
+                              </span>
+                            </div>
 
-                          <DayDots events={dayEventsForDate} />
+                            <DayDots events={dayEventsForDate} />
+                          </div>
                         </button>
                       );
                     })}
@@ -707,7 +717,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
               <span className="h-2 w-2 rounded-full bg-muted-foreground" /> Completed
             </span>
             <span className="flex items-center gap-1">
-              <span className="h-2 w-3 rounded-sm bg-destructive/20 border border-destructive/30" /> Time off
+              <span className="h-2 w-2 rounded-full bg-destructive" /> Time off
             </span>
           </div>
 
@@ -755,7 +765,7 @@ export function ProviderCalendarClient({ initialEvents, initialTimeOffs }: { ini
                   <span>Completed</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="h-2.5 w-3 rounded-sm bg-destructive/20 border border-destructive/30" />
+                  <span className="h-2.5 w-2.5 rounded-full bg-destructive" />
                   <span>Time off</span>
                 </div>
               </div>
