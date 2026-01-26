@@ -127,12 +127,15 @@ function buildWaitlistEmailHtml(params: {
 }) {
   const { referralLink, role, referralCount } = params;
   const headline = role === "provider" ? "Thanks for joining as a provider." : "Thanks for joining as a customer.";
+  const launchLine = role === "provider"
+    ? "You’ll get early access to set up your services and help shape Verial before we open to customers."
+    : "We’ll email you when Verial launches across New Zealand.";
 
   return `
   <div style="font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial; line-height: 1.5;">
     <h2>You’re on the Verial waitlist</h2>
     <p>${headline}</p>
-    <p>We’ll email you when Verial is ready in your area.</p>
+    <p>${launchLine}</p>
 
     <h3>Move up the list</h3>
     <p>Invite friends using your referral link:</p>
