@@ -1,5 +1,6 @@
 import { relations } from "drizzle-orm";
 import {
+  AnyPgColumn,
   pgTable,
   text,
   varchar,
@@ -29,6 +30,9 @@ export const kycStatusEnum = pgEnum("kyc_status", [
 
 export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elite", "unknown"]);
 
+// Waitlist
+export const waitlistRoleEnum = pgEnum("waitlist_role", ["provider", "customer"]);
+
 // --- TABLES ---
 
 /**
@@ -47,6 +51,48 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Waitlist Signups
+ * Public waitlist capture for launch.
+ */
+export const waitlistSignups = pgTable(
+  "waitlist_signups",
+  {
+    id: varchar("id", { length: 255 }).primaryKey(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+
+    role: waitlistRoleEnum("role").notNull(),
+
+    email: varchar("email", { length: 255 }).notNull(),
+    emailLower: varchar("email_lower", { length: 255 }).notNull(),
+
+    suburbCity: varchar("suburb_city", { length: 255 }).notNull(),
+    suburbCityNorm: varchar("suburb_city_norm", { length: 255 }).notNull(),
+
+    categoryText: varchar("category_text", { length: 255 }),
+    categoryNorm: varchar("category_norm", { length: 255 }),
+    yearsExperience: integer("years_experience"),
+
+    referralCode: varchar("referral_code", { length: 32 }).notNull(),
+    referredById: varchar("referred_by_id", { length: 255 }).references((): AnyPgColumn => waitlistSignups.id, { onDelete: "set null" }),
+
+    tags: jsonb("tags").$type<string[]>().notNull().default([]),
+
+    lastConfirmationEmailSentAt: timestamp("last_confirmation_email_sent_at"),
+  },
+  (table) => ({
+    emailLowerUnique: uniqueIndex("waitlist_signups_email_lower_unique").on(table.emailLower),
+    referralCodeUnique: uniqueIndex("waitlist_signups_referral_code_unique").on(table.referralCode),
+    emailLowerIdx: index("waitlist_signups_email_lower_idx").on(table.emailLower),
+    referralCodeIdx: index("waitlist_signups_referral_code_idx").on(table.referralCode),
+    referredByIdx: index("waitlist_signups_referred_by_id_idx").on(table.referredById),
+    roleIdx: index("waitlist_signups_role_idx").on(table.role),
+    createdAtIdx: index("waitlist_signups_created_at_idx").on(table.createdAt),
+    categoryNormIdx: index("waitlist_signups_category_norm_idx").on(table.categoryNorm),
+    suburbCityNormIdx: index("waitlist_signups_suburb_city_norm_idx").on(table.suburbCityNorm),
+  }),
+);
 
 /**
  * Providers Table

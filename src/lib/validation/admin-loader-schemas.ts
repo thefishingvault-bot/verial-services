@@ -122,3 +122,10 @@ export const AdminFeesSearchSchema = z.object({
   ...rest,
   providerSearch: providerSearch || provider || "",
 }));
+
+export const AdminWaitlistSearchSchema = z.object({
+  role: z.enum(["provider", "customer", "all"]).default("all"),
+  email: z.string().trim().optional().default(""),
+  location: z.string().trim().optional().default(""),
+  category: z.string().trim().optional().default(""),
+});

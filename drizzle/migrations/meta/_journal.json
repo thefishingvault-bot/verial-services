@@ -316,6 +316,13 @@
       "when": 1768548094795,
       "tag": "0039_provider_payout_requests",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1769393356494,
+      "tag": "0040_waitlist_signups",
+      "breakpoints": true
     }
   ]
 }
