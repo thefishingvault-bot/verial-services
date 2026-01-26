@@ -8,6 +8,7 @@ import Stripe from "stripe";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
 import { createNotification, createNotificationOnce } from "@/lib/notifications";
 import { sendEmail } from "@/lib/email";
+import { asOne } from "@/lib/relations/normalize";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
 import {
@@ -342,6 +343,9 @@ export async function POST(req: Request) {
     const booking = await loadBooking(bookingId);
     if (!booking) return NextResponse.json({ ok: true });
 
+    const service = asOne(booking.service);
+    const provider = asOne(booking.provider);
+
     try {
       assertTransition(booking.status as BookingStatus, "refunded");
     } catch (err) {
@@ -364,13 +368,13 @@ export async function POST(req: Request) {
         booking.userId,
         bookingId,
         "Payment refunded",
-        `Your payment for ${booking.service?.title ?? "your booking"} was refunded.`,
+        `Your payment for ${service?.title ?? "your booking"} was refunded.`,
       );
     }
 
-    if (booking.provider?.userId) {
+    if (provider?.userId) {
       await createNotification({
-        userId: booking.provider.userId,
+        userId: provider.userId,
         title: "Booking refunded",
         body: `A refund was processed for booking ${bookingId}.`,
         bookingId,
@@ -652,8 +656,11 @@ export async function POST(req: Request) {
         }
 
         // Compute earnings deterministically using stored price and GST settings.
-        const chargesGst = existing.service?.chargesGst ?? existing.provider?.chargesGst ?? true;
-        const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(existing.provider?.plan));
+        const existingService = asOne(existing.service);
+        const existingProvider = asOne(existing.provider);
+
+        const chargesGst = existingService?.chargesGst ?? existingProvider?.chargesGst ?? true;
+        const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(existingProvider?.plan));
 
         const breakdown = calculateEarnings({
           amountInCents: existing.priceAtBooking,
@@ -713,16 +720,19 @@ export async function POST(req: Request) {
         // Provider notification (best-effort): let provider know the booking was paid.
         try {
           const booking = await loadBooking(bookingId);
-          if (booking?.provider?.userId) {
+          const provider = asOne(booking?.provider);
+          const service = asOne(booking?.service);
+
+          if (booking && provider?.userId) {
             await createNotificationOnce({
               event: `stripe:payment_intent.succeeded:${paymentIntent.id}`,
               bookingId,
-              userId: booking.provider.userId,
+              userId: provider.userId,
               ttlSeconds: 60 * 60 * 24,
               payload: {
                 type: "payment",
                 title: "Booking paid",
-                body: `${booking.service?.title ?? "A booking"} has been paid. Funds are held until the customer confirms completion.`,
+                body: `${service?.title ?? "A booking"} has been paid. Funds are held until the customer confirms completion.`,
                 actionUrl: `/dashboard/provider/bookings/${bookingId}`,
                 bookingId,
                 providerId: booking.providerId,
@@ -756,6 +766,9 @@ export async function POST(req: Request) {
           const booking = await loadBooking(bookingIdMeta);
 
           if (booking) {
+            const provider = asOne(booking.provider);
+            const service = asOne(booking.service);
+
             await db
               .update(bookings)
               .set({
@@ -769,7 +782,7 @@ export async function POST(req: Request) {
                 customerId,
                 bookingIdMeta,
                 "Payment failed",
-                `Your payment for ${booking.service?.title ?? "your booking"} failed. Please try another payment method.`,
+                `Your payment for ${service?.title ?? "your booking"} failed. Please try another payment method.`,
               );
 
               const client = await clerkClient();
@@ -779,16 +792,16 @@ export async function POST(req: Request) {
                 await sendEmail({
                   to: email,
                   subject: `Payment failed for booking ${bookingIdMeta}`,
-                  html: `<p>Your payment for ${booking.service?.title ?? "your booking"} failed.</p><p>Please retry payment from your dashboard.</p>`,
+                  html: `<p>Your payment for ${service?.title ?? "your booking"} failed.</p><p>Please retry payment from your dashboard.</p>`,
                 });
               }
             }
 
-            if (booking.provider?.userId) {
+            if (provider?.userId) {
               await createNotificationOnce({
                 event: `stripe:payment_intent.payment_failed:${paymentFailedIntent.id}`,
                 bookingId: booking.id,
-                userId: booking.provider.userId,
+                userId: provider.userId,
                 ttlSeconds: 60 * 60 * 24,
                 payload: {
                   type: "payment",

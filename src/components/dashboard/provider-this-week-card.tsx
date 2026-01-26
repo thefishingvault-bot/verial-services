@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { auth } from "@clerk/nextjs/server";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { asOne } from "@/lib/relations/normalize";
 
 function formatDate(d: Date) {
   return d.toLocaleString("en-NZ", {
@@ -73,7 +74,9 @@ export async function ProviderThisWeekCard() {
           <div className="space-y-2">
             {topThree.map((b) => {
               const dateLabel = b.scheduledDate ? formatDate(b.scheduledDate) : "TBC";
-              const customerName = [b.user?.firstName, b.user?.lastName].filter(Boolean).join(" ") || "Customer";
+              const user = asOne(b.user);
+              const service = asOne(b.service);
+              const customerName = [user?.firstName, user?.lastName].filter(Boolean).join(" ") || "Customer";
 
               return (
                 <div
@@ -84,7 +87,7 @@ export async function ProviderThisWeekCard() {
                     <span className="font-medium">{dateLabel}</span>
                     <span className="capitalize text-muted-foreground">{b.status}</span>
                   </div>
-                  <span className="mt-0.5 font-semibold line-clamp-1">{b.service?.title}</span>
+                  <span className="mt-0.5 font-semibold line-clamp-1">{service?.title}</span>
                   <span className="text-muted-foreground line-clamp-1">{customerName}</span>
                 </div>
               );

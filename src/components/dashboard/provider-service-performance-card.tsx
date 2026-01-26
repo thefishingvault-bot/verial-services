@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { auth } from "@clerk/nextjs/server";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { asOne } from "@/lib/relations/normalize";
 
 function formatCurrency(amountInCents: number) {
   return new Intl.NumberFormat("en-NZ", {
@@ -68,9 +69,10 @@ export async function ProviderServicePerformanceCard() {
   for (const row of rows) {
     if (!row.serviceId) continue;
     const key = row.serviceId;
+    const service = asOne(row.service);
     const existing = map.get(key) ?? {
       serviceId: key,
-      title: row.service?.title ?? "Untitled service",
+      title: service?.title ?? "Untitled service",
       jobs: 0,
       revenueCents: 0,
     };

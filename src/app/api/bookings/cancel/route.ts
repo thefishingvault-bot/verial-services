@@ -7,6 +7,7 @@ import { createNotificationOnce } from '@/lib/notifications';
 import { assertTransition } from '@/lib/booking-state';
 import { bookingIdempotencyKey, withIdempotency } from '@/lib/idempotency';
 import { enforceRateLimit, rateLimitResponse } from '@/lib/rate-limit';
+import { asOne } from '@/lib/relations/normalize';
 
 export const runtime = 'nodejs';
 
@@ -51,6 +52,12 @@ export async function PATCH(req: Request) {
         throw new Error('NOT_FOUND');
       }
 
+      const provider = asOne(booking.provider);
+      const service = asOne(booking.service);
+
+      const providerUserId = provider?.userId;
+      const serviceTitle = service?.title;
+
       try {
         assertTransition(booking.status, 'canceled_customer');
       } catch (err) {
@@ -63,17 +70,19 @@ export async function PATCH(req: Request) {
         .set({ status: 'canceled_customer', updatedAt: new Date() })
         .where(eq(bookings.id, bookingId));
 
-      await createNotificationOnce({
-        event: 'booking_cancelled_customer',
-        bookingId,
-        userId: booking.provider.userId,
-        payload: {
-          message: `Booking canceled by customer: ${booking.service.title}`,
-          actionUrl: `/dashboard/provider/bookings/${bookingId}`,
+      if (providerUserId) {
+        await createNotificationOnce({
+          event: 'booking_cancelled_customer',
           bookingId,
-          providerId: booking.providerId,
-        },
-      });
+          userId: providerUserId,
+          payload: {
+            message: `Booking canceled by customer: ${serviceTitle ?? ""}`,
+            actionUrl: `/dashboard/provider/bookings/${bookingId}`,
+            bookingId,
+            providerId: booking.providerId,
+          },
+        });
+      }
 
       return { success: true };
     });

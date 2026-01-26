@@ -3,6 +3,7 @@
 import { db } from "@/lib/db";
 import { auth } from "@clerk/nextjs/server";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
+import { asOne } from "@/lib/relations/normalize";
 
 function formatDate(d: Date) {
   return d.toLocaleDateString("en-NZ", {
@@ -84,7 +85,8 @@ export async function ProviderReviewsCard() {
 
         <div className="space-y-3">
           {latestThree.map((review) => {
-            const name = [review.user?.firstName, review.user?.lastName]
+            const user = asOne(review.user);
+            const name = [user?.firstName, user?.lastName]
               .filter(Boolean)
               .join(" ") || "Customer";
             const snippet = review.comment?.trim() || "No written comment.";

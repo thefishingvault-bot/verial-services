@@ -2,10 +2,11 @@ import { auth } from "@clerk/nextjs/server";
 import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 
-import { bookings } from "@/db/schema";
+import { bookings, users } from "@/db/schema";
 import { db } from "@/lib/db";
 import { canMessage, listThreadMessages, sendBookingMessage } from "@/lib/messaging";
 import { MessageListSchema, MessageSendSchema } from "@/lib/validation/messages";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -36,7 +37,17 @@ export async function GET(req: NextRequest, context: { params: Promise<{ convers
       },
     });
 
-    const counterpartUser = booking?.userId === userId ? booking?.provider?.user : booking?.user;
+    const provider = asOne(booking?.provider);
+    const customerUser = asOne(booking?.user);
+
+    const providerUser = provider?.userId
+      ? await db.query.users.findFirst({
+          where: eq(users.id, provider.userId),
+          columns: { id: true, firstName: true, lastName: true, avatarUrl: true },
+        })
+      : null;
+
+    const counterpartUser = booking?.userId === userId ? providerUser : customerUser;
 
     return NextResponse.json({
       messages: items,

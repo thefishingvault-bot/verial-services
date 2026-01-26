@@ -10,6 +10,7 @@ import { createNotificationOnce } from "@/lib/notifications";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { createMarketplaceRefund } from "@/lib/stripe-refunds";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -52,9 +53,13 @@ export async function POST(
 
       if (!booking) throw new Error("NOT_FOUND");
 
+      const provider = asOne(booking.provider);
+      const providerUserId = provider?.userId;
+      const providerId = provider?.id;
+
       const actor = booking.userId === userId
         ? "customer"
-        : booking.provider?.userId === userId
+        : providerUserId === userId
         ? "provider"
         : null;
 
@@ -159,17 +164,17 @@ export async function POST(
 
       const bookingUrl = `/dashboard/bookings/${bookingId}`;
 
-      if (actor === "customer" && booking.provider?.userId) {
+      if (actor === "customer" && providerUserId) {
         await createNotificationOnce({
           event: "booking_cancelled_customer",
           bookingId,
-          userId: booking.provider.userId,
+          userId: providerUserId,
           payload: {
             title: "Booking cancelled by customer",
             body: reason ? `Reason: ${reason}` : "A customer cancelled a booking.",
             actionUrl: bookingUrl,
             bookingId,
-            providerId: booking.provider.id,
+            providerId,
           },
         });
       }
@@ -184,7 +189,7 @@ export async function POST(
             body: reason ? `Reason: ${reason}` : "Your provider cancelled this booking.",
             actionUrl: bookingUrl,
             bookingId,
-            providerId: booking.provider?.id,
+            providerId,
           },
         });
       }
@@ -204,17 +209,17 @@ export async function POST(
             },
           });
         }
-        if (booking.provider?.userId) {
+        if (providerUserId) {
           await createNotificationOnce({
             event: "booking_refunded",
             bookingId,
-            userId: booking.provider.userId,
+            userId: providerUserId,
             payload: {
               title: "Booking refunded",
               body: refundMessage,
               actionUrl: bookingUrl,
               bookingId,
-              providerId: booking.provider.id,
+              providerId,
             },
           });
         }

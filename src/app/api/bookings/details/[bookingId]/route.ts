@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -50,10 +51,12 @@ export async function GET(
       return new NextResponse('This booking needs a final price from the provider before payment.', { status: 400 });
     }
 
+    const provider = asOne(booking.provider);
+
     return NextResponse.json({
       bookingId: booking.id,
       amount: booking.priceAtBooking,
-      providerStripeId: booking.provider.stripeConnectId,
+      providerStripeId: provider?.stripeConnectId ?? null,
     }, {
       headers: {
         "Cache-Control": "no-store",

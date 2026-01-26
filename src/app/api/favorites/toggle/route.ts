@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { providers, serviceFavorites, services } from "@/db/schema";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isProviderCurrentlySuspended } from "@/lib/suspension";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -43,11 +44,13 @@ export async function POST(req: Request) {
     },
   });
 
+  const provider = asOne(service?.provider);
+
   if (
     !service ||
-    !service.provider ||
-    service.provider.status !== "approved" ||
-    isProviderCurrentlySuspended(service.provider)
+    !provider ||
+    provider.status !== "approved" ||
+    isProviderCurrentlySuspended(provider)
   ) {
     return NextResponse.json({ error: "Service not found" }, { status: 404 });
   }

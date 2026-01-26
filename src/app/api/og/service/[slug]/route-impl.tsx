@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 import { db } from '../../../../../lib/db';
 import { services, reviews, bookings } from '../../../../../db/schema';
 import { and, eq, or, sql } from 'drizzle-orm';
+import { asOne } from '../../../../../lib/relations/normalize';
 
 export const runtime = 'edge';
 export const revalidate = 3600;
@@ -37,6 +38,8 @@ const handler = async (req: NextRequest, context: RouteContext): Promise<Respons
     return new Response('Not found', { status: 404 });
   }
 
+  const provider = asOne(service.provider);
+
   const baseWhere = and(
     eq(reviews.isHidden, false),
     or(eq(reviews.serviceId, service.id), eq(bookings.serviceId, service.id)),
@@ -52,14 +55,14 @@ const handler = async (req: NextRequest, context: RouteContext): Promise<Respons
     .where(baseWhere);
 
   const title = sanitize(service.title, 90);
-  const providerName = sanitize(service.provider?.businessName ?? 'Provider', 50);
+  const providerName = sanitize(provider?.businessName ?? 'Provider', 50);
   const price = service.pricingType === 'quote'
     ? 'Quote required'
     : (service.priceInCents
       ? `${service.pricingType === 'from' ? 'From ' : ''}NZ$ ${(service.priceInCents / 100).toFixed(2)}`
       : '—');
   const ratingText = `${avgRating?.toFixed(1) ?? 'N/A'} ★ (${totalReviews ?? 0})`;
-  const verified = service.provider?.isVerified;
+  const verified = provider?.isVerified;
 
   return new ImageResponse(
     (

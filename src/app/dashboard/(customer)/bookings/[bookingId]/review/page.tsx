@@ -5,6 +5,7 @@ import { bookings, services, providers, reviews } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ReviewForm } from "@/components/reviews/review-form";
+import { asOne } from "@/lib/relations/normalize";
 
 export const dynamic = "force-dynamic";
 
@@ -60,19 +61,22 @@ export default async function BookingReviewPage({ params }: { params: Promise<{ 
     );
   }
 
+  const service = asOne(booking.service);
+  const provider = asOne(booking.provider);
+
   return (
     <div className="container mx-auto max-w-2xl py-8">
       <Card>
         <CardHeader>
           <CardTitle>Leave a review</CardTitle>
           <CardDescription>
-            Share your experience for {booking.service?.title ?? "this service"} by {booking.provider?.businessName ?? "the provider"}.
+            Share your experience for {service?.title ?? "this service"} by {provider?.businessName ?? "the provider"}.
           </CardDescription>
         </CardHeader>
         <CardContent>
           <ReviewForm
             bookingId={booking.id}
-            serviceTitle={booking.service?.title ?? "Service"}
+            serviceTitle={service?.title ?? "Service"}
             onReviewSubmit={() => redirect("/dashboard/bookings")}
           />
         </CardContent>

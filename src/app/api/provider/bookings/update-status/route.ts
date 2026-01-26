@@ -8,6 +8,7 @@ import { createNotification } from "@/lib/notifications";
 import { assertTransition, BookingStatus } from "@/lib/booking-state";
 import { getDay } from "date-fns";
 import { assertProviderCanTransactFromProvider } from "@/lib/provider-access";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -104,6 +105,8 @@ export async function PATCH(req: Request) {
       return new NextResponse("Booking not found or you do not have permission", { status: 404 });
     }
 
+    const service = asOne(booking.service);
+
     try {
       assertTransition(booking.status as BookingStatus, targetStatus as BookingStatus);
     } catch (err) {
@@ -114,7 +117,7 @@ export async function PATCH(req: Request) {
     // If accepting, re-check availability/time-off and overlap.
 
     if (action === "accept") {
-      const pricingType = booking.service?.pricingType ?? "fixed";
+      const pricingType = service?.pricingType ?? "fixed";
       const requiresQuote = pricingType === "from" || pricingType === "quote";
 
       let amountInCents = booking.priceAtBooking;
@@ -221,7 +224,7 @@ export async function PATCH(req: Request) {
         bookingId,
         status: targetStatus,
         reason: providerMessage ?? undefined,
-        serviceTitle: booking.service?.title,
+        serviceTitle: service?.title,
       });
 
       return NextResponse.json({ booking: updated });
@@ -260,7 +263,7 @@ export async function PATCH(req: Request) {
       bookingId,
       status: targetStatus,
       reason: action === "decline" ? declineReason : action === "cancel" ? cancelReason : undefined,
-      serviceTitle: booking.service?.title,
+      serviceTitle: service?.title,
     });
 
     return NextResponse.json(updatedBooking);
@@ -292,13 +295,16 @@ async function notifyCustomer(args: {
       },
     });
 
-    if (!bookingWithUser?.user?.email) return;
+    const user = asOne(bookingWithUser?.user);
+    const service = asOne(bookingWithUser?.service);
+
+    if (!user?.email) return;
 
     let subject = "";
     let html = "";
 
     if (status === "accepted") {
-      const title = serviceTitle || bookingWithUser.service?.title || "your booking";
+      const title = serviceTitle || service?.title || "your booking";
       subject = `Your booking for ${title} has been accepted`;
       html = `
         <h1>Booking Accepted</h1>
@@ -307,7 +313,7 @@ async function notifyCustomer(args: {
         <a href="${process.env.NEXT_PUBLIC_SITE_URL}/dashboard/bookings">Pay Now</a>
       `;
     } else if (status === "canceled_provider" || status === "declined") {
-      const title = serviceTitle || bookingWithUser.service?.title || "your booking";
+      const title = serviceTitle || service?.title || "your booking";
       subject = `Your booking for ${title} was canceled by the provider`;
       html = `
         <h1>Booking Canceled</h1>
@@ -317,7 +323,7 @@ async function notifyCustomer(args: {
         <a href="${process.env.NEXT_PUBLIC_SITE_URL}/services">Browse Services</a>
       `;
     } else if (status === "completed") {
-      const title = serviceTitle || bookingWithUser.service?.title || "your booking";
+      const title = serviceTitle || service?.title || "your booking";
       subject = `Your booking for ${title} is complete!`;
       html = `
         <h1>Job Complete!</h1>
@@ -329,10 +335,10 @@ async function notifyCustomer(args: {
 
     if (!subject) return;
 
-    await sendEmail({ to: bookingWithUser.user.email, subject, html });
+    await sendEmail({ to: user.email, subject, html });
 
     await createNotification({
-      userId: bookingWithUser.user.id,
+      userId: user.id,
       type: "booking",
       title: subject,
       body:
@@ -345,7 +351,7 @@ async function notifyCustomer(args: {
       href: "/dashboard/bookings",
       actionUrl: `/dashboard/bookings/${bookingId}`,
       bookingId,
-      providerId: bookingWithUser.providerId,
+      providerId: bookingWithUser?.providerId ?? undefined,
     });
   } catch (emailError) {
     console.error("[API_BOOKING_UPDATE] Failed to send notification:", emailError);

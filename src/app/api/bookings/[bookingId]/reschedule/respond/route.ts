@@ -8,6 +8,7 @@ import { createNotificationOnce } from "@/lib/notifications";
 import { isRescheduleEligible, validateRescheduleProposal } from "@/lib/reschedule";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -64,7 +65,15 @@ export async function POST(
 
       if (!booking) throw new Error("NOT_FOUND");
 
-      const viewerIsCustomer = booking.user?.id === userId;
+      const providerRelation = asOne(booking.provider);
+      const service = asOne(booking.service);
+      const user = asOne(booking.user);
+
+      const providerUserId = providerRelation?.userId;
+      const serviceTitle = service?.title;
+      const customerId = user?.id;
+
+      const viewerIsCustomer = customerId === userId;
       const viewerIsProvider = !!provider && booking.providerId === provider.id;
       if (!viewerIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
 
@@ -88,8 +97,8 @@ export async function POST(
 
       const now = new Date();
 
-      const requesterIsCustomer = pendingReschedule.requesterId === booking.user?.id;
-      const requesterIsProvider = pendingReschedule.requesterId === booking.provider?.userId;
+      const requesterIsCustomer = !!customerId && pendingReschedule.requesterId === customerId;
+      const requesterIsProvider = !!providerUserId && pendingReschedule.requesterId === providerUserId;
 
       if (requesterIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
       if (requesterIsProvider && !viewerIsCustomer) throw new Error("FORBIDDEN");
@@ -128,14 +137,14 @@ export async function POST(
           .set({ scheduledDate: pendingReschedule.proposedDate, updatedAt: now })
           .where(eq(bookings.id, bookingId));
 
-        if (requesterIsCustomer && booking.user?.id) {
+        if (requesterIsCustomer && customerId) {
           await createNotificationOnce({
             event: `reschedule_approved:${pendingReschedule.id}`,
             bookingId,
-            userId: booking.user.id,
+            userId: customerId,
             payload: {
               title: "Reschedule approved",
-              body: note || `Your booking was rescheduled${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
+              body: note || `Your booking was rescheduled${serviceTitle ? ` for ${serviceTitle}` : ""}.`,
               actionUrl: `/dashboard/bookings/${bookingId}?focus=reschedule`,
               bookingId,
               providerId,
@@ -143,11 +152,11 @@ export async function POST(
           });
         }
 
-        if (requesterIsProvider && booking.provider?.userId) {
+        if (requesterIsProvider && providerUserId) {
           await createNotificationOnce({
             event: `reschedule_approved:${pendingReschedule.id}`,
             bookingId,
-            userId: booking.provider.userId,
+            userId: providerUserId,
             payload: {
               title: "Reschedule approved",
               body: note || "Your customer approved the new time.",
@@ -172,11 +181,11 @@ export async function POST(
         })
         .where(eq(bookingReschedules.id, pendingReschedule.id));
 
-      if (requesterIsCustomer && booking.user?.id) {
+      if (requesterIsCustomer && customerId) {
         await createNotificationOnce({
           event: `reschedule_declined:${pendingReschedule.id}`,
           bookingId,
-          userId: booking.user.id,
+          userId: customerId,
           payload: {
             title: "Reschedule declined",
             body: note || "Your provider declined the reschedule request.",
@@ -187,11 +196,11 @@ export async function POST(
         });
       }
 
-      if (requesterIsProvider && booking.provider?.userId) {
+      if (requesterIsProvider && providerUserId) {
         await createNotificationOnce({
           event: `reschedule_declined:${pendingReschedule.id}`,
           bookingId,
-          userId: booking.provider.userId,
+          userId: providerUserId,
           payload: {
             title: "Reschedule declined",
             body: note || "Your customer declined the new time.",

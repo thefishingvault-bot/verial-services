@@ -4,6 +4,7 @@ import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { createNotification } from "@/lib/notifications";
+import { asOne } from "@/lib/relations/normalize";
 import { calculateTrustScore } from "@/lib/trust";
 import { ReviewCreateSchema, parseBody } from "@/lib/validation/reviews";
 
@@ -111,12 +112,13 @@ export async function POST(req: Request) {
         with: { provider: { columns: { handle: true, userId: true } } },
       });
 
-      const providerUserId = service?.provider?.userId;
+      const provider = asOne(service?.provider);
+      const providerUserId = provider?.userId;
       if (providerUserId) {
         await createNotification({
           userId: providerUserId,
           message: `You received a ${rating}-star review on ${service?.title ?? "your service"}!`,
-          href: `/p/${service?.provider?.handle ?? ""}`,
+          href: `/p/${provider?.handle ?? ""}`,
         });
       }
     } catch (notifError) {

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { db } from "@/lib/db";
-import { bookings, bookingCancellations, bookingReschedules, providers, reviews } from "@/db/schema";
+import { bookings, bookingCancellations, bookingReschedules, providers, reviews, users } from "@/db/schema";
 import { formatPrice } from "@/lib/utils";
 import { getBookingStatusLabel, getBookingStatusVariant } from "@/lib/bookings/status";
 import { BookingTimeline, TimelineEvent } from "@/components/bookings/booking-timeline";
@@ -20,6 +20,7 @@ import { RescheduleResponseCard } from "@/components/bookings/reschedule-respons
 import { CustomerRescheduleResponseCard } from "@/components/bookings/customer-reschedule-response-card";
 import { PaymentSyncClient } from "./payment-sync-client";
 import { PaymentActionsClient } from "./payment-actions-client";
+import { requireOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -268,7 +269,7 @@ async function loadBooking(
         columns: { id: true, title: true, slug: true, pricingType: true },
       },
       provider: {
-        columns: { id: true, businessName: true, handle: true, isVerified: true, chargesGst: true },
+        columns: { id: true, userId: true, businessName: true, handle: true, isVerified: true, chargesGst: true },
         with: {
           user: { columns: { firstName: true, lastName: true, email: true } },
         },
@@ -345,18 +346,29 @@ async function loadBooking(
 
   const timeline = buildTimeline(booking, (review ?? null) as { id: string; createdAt: Date } | null, paymentIntent, typedCancellation, typedReschedules);
 
+  const service = requireOne(booking.service, "Missing booking.service");
+  const provider = requireOne(booking.provider, "Missing booking.provider");
+  const customer = requireOne(booking.user, "Missing booking.user");
+
+  const providerUser = provider.userId
+    ? await db.query.users.findFirst({
+        where: eq(users.id, provider.userId),
+        columns: { firstName: true, lastName: true, email: true },
+      })
+    : null;
+
   return {
     booking,
-    service: booking.service,
+    service,
     provider: {
-      id: booking.provider.id,
-      businessName: booking.provider.businessName,
-      handle: booking.provider.handle,
-      isVerified: booking.provider.isVerified,
-      chargesGst: booking.provider.chargesGst,
-      user: booking.provider.user,
+      id: provider.id,
+      businessName: provider.businessName,
+      handle: provider.handle,
+      isVerified: provider.isVerified,
+      chargesGst: provider.chargesGst,
+      user: providerUser ?? null,
     },
-    customer: booking.user,
+    customer,
     review: review ?? null,
     paymentIntent,
     timeline,

@@ -9,6 +9,7 @@ import { createNotificationOnce } from "@/lib/notifications";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isProviderCurrentlySuspended } from "@/lib/suspension";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -87,7 +88,9 @@ export async function POST(req: Request) {
         throw new Error("Service not found");
       }
 
-      if (service.provider && isProviderCurrentlySuspended(service.provider)) {
+      const provider = asOne(service.provider);
+
+      if (provider && isProviderCurrentlySuspended(provider)) {
         throw new Error("PROVIDER_SUSPENDED");
       }
 
@@ -195,7 +198,12 @@ export async function POST(req: Request) {
 
       // --- 5. Send Notification Email to Provider ---
       try {
-        const providerEmail = service.provider?.user?.email;
+        const providerEmail = provider?.userId
+          ? (await db.query.users.findFirst({
+            where: eq(users.id, provider.userId),
+            columns: { email: true },
+          }))?.email
+          : null;
 
         if (providerEmail) {
           await sendEmail({
@@ -215,9 +223,9 @@ export async function POST(req: Request) {
 
       // --- 6. Create In-App Notification ---
       try {
-        const providerUser = await db.query.users.findFirst({
-          where: eq(users.id, service.provider.userId),
-        });
+        const providerUser = provider?.userId
+          ? await db.query.users.findFirst({ where: eq(users.id, provider.userId) })
+          : null;
 
         if (providerUser) {
           await createNotificationOnce({

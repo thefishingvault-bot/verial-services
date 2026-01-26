@@ -12,6 +12,7 @@ import { getTrustBadge } from "@/lib/utils";
 import { formatServicePriceLabel } from "@/lib/pricing";
 import { ContactButton } from "@/components/common/contact-button";
 import { auth } from "@clerk/nextjs/server";
+import { requireOne } from "@/lib/relations/normalize";
 
 // This is a Server Component
 
@@ -102,14 +103,15 @@ function ProviderHeader({
   bookingCount: number;
 }) {
   const { Icon, color } = getTrustBadge(provider.trustLevel);
-  const memberSinceYear = new Date(provider.user.createdAt).getFullYear();
+  const user = requireOne(provider.user, "Missing provider.user");
+  const memberSinceYear = new Date(user.createdAt).getFullYear();
 
   return (
     <Card className="overflow-hidden">
       <CardHeader className="flex flex-col items-start gap-6 p-6 md:flex-row">
         <div className="relative h-32 w-32 shrink-0">
           <Image
-            src={provider.user.avatarUrl || '/default-avatar.png'}
+            src={user.avatarUrl || '/default-avatar.png'}
             alt={provider.businessName}
             fill
             className="rounded-full border object-cover"

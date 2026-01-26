@@ -8,6 +8,7 @@ import { createNotificationOnce } from "@/lib/notifications";
 import { validateRescheduleProposal, isRescheduleEligible } from "@/lib/reschedule";
 import { bookingIdempotencyKey, withIdempotency } from "@/lib/idempotency";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asOne } from "@/lib/relations/normalize";
 
 export const runtime = "nodejs";
 
@@ -62,8 +63,17 @@ export async function POST(
 
       if (!booking) throw new Error("NOT_FOUND");
 
+      const provider = asOne(booking.provider);
+      const service = asOne(booking.service);
+      const user = asOne(booking.user);
+
+      const providerUserId = provider?.userId;
+      const providerId = provider?.id;
+      const serviceTitle = service?.title;
+      const customerId = user?.id;
+
       const viewerIsCustomer = booking.userId === userId;
-      const viewerIsProvider = booking.provider?.userId === userId;
+      const viewerIsProvider = providerUserId === userId;
       if (!viewerIsCustomer && !viewerIsProvider) throw new Error("FORBIDDEN");
 
       if (!isRescheduleEligible(booking.status)) {
@@ -104,32 +114,32 @@ export async function POST(
         updatedAt: now,
       });
 
-      if (viewerIsCustomer && booking.provider?.userId) {
+      if (viewerIsCustomer && providerUserId) {
         await createNotificationOnce({
           event: `reschedule_requested:${rescheduleId}`,
           bookingId,
-          userId: booking.provider.userId,
+          userId: providerUserId,
           payload: {
             title: "New reschedule request",
-            body: `A customer requested to move this booking${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
+            body: `A customer requested to move this booking${serviceTitle ? ` for ${serviceTitle}` : ""}.`,
             actionUrl: `/dashboard/provider/bookings/${bookingId}?focus=reschedule`,
             bookingId,
-            providerId: booking.provider.id,
+            providerId,
           },
         });
       }
 
-      if (viewerIsProvider && booking.user?.id) {
+      if (viewerIsProvider && customerId) {
         await createNotificationOnce({
           event: `reschedule_proposed:${rescheduleId}`,
           bookingId,
-          userId: booking.user.id,
+          userId: customerId,
           payload: {
             title: "Provider proposed a new time",
-            body: `Your provider proposed a new time for this booking${booking.service?.title ? ` for ${booking.service.title}` : ""}.`,
+            body: `Your provider proposed a new time for this booking${serviceTitle ? ` for ${serviceTitle}` : ""}.`,
             actionUrl: `/dashboard/bookings/${bookingId}?focus=reschedule`,
             bookingId,
-            providerId: booking.provider?.id,
+            providerId,
           },
         });
       }
