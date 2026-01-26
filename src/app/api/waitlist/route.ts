@@ -12,6 +12,27 @@ export const runtime = "nodejs";
 
 const CONFIRMATION_EMAIL_COOLDOWN_DAYS = 7;
 
+function maskEmail(value: string) {
+  const email = value.trim();
+  const at = email.indexOf("@");
+  if (at <= 0) return "<invalid>";
+  const local = email.slice(0, at);
+  const domain = email.slice(at + 1);
+
+  const localMasked = local.length <= 2
+    ? `${local[0] ?? "*"}*`
+    : `${local[0]}***${local.slice(-1)}`;
+
+  const domainParts = domain.split(".");
+  const domainFirst = domainParts[0] ?? domain;
+  const domainMasked = domainFirst.length <= 2
+    ? `${domainFirst[0] ?? "*"}*`
+    : `${domainFirst[0]}***${domainFirst.slice(-1)}`;
+  const tld = domainParts.length > 1 ? `.${domainParts.slice(1).join(".")}` : "";
+
+  return `${localMasked}@${domainMasked}${tld}`;
+}
+
 function normalizeLooseText(value: string) {
   return value.trim().replace(/\s+/g, " ");
 }
@@ -127,6 +148,8 @@ function buildWaitlistEmailHtml(params: {
 }
 
 export async function POST(req: Request) {
+  const requestId = crypto.randomUUID();
+
   let payload: unknown;
   try {
     payload = await req.json();
@@ -158,6 +181,23 @@ export async function POST(req: Request) {
 
   const ref = parsed.data.ref ? parsed.data.ref.trim().toUpperCase() : null;
 
+  console.info("[WAITLIST_EMAIL] request", {
+    requestId,
+    role,
+    email: maskEmail(email),
+    env: {
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL_ENV: process.env.VERCEL_ENV,
+    },
+    configPresent: {
+      RESEND_API_KEY: Boolean(process.env.RESEND_API_KEY),
+      EMAIL_FROM: Boolean(process.env.EMAIL_FROM),
+      NEXT_PUBLIC_SITE_URL: Boolean(process.env.NEXT_PUBLIC_SITE_URL),
+      NEXT_PUBLIC_APP_URL: Boolean(process.env.NEXT_PUBLIC_APP_URL),
+      VERCEL_URL: Boolean(process.env.VERCEL_URL),
+    },
+  });
+
   const existing = await db.query.waitlistSignups.findFirst({
     where: (w, { eq }) => eq(w.emailLower, emailLower),
   });
@@ -165,21 +205,49 @@ export async function POST(req: Request) {
   const origin = safeOriginFromRequest(req);
 
   if (existing) {
+    console.info("[WAITLIST_EMAIL] existing_signup", {
+      requestId,
+      signupId: existing.id,
+      email: maskEmail(existing.email),
+      lastConfirmationEmailSentAt: existing.lastConfirmationEmailSentAt?.toISOString?.() ?? null,
+      origin,
+    });
+
     const referralCount = await referralCountForSignupId(existing.id);
     const referralLink = `${origin}/waitlist?ref=${encodeURIComponent(existing.referralCode)}`;
 
     const sendOk = shouldSendConfirmationEmail(existing.lastConfirmationEmailSentAt);
+    console.info("[WAITLIST_EMAIL] duplicate_send_decision", {
+      requestId,
+      sendOk,
+      cooldownDays: CONFIRMATION_EMAIL_COOLDOWN_DAYS,
+    });
     if (sendOk) {
+      console.info("[WAITLIST_EMAIL] sending_confirmation", {
+        requestId,
+        to: maskEmail(existing.email),
+        origin,
+      });
       const result = await sendEmail({
         to: existing.email,
         subject: "You’re on the Verial waitlist",
         html: buildWaitlistEmailHtml({ referralLink, role: existing.role, referralCount }),
+      });
+
+      console.info("[WAITLIST_EMAIL] send_result", {
+        requestId,
+        to: maskEmail(existing.email),
+        hasResendKey: Boolean(process.env.RESEND_API_KEY),
+        resendResponsePresent: Boolean(result),
+        resendId: (result as { id?: string } | null | undefined)?.id ?? null,
       });
       if (process.env.RESEND_API_KEY && result) {
         await db
           .update(waitlistSignups)
           .set({ lastConfirmationEmailSentAt: new Date() })
           .where(eq(waitlistSignups.id, existing.id));
+
+        console.info("[WAITLIST_EMAIL] updated_last_sent", { requestId, signupId: existing.id });
       }
     }
 
@@ -251,16 +319,33 @@ export async function POST(req: Request) {
   const referralCount = 0;
   const referralLink = `${origin}/waitlist?ref=${encodeURIComponent(created.referralCode)}`;
 
+  console.info("[WAITLIST_EMAIL] created_signup", {
+    requestId,
+    signupId: created.id,
+    to: maskEmail(email),
+    origin,
+  });
+
   const result = await sendEmail({
     to: email,
     subject: "You’re on the Verial waitlist",
     html: buildWaitlistEmailHtml({ referralLink, role, referralCount }),
+  });
+
+  console.info("[WAITLIST_EMAIL] send_result", {
+    requestId,
+    to: maskEmail(email),
+    hasResendKey: Boolean(process.env.RESEND_API_KEY),
+    resendResponsePresent: Boolean(result),
+    resendId: (result as { id?: string } | null | undefined)?.id ?? null,
   });
   if (process.env.RESEND_API_KEY && result) {
     await db
       .update(waitlistSignups)
       .set({ lastConfirmationEmailSentAt: new Date() })
       .where(eq(waitlistSignups.id, created.id));
+
+    console.info("[WAITLIST_EMAIL] updated_last_sent", { requestId, signupId: created.id });
   }
 
   return NextResponse.json({
