@@ -10,8 +10,6 @@ import { sendEmail } from "@/lib/email";
 
 export const runtime = "nodejs";
 
-const CONFIRMATION_EMAIL_COOLDOWN_DAYS = 7;
-
 function maskEmail(value: string) {
   const email = value.trim();
   const at = email.indexOf("@");
@@ -52,10 +50,9 @@ function safeOriginFromRequest(req: Request) {
   }
 }
 
-function shouldSendConfirmationEmail(lastSentAt: Date | null | undefined) {
-  if (!lastSentAt) return true;
-  const ms = Date.now() - lastSentAt.getTime();
-  return ms > CONFIRMATION_EMAIL_COOLDOWN_DAYS * 24 * 60 * 60 * 1000;
+function isUniqueViolation(error: unknown) {
+  const code = (error as { code?: string } | null | undefined)?.code;
+  return code === "23505";
 }
 
 function generateReferralCode(length = 10) {
@@ -170,8 +167,8 @@ export async function POST(req: Request) {
   if (!rate.success) return rateLimitResponse(rate.retryAfter);
 
   const role = parsed.data.role;
-  const email = normalizeLooseText(parsed.data.email);
-  const emailLower = email.toLowerCase();
+  const email = parsed.data.email.trim();
+  const emailLower = email.trim().toLowerCase();
   const suburbCity = normalizeLooseText(parsed.data.suburbCity);
   const suburbCityNorm = normalizeForSearch(suburbCity);
 
@@ -214,50 +211,14 @@ export async function POST(req: Request) {
     });
 
     const referralCount = await referralCountForSignupId(existing.id);
-    const referralLink = `${origin}/waitlist?ref=${encodeURIComponent(existing.referralCode)}`;
-
-    const sendOk = shouldSendConfirmationEmail(existing.lastConfirmationEmailSentAt);
-    console.info("[WAITLIST_EMAIL] duplicate_send_decision", {
-      requestId,
-      sendOk,
-      cooldownDays: CONFIRMATION_EMAIL_COOLDOWN_DAYS,
-    });
-    if (sendOk) {
-      console.info("[WAITLIST_EMAIL] sending_confirmation", {
-        requestId,
-        to: maskEmail(existing.email),
-        origin,
-      });
-      const result = await sendEmail({
-        to: existing.email,
-        subject: "You’re on the Verial waitlist",
-        html: buildWaitlistEmailHtml({ referralLink, role: existing.role, referralCount }),
-      });
-
-      console.info("[WAITLIST_EMAIL] send_result", {
-        requestId,
-        to: maskEmail(existing.email),
-        hasResendKey: Boolean(process.env.RESEND_API_KEY),
-        resendResponsePresent: Boolean(result),
-        resendId: (result as { id?: string } | null | undefined)?.id ?? null,
-      });
-      if (process.env.RESEND_API_KEY && result) {
-        await db
-          .update(waitlistSignups)
-          .set({ lastConfirmationEmailSentAt: new Date() })
-          .where(eq(waitlistSignups.id, existing.id));
-
-        console.info("[WAITLIST_EMAIL] updated_last_sent", { requestId, signupId: existing.id });
-      }
-    }
+    const referralUrl = `${origin}/waitlist?ref=${encodeURIComponent(existing.referralCode)}`;
 
     return NextResponse.json({
-      status: "already_exists" as const,
-      role: existing.role,
-      email: existing.email,
-      suburbCity: existing.suburbCity,
+      ok: true,
+      status: "already_joined" as const,
+      message: "You're already on the waitlist.",
       referralCode: existing.referralCode,
-      referralLink,
+      referralUrl,
       referralCount,
     });
   }
@@ -279,10 +240,9 @@ export async function POST(req: Request) {
   ];
   if (role === "provider" && categoryNorm) tags.push(`category:${categoryNorm}`);
 
-  const id = crypto.randomUUID();
-
   let created: { id: string; role: "provider" | "customer"; referralCode: string } | null = null;
   for (let attempt = 0; attempt < 5; attempt++) {
+    const id = crypto.randomUUID();
     const referralCode = generateReferralCode();
     try {
       const [row] = await db
@@ -307,8 +267,30 @@ export async function POST(req: Request) {
         created = row;
         break;
       }
-    } catch {
-      // Likely a referralCode collision; retry.
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        const winner = await db.query.waitlistSignups.findFirst({
+          where: (w, { eq }) => eq(w.emailLower, emailLower),
+        });
+        if (winner) {
+          const referralCount = await referralCountForSignupId(winner.id);
+          const referralUrl = `${origin}/waitlist?ref=${encodeURIComponent(winner.referralCode)}`;
+          return NextResponse.json({
+            ok: true,
+            status: "already_joined" as const,
+            message: "You're already on the waitlist.",
+            referralCode: winner.referralCode,
+            referralUrl,
+            referralCount,
+          });
+        }
+
+        // Unique violation, but not the emailLower row (likely referralCode collision). Retry.
+        continue;
+      }
+
+      console.error("[WAITLIST] insert_failed", { requestId, message: error instanceof Error ? error.message : String(error) });
+      return NextResponse.json({ error: "Unable to create waitlist signup" }, { status: 500 });
     }
   }
 
@@ -317,7 +299,7 @@ export async function POST(req: Request) {
   }
 
   const referralCount = 0;
-  const referralLink = `${origin}/waitlist?ref=${encodeURIComponent(created.referralCode)}`;
+  const referralUrl = `${origin}/waitlist?ref=${encodeURIComponent(created.referralCode)}`;
 
   console.info("[WAITLIST_EMAIL] created_signup", {
     requestId,
@@ -329,7 +311,7 @@ export async function POST(req: Request) {
   const result = await sendEmail({
     to: email,
     subject: "You’re on the Verial waitlist",
-    html: buildWaitlistEmailHtml({ referralLink, role, referralCount }),
+    html: buildWaitlistEmailHtml({ referralLink: referralUrl, role, referralCount }),
   });
 
   console.info("[WAITLIST_EMAIL] send_result", {
@@ -349,12 +331,11 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({
-    status: "created" as const,
-    role: created.role,
-    email,
-    suburbCity,
+    ok: true,
+    status: "joined" as const,
+    message: "You're on the waitlist!",
     referralCode: created.referralCode,
-    referralLink,
+    referralUrl,
     referralCount,
   });
 }

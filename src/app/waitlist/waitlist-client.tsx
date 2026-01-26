@@ -21,13 +21,12 @@ type Role = "provider" | "customer";
 
 type WaitlistResponse =
   | {
-      status: "created" | "already_exists";
-      role: Role;
-      email: string;
-      suburbCity: string;
+      ok: true;
+      status: "joined" | "already_joined";
+      message: string;
       referralCode: string;
-      referralLink: string;
-      referralCount: number;
+      referralUrl: string;
+      referralCount?: number;
     }
   | { error: string; details?: unknown };
 
@@ -53,7 +52,7 @@ export function WaitlistClient() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<Extract<WaitlistResponse, { status: string }> | null>(null);
 
-  const referralLink = result?.referralLink || "";
+  const referralLink = result?.referralUrl || "";
   const shareUrls = useMemo(() => {
     if (!referralLink) return null;
     return {
@@ -107,45 +106,52 @@ export function WaitlistClient() {
   }
 
   if (result) {
+    const isAlready = result.status === "already_joined";
     return (
       <Card className="p-6">
         <div className="space-y-4">
           <div>
-            <h1 className="text-2xl font-semibold">You’re on the waitlist</h1>
+            <h1 className="text-2xl font-semibold">
+              {isAlready ? "Already on the waitlist ✅" : "You’re on the waitlist"}
+            </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              {result.status === "already_exists" ? "You were already signed up." : "Thanks — we’ll be in touch soon."}
+              {isAlready ? "All good — you’re already registered with that email." : "Thanks — we’ll be in touch soon."}
             </p>
           </div>
 
-          <div className="rounded-lg border bg-muted/20 p-3">
-            <p className="text-sm font-medium">Your referral link</p>
-            <p className="mt-1 break-all text-sm text-muted-foreground">{referralLink}</p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={copyReferralLink}>
-                Copy
-              </Button>
-              {shareUrls ? (
-                <>
-                  <Button asChild size="sm" variant="outline">
-                    <a href={shareUrls.whatsapp} target="_blank" rel="noreferrer">
-                      WhatsApp
-                    </a>
-                  </Button>
-                  <Button asChild size="sm" variant="outline">
-                    <a href={shareUrls.facebook} target="_blank" rel="noreferrer">
-                      Facebook
-                    </a>
-                  </Button>
-                </>
-              ) : null}
+          {referralLink ? (
+            <div className="rounded-lg border bg-muted/20 p-3">
+              <p className="text-sm font-medium">Your referral link</p>
+              <p className="mt-1 break-all text-sm text-muted-foreground">{referralLink}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="outline" onClick={copyReferralLink}>
+                  Copy
+                </Button>
+                {shareUrls ? (
+                  <>
+                    <Button asChild size="sm" variant="outline">
+                      <a href={shareUrls.whatsapp} target="_blank" rel="noreferrer">
+                        WhatsApp
+                      </a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <a href={shareUrls.facebook} target="_blank" rel="noreferrer">
+                        Facebook
+                      </a>
+                    </Button>
+                  </>
+                ) : null}
+              </div>
             </div>
-          </div>
+          ) : null}
 
-          <div className="rounded-lg border bg-background p-3">
-            <p className="text-sm">
-              You’ve referred <span className="font-semibold">{result.referralCount}</span> people. Refer 3 to move up the list.
-            </p>
-          </div>
+          {typeof result.referralCount === "number" ? (
+            <div className="rounded-lg border bg-background p-3">
+              <p className="text-sm">
+                You’ve referred <span className="font-semibold">{result.referralCount}</span> people. Refer 3 to move up the list.
+              </p>
+            </div>
+          ) : null}
 
           <Button variant="ghost" onClick={() => setResult(null)}>
             Back
