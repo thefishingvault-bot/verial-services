@@ -7,6 +7,26 @@ import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
+const PUBLIC_PATHS = [
+  "/waitlist",
+  "/api/waitlist",
+];
+
+function isPublicPath(pathname: string) {
+  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
+}
+
+function isAsset(pathname: string) {
+  return (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/favicon") ||
+    pathname === "/robots.txt" ||
+    pathname.startsWith("/sitemap") ||
+    pathname.startsWith("/images") ||
+    pathname.match(/\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt)$/)
+  );
+}
+
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
   "/",
@@ -171,6 +191,19 @@ const clerk = clerkMiddleware(async (auth, req) => {
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
   const pathname = req.nextUrl.pathname;
+
+  const maintenance = process.env.MAINTENANCE_MODE === "true";
+  if (maintenance) {
+    if (isPublicPath(pathname) || isAsset(pathname)) {
+      return NextResponse.next();
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url, 307);
+  }
+
   // PWA install flows fetch these without auth/cookies; Clerk redirects break install icons.
   if (pathname === "/manifest.webmanifest" || pathname.startsWith("/api/pwa")) {
     return NextResponse.next();
@@ -179,6 +212,6 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
-  matcher: ["/((?!.*\\..*|_next).*)", "/", "/(api|trpc)(.*)"],
+  matcher: ["/((?!_next/static|_next/image).*)"],
 };
 
