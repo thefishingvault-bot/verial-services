@@ -150,6 +150,15 @@ function buildWaitlistEmailHtml(params: {
 export async function POST(req: Request) {
   const requestId = crypto.randomUUID();
 
+  if (process.env.NODE_ENV !== "production") {
+    const cookie = req.headers.get("cookie") ?? "";
+    console.info("[WAITLIST] auth_check", {
+      requestId,
+      hasAuthorizationHeader: Boolean(req.headers.get("authorization")),
+      hasClerkSessionCookie: cookie.includes("__session="),
+    });
+  }
+
   let payload: unknown;
   try {
     payload = await req.json();

@@ -10,11 +10,16 @@ import { eq } from "drizzle-orm";
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
   "/",
+  "/waitlist(.*)",
   "/services(.*)",
   "/s/(.*)",
   "/p/(.*)",
+  "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
   "/manifest.webmanifest",
   "/api/pwa(.*)",
+  "/api/waitlist(.*)",
   "/api/services/list", // Public service list API
   "/api/services/by-slug(.*)", // Public service detail API
   "/api/webhooks(.*)", // All webhooks are public
