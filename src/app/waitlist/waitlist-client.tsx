@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { toast } from "sonner";
+import { CheckCircle2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -154,74 +155,106 @@ export function WaitlistClient() {
     );
   }
 
+  const subtitle = role === "provider"
+    ? "Get early access and priority placement when we launch."
+    : "Be first to book trusted local providers when we launch.";
+
+  const finalHowItWorks = role === "provider"
+    ? "Start getting bookings"
+    : "Book local services in minutes";
+
   return (
-    <Card className="p-6">
-      <div className="space-y-2">
-        <h1 className="text-2xl font-semibold">Join the Verial waitlist</h1>
-        <p className="text-sm text-muted-foreground">Be first to know when we launch.</p>
+    <div className="space-y-5">
+      <Card className="p-6">
+        <div className="space-y-2">
+          <h1 className="text-2xl font-semibold">Join the Verial waitlist</h1>
+          <p className="text-sm text-muted-foreground">{subtitle}</p>
+        </div>
+
+        <form className="mt-6 space-y-4" onSubmit={onSubmit}>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <Select value={role} onValueChange={(v) => setRole(v as Role)}>
+              <SelectTrigger>
+                <SelectValue placeholder="Choose…" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="provider">Provider</SelectItem>
+                <SelectItem value="customer">Customer</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Email</Label>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Suburb/City</Label>
+            <Input value={suburbCity} onChange={(e) => setSuburbCity(e.target.value)} placeholder="e.g. Grey Lynn, Auckland" required />
+          </div>
+
+          {role === "provider" ? (
+            <>
+              <div className="space-y-2">
+                <Label>What service do you provide?</Label>
+                <Input
+                  value={categoryText}
+                  onChange={(e) => setCategoryText(e.target.value)}
+                  placeholder="e.g. House cleaning, Lawn mowing, IT support"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">Example: House cleaning, Lawn mowing, IT support</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Years experience (optional)</Label>
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={80}
+                  value={yearsExperience}
+                  onChange={(e) => setYearsExperience(e.target.value)}
+                  placeholder="e.g. 5"
+                />
+                <p className="text-xs text-muted-foreground">Optional. Enter a number from 0–80.</p>
+              </div>
+            </>
+          ) : null}
+
+          <Button type="submit" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? "Submitting…" : "Join waitlist"}
+          </Button>
+
+          <p className="text-center text-xs text-muted-foreground">No spam. Unsubscribe anytime.</p>
+
+          {ref ? (
+            <p className="text-xs text-muted-foreground">
+              Referral applied: <span className="font-mono">{ref}</span>
+            </p>
+          ) : null}
+        </form>
+      </Card>
+
+      <div className="rounded-lg border bg-background/60 p-4">
+        <p className="text-sm font-medium">How it works</p>
+        <div className="mt-3 space-y-2 text-sm text-muted-foreground">
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="mt-0.5 h-4 w-4" aria-hidden />
+            <span>Join the waitlist</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="mt-0.5 h-4 w-4" aria-hidden />
+            <span>Get an invite when we open your area</span>
+          </div>
+          <div className="flex items-start gap-2">
+            <CheckCircle2 className="mt-0.5 h-4 w-4" aria-hidden />
+            <span>{finalHowItWorks}</span>
+          </div>
+        </div>
       </div>
-
-      <form className="mt-6 space-y-4" onSubmit={onSubmit}>
-        <div className="space-y-2">
-          <Label>Role</Label>
-          <Select value={role} onValueChange={(v) => setRole(v as Role)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choose…" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="provider">Provider</SelectItem>
-              <SelectItem value="customer">Customer</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Email</Label>
-          <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required />
-        </div>
-
-        <div className="space-y-2">
-          <Label>Suburb/City</Label>
-          <Input value={suburbCity} onChange={(e) => setSuburbCity(e.target.value)} placeholder="e.g. Grey Lynn, Auckland" required />
-        </div>
-
-        {role === "provider" ? (
-          <>
-            <div className="space-y-2">
-              <Label>What service do you provide?</Label>
-              <Input
-                value={categoryText}
-                onChange={(e) => setCategoryText(e.target.value)}
-                placeholder="e.g. House cleaning, Lawn mowing, IT support"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Years experience (optional)</Label>
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                max={80}
-                value={yearsExperience}
-                onChange={(e) => setYearsExperience(e.target.value)}
-                placeholder="e.g. 5"
-              />
-            </div>
-          </>
-        ) : null}
-
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "Submitting…" : "Join waitlist"}
-        </Button>
-
-        {ref ? (
-          <p className="text-xs text-muted-foreground">
-            Referral applied: <span className="font-mono">{ref}</span>
-          </p>
-        ) : null}
-      </form>
-    </Card>
+    </div>
   );
 }
