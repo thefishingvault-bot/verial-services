@@ -504,6 +504,23 @@ export default async function AdminDashboardPage() {
           </Card>
         </Link>
 
+        <Link href="/dashboard/admin/waitlist">
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer">
+            <CardHeader>
+              <div className="flex items-center space-x-2">
+                <Users className="h-5 w-5 text-blue-600" />
+                <CardTitle className="text-lg">Waitlist</CardTitle>
+              </div>
+              <CardDescription>
+                View waitlist signups.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Badge variant="outline">View List</Badge>
+            </CardContent>
+          </Card>
+        </Link>
+
         <Link href="/dashboard/admin/templates">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer">
             <CardHeader>
