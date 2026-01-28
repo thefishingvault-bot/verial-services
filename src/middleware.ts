@@ -8,6 +8,7 @@ import { providers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const PUBLIC_PATHS = [
+  "/_clerk",
   "/waitlist",
   "/api/waitlist",
   "/invite/provider",
@@ -38,6 +39,7 @@ function isAsset(pathname: string) {
 
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
+  "/_clerk(.*)",
   "/",
   "/waitlist(.*)",
   "/invite/provider(.*)",
