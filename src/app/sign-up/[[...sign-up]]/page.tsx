@@ -1,12 +1,31 @@
 import { SignUp } from "@clerk/nextjs";
+import { headers } from "next/headers";
 
-export default function Page() {
+async function getRequestOrigin(h: Awaited<ReturnType<typeof headers>>) {
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const proto = h.get("x-forwarded-proto") ?? "https";
+  if (!host) return "";
+  return `${proto}://${host}`;
+}
+
+export default async function Page() {
+  const h = await headers();
+  const origin = await getRequestOrigin(h);
+  const host = h.get("x-forwarded-host") ?? h.get("host") ?? "";
+  const vercelEnv = process.env.VERCEL_ENV;
+  const isPrimaryHost = host === "verial.co.nz" || host === "www.verial.co.nz";
+  const forceSameOrigin = !isPrimaryHost || vercelEnv !== "production";
+
+  const redirectUrl = forceSameOrigin && origin ? `${origin}/dashboard` : "/dashboard";
+
   return (
     <div className="flex items-center justify-center min-h-screen bg-verial-light p-4">
       <SignUp
         path="/sign-up"
         signInUrl="/sign-in"
-        forceRedirectUrl="/dashboard"
+        forceRedirectUrl={redirectUrl}
+        afterSignInUrl={redirectUrl}
+        afterSignUpUrl={redirectUrl}
         appearance={{
           baseTheme: undefined, // Use our default theme
           elements: {
