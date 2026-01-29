@@ -20,7 +20,27 @@ ALTER TABLE "messages" ADD COLUMN "recipient_id" varchar(255);
 --> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "is_system" boolean DEFAULT false NOT NULL;
 --> statement-breakpoint
-ALTER TABLE "messages" ADD COLUMN "attachments" text;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+            AND table_name = 'messages'
+            AND column_name = 'attachments'
+    ) THEN
+        ALTER TABLE "messages" ADD COLUMN "attachments" jsonb;
+    ELSIF EXISTS (
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+            AND table_name = 'messages'
+            AND column_name = 'attachments'
+            AND data_type = 'text'
+    ) THEN
+        ALTER TABLE "messages" ALTER COLUMN "attachments" TYPE jsonb USING NULLIF("attachments", '')::jsonb;
+    END IF;
+END $$;
 --> statement-breakpoint
 ALTER TABLE "messages" ADD COLUMN "deleted_at" timestamp;
 --> statement-breakpoint

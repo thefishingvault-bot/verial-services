@@ -17,8 +17,19 @@ ALTER TABLE "messages" DROP CONSTRAINT IF EXISTS "messages_pkey";
 ALTER TABLE "messages" ADD CONSTRAINT "messages_pkey" PRIMARY KEY ("server_message_id");
 ALTER TABLE "messages" ADD CONSTRAINT "messages_id_unique" UNIQUE ("id");
 
--- Index for pagination within booking threads
-CREATE INDEX IF NOT EXISTS "messages_booking_created_idx" ON "messages" ("booking_id", "created_at");
+-- Index for pagination within threads (guarded for older schemas)
+DO $$
+BEGIN
+	IF EXISTS (
+		SELECT 1
+		FROM information_schema.columns
+		WHERE table_schema = 'public'
+			AND table_name = 'messages'
+			AND column_name = 'thread_id'
+	) THEN
+		CREATE INDEX IF NOT EXISTS "messages_thread_created_idx" ON "messages" ("thread_id", "created_at");
+	END IF;
+END $$;
 
 -- Cached unread count on threads
-ALTER TABLE "message_threads" ADD COLUMN IF NOT EXISTS "unread_count" integer NOT NULL DEFAULT 0;
+ALTER TABLE IF EXISTS "message_threads" ADD COLUMN IF NOT EXISTS "unread_count" integer NOT NULL DEFAULT 0;

@@ -10,4 +10,3 @@ ALTER TABLE "bookings"
 
 ALTER TABLE "bookings"
   ADD COLUMN IF NOT EXISTS "paid_out_at" timestamp;
-  ADD COLUMN IF NOT EXISTS "paid_out_at" timestamp;

@@ -1,6 +1,26 @@
 -- Align conversations schema to userA/userB and add metadata
-ALTER TABLE "conversations" RENAME COLUMN IF EXISTS "user1_id" TO "user_a_id";
-ALTER TABLE "conversations" RENAME COLUMN IF EXISTS "user2_id" TO "user_b_id";
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'conversations'
+      AND column_name = 'user1_id'
+  ) THEN
+    ALTER TABLE "conversations" RENAME COLUMN "user1_id" TO "user_a_id";
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'conversations'
+      AND column_name = 'user2_id'
+  ) THEN
+    ALTER TABLE "conversations" RENAME COLUMN "user2_id" TO "user_b_id";
+  END IF;
+END $$;
 ALTER TABLE "conversations" ADD COLUMN IF NOT EXISTS "updated_at" timestamp DEFAULT now() NOT NULL;
 
 -- Normalize participant ordering to prevent duplicate pairs
