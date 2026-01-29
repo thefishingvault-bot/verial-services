@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { providerInvites } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ensureUserExistsInDb } from "@/lib/user-sync";
+import { sendEmailWithResult } from "@/lib/email";
+import { eq } from "drizzle-orm";
 
 export const runtime = "nodejs";
 
@@ -104,18 +106,109 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const invites = created.map((i) => {
-      const path = `/invite/provider?token=${encodeURIComponent(i.token)}`;
-      return {
-        id: i.id,
-        email: i.email,
-        status: i.status,
-        inviteUrlCurrent: `${origin}${path}`,
-        inviteUrlPublic: `${publicBase}${path}`,
-      };
-    });
+    const now = new Date();
 
-    return NextResponse.json({ ok: true, invites });
+    const invites = [] as Array<{
+      id: string;
+      email: string;
+      status: string;
+      inviteUrlCurrent: string;
+      inviteUrlPublic: string;
+      emailStatus: "not_sent" | "sent" | "failed";
+      emailSentAt: string | null;
+      emailResendId: string | null;
+      emailError: string | null;
+    }>;
+
+    for (const i of created) {
+      const path = `/invite/provider?token=${encodeURIComponent(i.token)}`;
+      const inviteUrlCurrent = `${origin}${path}`;
+      const inviteUrlPublic = `${publicBase}${path}`;
+
+      const to = i.email;
+      const subject = "Your early access link to Verial";
+      const html = `
+        <div style="font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial;line-height:1.5">
+          <h2 style="margin:0 0 12px 0">You're invited to Verial</h2>
+          <p style="margin:0 0 12px 0">Use this link to redeem early provider access:</p>
+          <p style="margin:0 0 16px 0"><a href="${inviteUrlPublic}">${inviteUrlPublic}</a></p>
+          <p style="margin:0;color:#6b7280;font-size:12px">If you didn’t request this, you can ignore this email.</p>
+        </div>
+      `.trim();
+
+      console.info("[PROVIDER_INVITE_EMAIL] send_attempt", {
+        inviteId: i.id,
+        to,
+        subject,
+        publicBase,
+      });
+
+      const sendResult = await sendEmailWithResult({ to, subject, html });
+
+      if (sendResult.ok) {
+        await db
+          .update(providerInvites)
+          .set({
+            inviteEmailSentAt: now,
+            inviteEmailTo: to,
+            inviteEmailResendId: sendResult.id,
+            inviteEmailError: null,
+          })
+          .where(eq(providerInvites.id, i.id));
+
+        invites.push({
+          id: i.id,
+          email: i.email,
+          status: i.status,
+          inviteUrlCurrent,
+          inviteUrlPublic,
+          emailStatus: "sent",
+          emailSentAt: now.toISOString(),
+          emailResendId: sendResult.id,
+          emailError: null,
+        });
+      } else {
+        await db
+          .update(providerInvites)
+          .set({
+            inviteEmailSentAt: null,
+            inviteEmailTo: to,
+            inviteEmailResendId: null,
+            inviteEmailError: sendResult.error,
+          })
+          .where(eq(providerInvites.id, i.id));
+
+        console.error("[PROVIDER_INVITE_EMAIL] send_failed", {
+          inviteId: i.id,
+          to,
+          subject,
+          error: sendResult.error,
+        });
+
+        invites.push({
+          id: i.id,
+          email: i.email,
+          status: i.status,
+          inviteUrlCurrent,
+          inviteUrlPublic,
+          emailStatus: "failed",
+          emailSentAt: null,
+          emailResendId: null,
+          emailError: sendResult.error,
+        });
+      }
+    }
+
+    const failures = invites.filter((i) => i.emailStatus === "failed");
+    if (failures.length > 0) {
+      console.warn("[PROVIDER_INVITE_EMAIL] some_failed", { failed: failures.length, total: invites.length });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      invites,
+      errorBanner: failures.length > 0 ? `Failed to send ${failures.length} invite email${failures.length === 1 ? "" : "s"}.` : null,
+    });
   } catch (error) {
     console.error("[API_ADMIN_PROVIDER_INVITES]", error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });

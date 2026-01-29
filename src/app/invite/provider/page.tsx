@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { eq } from "drizzle-orm";
 
 import { auth } from "@clerk/nextjs/server";
@@ -81,9 +80,72 @@ export default async function ProviderInvitePage({
   }
 
   const { userId } = await auth();
+  const helperErrorText =
+    error === "revoked"
+      ? "This invite has been revoked."
+      : error === "redeemed"
+        ? "This invite link has already been used."
+        : error === "invalid"
+          ? "We couldn't redeem that invite. Please try again."
+          : "";
+
   if (!userId) {
-    redirect(`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`);
+    return (
+      <div className="min-h-screen bg-muted/20">
+        <div className="container mx-auto max-w-lg px-4 py-10">
+          <Card className="p-6 space-y-4">
+            <div className="space-y-2">
+              <h1 className="text-2xl font-semibold">Provider invite</h1>
+              <p className="text-sm text-muted-foreground">
+                Sign in to redeem your invite and get early provider access.
+              </p>
+              {helperErrorText ? (
+                <p className="text-sm text-destructive">{helperErrorText}</p>
+              ) : null}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button asChild>
+                <Link href={`/sign-in?redirect_url=${encodeURIComponent(returnUrl)}`}>Sign in to redeem</Link>
+              </Button>
+              <Button asChild variant="outline">
+                <Link href="/waitlist">Go to waitlist</Link>
+              </Button>
+            </div>
+          </Card>
+        </div>
+      </div>
+    );
   }
 
-  redirect(`/invite/provider/redeem?token=${encodeURIComponent(token)}`);
+  return (
+    <div className="min-h-screen bg-muted/20">
+      <div className="container mx-auto max-w-lg px-4 py-10">
+        <Card className="p-6 space-y-4">
+          <div className="space-y-2">
+            <h1 className="text-2xl font-semibold">You’re invited 🎉</h1>
+            <p className="text-sm text-muted-foreground">
+              Redeem your invite to unlock provider registration.
+            </p>
+            {helperErrorText ? (
+              <p className="text-sm text-destructive">{helperErrorText}</p>
+            ) : null}
+          </div>
+
+          <form action={`/invite/provider/redeem?token=${encodeURIComponent(token)}`} method="POST">
+            <Button type="submit" className="w-full">
+              Redeem invite
+            </Button>
+          </form>
+
+          <p className="text-xs text-muted-foreground">
+            If you have issues, go back to the waitlist and request a new invite.
+          </p>
+
+          <Button asChild variant="outline" className="w-full">
+            <Link href="/waitlist">Go to waitlist</Link>
+          </Button>
+        </Card>
+      </div>
+    </div>
+  );
 }

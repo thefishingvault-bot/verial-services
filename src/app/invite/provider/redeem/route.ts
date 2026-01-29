@@ -11,9 +11,17 @@ export const runtime = "nodejs";
 const EARLY_ACCESS_COOKIE = "verial_early_provider_access";
 
 export async function GET(request: NextRequest) {
+  // Do not redeem on GET (prevents redirect loops and accidental redemptions).
+  const token = request.nextUrl.searchParams.get("token")?.trim() || "";
+  const url = new URL("/invite/provider", request.url);
+  if (token) url.searchParams.set("token", token);
+  return NextResponse.redirect(url);
+}
+
+export async function POST(request: NextRequest) {
   const token = request.nextUrl.searchParams.get("token")?.trim() || "";
   if (!token) {
-    return NextResponse.redirect(new URL("/waitlist", request.url));
+    return NextResponse.redirect(new URL("/invite/provider", request.url));
   }
 
   const { userId } = await auth();
@@ -28,35 +36,36 @@ export async function GET(request: NextRequest) {
   const now = new Date();
 
   try {
-    const result = await db.transaction(async (tx) => {
-      const [updatedInvite] = await tx
-        .update(providerInvites)
-        .set({
-          status: "redeemed",
-          redeemedAt: now,
-          redeemedByUserId: userId,
-        })
-        .where(and(eq(providerInvites.token, token), eq(providerInvites.status, "pending")))
-        .returning({ id: providerInvites.id });
+    // NOTE: Neon HTTP driver does not support transactions.
+    // Make redemption atomic via a single conditional UPDATE.
+    const [updatedInvite] = await db
+      .update(providerInvites)
+      .set({
+        status: "redeemed",
+        redeemedAt: now,
+        redeemedByUserId: userId,
+      })
+      .where(and(eq(providerInvites.token, token), eq(providerInvites.status, "pending")))
+      .returning({ id: providerInvites.id });
 
-      if (!updatedInvite) {
-        return { ok: false as const };
-      }
+    if (!updatedInvite) {
+      // Distinguish invalid vs revoked vs already redeemed.
+      const invite = await db.query.providerInvites.findFirst({
+        where: eq(providerInvites.token, token),
+        columns: { status: true },
+      });
 
-      await tx
-        .update(users)
-        .set({ earlyProviderAccess: true, updatedAt: now })
-        .where(eq(users.id, userId));
-
-      return { ok: true as const };
-    });
-
-    if (!result.ok) {
       const url = new URL("/invite/provider", request.url);
       url.searchParams.set("token", token);
-      url.searchParams.set("error", "redeemed");
+      url.searchParams.set("error", !invite ? "invalid" : invite.status === "revoked" ? "revoked" : "redeemed");
       return NextResponse.redirect(url);
     }
+
+    // Best-effort: mark early access on the user.
+    await db
+      .update(users)
+      .set({ earlyProviderAccess: true, updatedAt: now })
+      .where(eq(users.id, userId));
 
     const res = NextResponse.redirect(new URL("/dashboard/register-provider", request.url));
     res.cookies.set({

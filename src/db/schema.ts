@@ -77,6 +77,11 @@ export const providerInvites = pgTable(
     redeemedAt: timestamp("redeemed_at"),
     redeemedByUserId: varchar("redeemed_by_user_id", { length: 255 }),
 
+    inviteEmailSentAt: timestamp("invite_email_sent_at"),
+    inviteEmailTo: varchar("invite_email_to", { length: 255 }),
+    inviteEmailResendId: varchar("invite_email_resend_id", { length: 255 }),
+    inviteEmailError: text("invite_email_error"),
+
     notes: text("notes"),
   },
   (table) => ({

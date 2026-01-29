@@ -32,10 +32,14 @@ type InviteResult = {
   status: string;
   inviteUrlCurrent: string;
   inviteUrlPublic: string;
+  emailStatus: "not_sent" | "sent" | "failed";
+  emailSentAt: string | null;
+  emailResendId: string | null;
+  emailError: string | null;
 };
 
 type CreateInvitesResponse =
-  | { ok: true; invites: InviteResult[] }
+  | { ok: true; invites: InviteResult[]; errorBanner: string | null }
   | { error: string; details?: unknown };
 
 export function AdminWaitlistInteractive(props: {
@@ -48,6 +52,10 @@ export function AdminWaitlistInteractive(props: {
   const [notes, setNotes] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState<InviteResult[] | null>(null);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
+
+  const [testEmail, setTestEmail] = useState("");
+  const [isSendingTest, setIsSendingTest] = useState(false);
 
   const [localAccessEmailLowers, setLocalAccessEmailLowers] = useState<Set<string>>(() => {
     const s = new Set<string>();
@@ -115,6 +123,7 @@ export function AdminWaitlistInteractive(props: {
       }
 
       setResults(data.invites);
+      setErrorBanner(data.errorBanner);
 
       // Mark those emails as having access now (so they become unselectable immediately).
       const createdLower = new Set(data.invites.map((i) => i.email.toLowerCase()));
@@ -138,6 +147,37 @@ export function AdminWaitlistInteractive(props: {
       toast.error(err instanceof Error ? err.message : "Failed to generate invites");
     } finally {
       setIsGenerating(false);
+    }
+  }
+
+  async function sendTestInvite() {
+    const email = testEmail.trim();
+    if (!email) {
+      toast.error("Enter an email address");
+      return;
+    }
+
+    setIsSendingTest(true);
+    try {
+      const res = await fetch("/api/admin/provider-invites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ emails: [email], notes: "test_invite" }),
+      });
+
+      const data = (await res.json()) as CreateInvitesResponse;
+      if (!res.ok || "error" in data) {
+        toast.error("error" in data ? data.error : "Failed to send test invite");
+        return;
+      }
+
+      setResults(data.invites);
+      setErrorBanner(data.errorBanner);
+      toast.success("Test invite processed");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send test invite");
+    } finally {
+      setIsSendingTest(false);
     }
   }
 
@@ -173,10 +213,31 @@ export function AdminWaitlistInteractive(props: {
             </Button>
           </div>
 
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+            <div className="flex-1 space-y-2">
+              <label className="text-xs text-muted-foreground">Send test invite email (optional)</label>
+              <Input
+                value={testEmail}
+                onChange={(e) => setTestEmail(e.target.value)}
+                placeholder="provider@example.com"
+                className="h-9"
+              />
+            </div>
+            <Button type="button" variant="outline" disabled={isSendingTest} onClick={sendTestInvite}>
+              {isSendingTest ? "Sending…" : "Send test invite"}
+            </Button>
+          </div>
+
           <div className="space-y-2">
             <label className="text-xs text-muted-foreground">Notes (optional)</label>
             <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="e.g. Auckland launch batch #1" />
           </div>
+
+          {errorBanner ? (
+            <div className="rounded-lg border border-destructive bg-destructive/5 p-3 text-sm text-destructive">
+              {errorBanner}
+            </div>
+          ) : null}
 
           {results && results.length > 0 ? (
             <div className="space-y-3">
@@ -196,10 +257,28 @@ export function AdminWaitlistInteractive(props: {
               <div className="space-y-2">
                 {results.map((r) => {
                   const url = r.inviteUrlCurrent || r.inviteUrlPublic;
+                  const statusBadge =
+                    r.emailStatus === "sent"
+                      ? <Badge className="bg-emerald-500/15 text-emerald-700 border-emerald-500/20" variant="outline">Sent ✅</Badge>
+                      : r.emailStatus === "failed"
+                        ? <Badge className="bg-destructive/10 text-destructive border-destructive/20" variant="outline">Failed ❌</Badge>
+                        : <Badge variant="secondary">Not sent</Badge>;
+
                   return (
                     <div key={r.id} className="rounded-lg border bg-muted/20 p-3">
                       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                        <p className="text-sm font-medium">{r.email}</p>
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium">{r.email}</p>
+                            {statusBadge}
+                          </div>
+                          {r.emailResendId ? (
+                            <p className="text-xs text-muted-foreground">resend_id: {r.emailResendId}</p>
+                          ) : null}
+                          {r.emailError ? (
+                            <p className="text-xs text-destructive wrap-break-word">{r.emailError}</p>
+                          ) : null}
+                        </div>
                         <Button type="button" size="sm" variant="outline" onClick={() => copy(url)}>
                           Copy link
                         </Button>
