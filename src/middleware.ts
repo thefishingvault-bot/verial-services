@@ -8,9 +8,19 @@ import { providers, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const PUBLIC_PATHS = [
+  "/_clerk",
   "/waitlist",
   "/api/waitlist",
+  "/invite/provider",
+  "/sign-in",
+  "/sign-up",
+  "/api/webhooks",
+  "/api/stripe/webhook",
+  "/api/health",
+  "/api/sentry-test",
 ];
+
+const EARLY_ACCESS_COOKIE = "verial_early_provider_access";
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
@@ -29,8 +39,10 @@ function isAsset(pathname: string) {
 
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
+  "/_clerk(.*)",
   "/",
   "/waitlist(.*)",
+  "/invite/provider(.*)",
   "/services(.*)",
   "/s/(.*)",
   "/p/(.*)",
@@ -78,6 +90,57 @@ const isMessagesRoute = createRouteMatcher([
 
 const clerk = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
+
+  const hostname = req.nextUrl.hostname;
+  const isStagingHost =
+    hostname.includes("staging.") ||
+    hostname.startsWith("staging-") ||
+    hostname.includes("-staging") ||
+    hostname === "localhost";
+
+  // Waitlist-only gate (production only) with bypass for admins + invited providers.
+  const maintenance = process.env.MAINTENANCE_MODE === "true";
+  const vercelEnv = process.env.VERCEL_ENV;
+  const shouldEnforceMaintenance = maintenance && vercelEnv === "production" && !isStagingHost;
+
+  if (shouldEnforceMaintenance) {
+    // Always allow waitlist + invite redeem flows + assets.
+    if (isPublicPath(pathname) || isAsset(pathname)) {
+      return NextResponse.next();
+    }
+
+    const { userId, sessionClaims } = await auth();
+    if (!userId) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/waitlist";
+      url.search = "";
+      return NextResponse.redirect(url, 307);
+    }
+
+    const cookieBypass = req.cookies.get(EARLY_ACCESS_COOKIE)?.value === "1";
+    const sessionRole = (sessionClaims?.publicMetadata as Record<string, unknown> | undefined)?.role;
+    if (sessionRole === "admin") {
+      return NextResponse.next();
+    }
+
+    const dbUser = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { role: true, earlyProviderAccess: true },
+    });
+
+    if (dbUser?.role === "admin") {
+      return NextResponse.next();
+    }
+
+    if (cookieBypass || dbUser?.earlyProviderAccess) {
+      return NextResponse.next();
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url, 307);
+  }
 
   if (isPublicRoute(req)) {
     return NextResponse.next();
@@ -191,18 +254,6 @@ const clerk = clerkMiddleware(async (auth, req) => {
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
   const pathname = req.nextUrl.pathname;
-
-  const maintenance = process.env.MAINTENANCE_MODE === "true";
-  if (maintenance) {
-    if (isPublicPath(pathname) || isAsset(pathname)) {
-      return NextResponse.next();
-    }
-
-    const url = req.nextUrl.clone();
-    url.pathname = "/waitlist";
-    url.search = "";
-    return NextResponse.redirect(url, 307);
-  }
 
   // PWA install flows fetch these without auth/cookies; Clerk redirects break install icons.
   if (pathname === "/manifest.webmanifest" || pathname.startsWith("/api/pwa")) {

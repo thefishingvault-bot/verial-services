@@ -323,6 +323,20 @@
       "when": 1769393356494,
       "tag": "0040_waitlist_signups",
       "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1769586000000,
+      "tag": "0041_provider_invites",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1769720000000,
+      "tag": "0042_provider_invite_email_status",
+      "breakpoints": true
     }
   ]
 }

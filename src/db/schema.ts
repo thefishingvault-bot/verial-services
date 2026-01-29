@@ -14,6 +14,7 @@ import {
   uniqueIndex,
   jsonb,
   primaryKey,
+  uuid,
 } from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
@@ -33,6 +34,9 @@ export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elit
 // Waitlist
 export const waitlistRoleEnum = pgEnum("waitlist_role", ["provider", "customer"]);
 
+// Provider early-access invites
+export const providerInviteStatusEnum = pgEnum("provider_invite_status", ["pending", "redeemed", "revoked"]);
+
 // --- TABLES ---
 
 /**
@@ -48,9 +52,45 @@ export const users = pgTable("users", {
   avatarUrl: text("avatar_url"),
   role: userRoleEnum("role").default("user").notNull(),
   providerId: varchar("provider_id", { length: 255 }),
+  earlyProviderAccess: boolean("early_provider_access").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+/**
+ * Provider Invites
+ * Admin-issued early-access invites for providers.
+ */
+export const providerInvites = pgTable(
+  "provider_invites",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    email: varchar("email", { length: 255 }).notNull(),
+    emailLower: varchar("email_lower", { length: 255 }).notNull(),
+
+    token: varchar("token", { length: 255 }).notNull(),
+    status: providerInviteStatusEnum("status").default("pending").notNull(),
+
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    createdByUserId: varchar("created_by_user_id", { length: 255 }).notNull(),
+
+    redeemedAt: timestamp("redeemed_at"),
+    redeemedByUserId: varchar("redeemed_by_user_id", { length: 255 }),
+
+    inviteEmailSentAt: timestamp("invite_email_sent_at"),
+    inviteEmailTo: varchar("invite_email_to", { length: 255 }),
+    inviteEmailResendId: varchar("invite_email_resend_id", { length: 255 }),
+    inviteEmailError: text("invite_email_error"),
+
+    notes: text("notes"),
+  },
+  (table) => ({
+    tokenUnique: uniqueIndex("provider_invites_token_unique").on(table.token),
+    emailLowerIdx: index("provider_invites_email_lower_idx").on(table.emailLower),
+    statusIdx: index("provider_invites_status_idx").on(table.status),
+    createdAtIdx: index("provider_invites_created_at_idx").on(table.createdAt),
+  }),
+);
 
 /**
  * Waitlist Signups

@@ -4,12 +4,12 @@ import { desc, eq, ilike, and, inArray, sql } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { requireAdmin } from "@/lib/admin-auth";
-import { waitlistSignups } from "@/db/schema";
+import { providerInvites, users, waitlistSignups } from "@/db/schema";
 import { AdminWaitlistSearchSchema, parseSearchParams } from "@/lib/validation/admin-loader-schemas";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { AdminWaitlistInteractive, type AdminWaitlistRow } from "./admin-waitlist-interactive";
 
 export default async function AdminWaitlistPage({
   searchParams,
@@ -47,6 +47,7 @@ export default async function AdminWaitlistPage({
       createdAt: waitlistSignups.createdAt,
       role: waitlistSignups.role,
       email: waitlistSignups.email,
+      emailLower: waitlistSignups.emailLower,
       suburbCity: waitlistSignups.suburbCity,
       categoryText: waitlistSignups.categoryText,
       yearsExperience: waitlistSignups.yearsExperience,
@@ -59,6 +60,38 @@ export default async function AdminWaitlistPage({
     .orderBy(desc(waitlistSignups.createdAt))
     .limit(500);
 
+  const providerEmailLowers = Array.from(
+    new Set(rows.filter((r) => r.role === "provider").map((r) => r.emailLower).filter(Boolean)),
+  );
+
+  const inviteAccessRows = providerEmailLowers.length
+    ? await db
+        .select({ emailLower: providerInvites.emailLower })
+        .from(providerInvites)
+        .where(
+          and(
+            inArray(providerInvites.emailLower, providerEmailLowers),
+            inArray(providerInvites.status, ["pending", "redeemed"]),
+          ),
+        )
+    : [];
+
+  const inviteAccessSet = new Set(inviteAccessRows.map((r) => r.emailLower));
+
+  // Best-effort: mark users with earlyProviderAccess=true as already having access.
+  // Users table does not store emailLower, so we match using lower(email).
+  const lowerEmailExpr = sql<string>`lower(${users.email})`;
+  const userAccessRows = providerEmailLowers.length
+    ? await db
+        .select({ emailLower: lowerEmailExpr, earlyProviderAccess: users.earlyProviderAccess })
+        .from(users)
+        .where(inArray(lowerEmailExpr, providerEmailLowers))
+    : [];
+
+  const userAccessSet = new Set(
+    userAccessRows.filter((r) => r.earlyProviderAccess).map((r) => r.emailLower),
+  );
+
   const referredByIds = Array.from(new Set(rows.map((r) => r.referredById).filter(Boolean) as string[]));
   const referredByRows = referredByIds.length
     ? await db
@@ -68,6 +101,28 @@ export default async function AdminWaitlistPage({
     : [];
 
   const referredByEmailById = new Map(referredByRows.map((r) => [r.id, r.email] as const));
+
+  const referredByEmailByIdRecord = Object.fromEntries(referredByEmailById.entries());
+
+  const clientRows: AdminWaitlistRow[] = rows.map((r) => {
+    const alreadyHasAccess =
+      r.role === "provider" && (inviteAccessSet.has(r.emailLower) || userAccessSet.has(r.emailLower));
+
+    return {
+      id: r.id,
+      createdAtIso: r.createdAt?.toISOString?.() ?? "",
+      role: r.role,
+      email: r.email,
+      emailLower: r.emailLower,
+      suburbCity: r.suburbCity,
+      categoryText: r.categoryText ?? null,
+      yearsExperience: r.yearsExperience ?? null,
+      referralCode: r.referralCode,
+      referredById: r.referredById ?? null,
+      referralCount: Number(r.referralCount ?? 0),
+      alreadyHasAccess,
+    };
+  });
 
   const query = new URLSearchParams();
   if (params.role !== "all") query.set("role", params.role);
@@ -132,50 +187,7 @@ export default async function AdminWaitlistPage({
         </div>
       </form>
 
-      <div className="rounded-lg border bg-background">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Created</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Suburb/City</TableHead>
-              <TableHead>Category</TableHead>
-              <TableHead>Years</TableHead>
-              <TableHead>Referral code</TableHead>
-              <TableHead>Referred by</TableHead>
-              <TableHead className="text-right">Referrals</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-sm text-muted-foreground">
-                  No results.
-                </TableCell>
-              </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {r.createdAt?.toISOString?.().slice(0, 10) ?? ""}
-                  </TableCell>
-                  <TableCell className="capitalize">{r.role}</TableCell>
-                  <TableCell className="max-w-[220px] truncate">{r.email}</TableCell>
-                  <TableCell className="max-w-[220px] truncate">{r.suburbCity}</TableCell>
-                  <TableCell className="max-w-[220px] truncate">{r.categoryText ?? ""}</TableCell>
-                  <TableCell>{r.yearsExperience ?? ""}</TableCell>
-                  <TableCell className="font-mono text-xs">{r.referralCode}</TableCell>
-                  <TableCell className="max-w-[220px] truncate text-xs text-muted-foreground">
-                    {r.referredById ? referredByEmailById.get(r.referredById) ?? r.referredById : ""}
-                  </TableCell>
-                  <TableCell className="text-right">{Number(r.referralCount ?? 0)}</TableCell>
-                </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </div>
+      <AdminWaitlistInteractive rows={clientRows} referredByEmailById={referredByEmailByIdRecord} />
 
       <p className="text-xs text-muted-foreground">Showing up to 500 results. Use export for larger pulls.</p>
     </div>

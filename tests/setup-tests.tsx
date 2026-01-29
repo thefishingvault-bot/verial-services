@@ -44,3 +44,19 @@ vi.mock("next/navigation", async (importOriginal: () => Promise<unknown>) => {
 vi.mock("@clerk/nextjs", () => ({
   useAuth: () => ({ isSignedIn: true, userId: "user_test", orgId: null, sessionId: "sess_test" }),
 }));
+
+// jsdom doesn't implement matchMedia; some components use it for responsive UI.
+if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+  window.matchMedia = ((_query: string) => {
+    return {
+      matches: false,
+      media: _query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    } as any;
+  }) as any;
+}

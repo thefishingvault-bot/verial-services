@@ -14,7 +14,23 @@ const getResendClient = () => {
   return resend;
 };
 
-const fromEmail = process.env.EMAIL_FROM || 'Verial <no-reply@verial.co.nz>';
+function getFromEmail() {
+  const vercelEnv = process.env.VERCEL_ENV;
+
+  // Prefer explicit Resend sender.
+  const configured = process.env.RESEND_FROM || process.env.EMAIL_FROM;
+  if (configured) return configured;
+
+  // Staging/dev safe fallback (Resend shared domain).
+  if (vercelEnv !== 'production') {
+    return 'Verial <onboarding@resend.dev>';
+  }
+
+  // Production fallback (may require domain verification).
+  return 'Verial <no-reply@verial.co.nz>';
+}
+
+const fromEmail = getFromEmail();
 
 function maskEmail(value: string) {
   const email = value.trim();
@@ -47,8 +63,8 @@ export const sendEmail = async (payload: EmailPayload) => {
   try {
     const client = getResendClient();
 
-    if (!process.env.EMAIL_FROM) {
-      console.warn('[EMAIL] EMAIL_FROM not set - using default sender. Ensure this sender/domain is verified in Resend.');
+    if (!process.env.RESEND_FROM && !process.env.EMAIL_FROM) {
+      console.warn('[EMAIL] RESEND_FROM/EMAIL_FROM not set - using fallback sender. Ensure sender/domain is verified in Resend.');
     }
 
     console.info('[EMAIL] send_attempt', {
@@ -90,6 +106,47 @@ export const sendEmail = async (payload: EmailPayload) => {
     });
     // Don't throw, just log the error. A failed email
     // should not fail the entire API request.
+  }
+};
+
+export type SendEmailResult =
+  | { ok: true; id: string | null }
+  | { ok: false; error: string };
+
+export const sendEmailWithResult = async (payload: EmailPayload): Promise<SendEmailResult> => {
+  const client = getResendClient();
+
+  console.info('[EMAIL] send_attempt_strict', {
+    from: fromEmail,
+    to: maskEmail(payload.to),
+    subject: payload.subject,
+    hasResendKey: Boolean(process.env.RESEND_API_KEY),
+  });
+
+  if (!client) {
+    return { ok: false, error: 'RESEND_API_KEY not configured' };
+  }
+
+  try {
+    const data = await client.emails.send({
+      from: fromEmail,
+      to: payload.to,
+      subject: payload.subject,
+      html: payload.html,
+    });
+
+    const id = (data as { id?: string } | null | undefined)?.id ?? null;
+    console.info('[EMAIL_SENT_STRICT]', { subject: payload.subject, to: maskEmail(payload.to), id });
+    return { ok: true, id };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error('[EMAIL_ERROR_STRICT]', {
+      from: fromEmail,
+      to: maskEmail(payload.to),
+      subject: payload.subject,
+      message,
+    });
+    return { ok: false, error: message };
   }
 };
 
