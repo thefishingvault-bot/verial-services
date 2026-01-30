@@ -1,45 +1,10 @@
-src/middleware.ts
-
+// src/middleware.ts
 export const runtime = "nodejs";
 
-import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
-import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { db } from "@/lib/db";
-import { providers, users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { NextResponse } from "next/server";
 
-const PUBLIC_PATHS = [
-  "/_clerk",
-  "/waitlist",
-  "/api/waitlist",
-  "/invite/provider",
-  "/sign-in",
-  "/sign-up",
-  "/api/webhooks",
-  "/api/stripe/webhook",
-  "/api/health",
-  "/api/sentry-test",
-];
-
-const EARLY_ACCESS_COOKIE = "verial_early_provider_access";
-
-function isPublicPath(pathname: string) {
-  return PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
-}
-
-function isAsset(pathname: string) {
-  return (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon") ||
-    pathname === "/robots.txt" ||
-    pathname.startsWith("/sitemap") ||
-    pathname.startsWith("/images") ||
-    pathname.match(/\.(png|jpg|jpeg|gif|webp|svg|ico|css|js|map|txt)$/)
-  );
-}
-
-// Define routes that are public (accessible without auth)
+// Public routes (no auth required)
 const isPublicRoute = createRouteMatcher([
   "/_clerk(.*)",
   "/",
@@ -48,13 +13,47 @@ const isPublicRoute = createRouteMatcher([
   "/services(.*)",
   "/s/(.*)",
   "/p/(.*)",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
   "/favicon.ico",
   "/robots.txt",
   "/sitemap.xml",
   "/manifest.webmanifest",
   "/api/pwa(.*)",
   "/api/waitlist(.*)",
-  "/api/services/list", // Public service list API
-  "/api/public/provider/time-offs", // Public time-offs API
-  "/api/recommendations/providers", // Public recommendations API
+  "/api/services/list",
+  "/api/public/provider/time-offs",
+  "/api/recommendations/providers",
+  "/api/webhooks(.*)",
+  "/api/stripe/webhook(.*)",
+  "/api/health(.*)",
 ]);
+
+const MAINTENANCE_MODE =
+  (process.env.MAINTENANCE_MODE ?? "false").toLowerCase() === "true";
+
+// ✅ This is the middleware function Next.js requires
+export default clerkMiddleware((auth, req) => {
+  // If you're not using maintenance mode, just let Clerk handle auth normally.
+  if (!MAINTENANCE_MODE) {
+    // Optional: protect non-public routes explicitly (recommended)
+    if (!isPublicRoute(req)) auth().protect();
+    return NextResponse.next();
+  }
+
+  // Maintenance ON: allow public routes; redirect everything else
+  if (!isPublicRoute(req)) {
+    return NextResponse.redirect(new URL("/waitlist", req.url));
+  }
+
+  return NextResponse.next();
+});
+
+export const config = {
+  matcher: [
+    // Run on all routes except Next internals and static files
+    "/((?!_next|.*\\..*).*)",
+    // Always run for API routes too
+    "/(api|trpc)(.*)",
+  ],
+};
