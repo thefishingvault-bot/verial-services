@@ -51,3 +51,4 @@ next-env.d.ts
 # Sentry
 .sentryclirc
 .env.sentry-build-plugin
+verial.dump
