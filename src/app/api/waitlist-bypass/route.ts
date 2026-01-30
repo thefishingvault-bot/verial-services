@@ -7,12 +7,15 @@ export async function GET(req: NextRequest) {
   const bypassKey = process.env.WAITLIST_BYPASS_KEY;
 
   if (!bypassKey || key !== bypassKey) {
-    return NextResponse.json({ ok: false }, { status: 401 });
+    return NextResponse.json(
+      { ok: false },
+      { status: 401, headers: { "Cache-Control": "no-store" } },
+    );
   }
 
   const cookieName = process.env.WAITLIST_BYPASS_COOKIE || "verial_bypass";
 
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   res.cookies.set({
     name: cookieName,
     value: bypassKey,

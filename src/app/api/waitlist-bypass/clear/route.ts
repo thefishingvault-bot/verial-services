@@ -5,7 +5,7 @@ export const runtime = "nodejs";
 export async function GET() {
   const cookieName = process.env.WAITLIST_BYPASS_COOKIE || "verial_bypass";
 
-  const res = NextResponse.json({ ok: true });
+  const res = NextResponse.json({ ok: true }, { headers: { "Cache-Control": "no-store" } });
   res.cookies.set({
     name: cookieName,
     value: "",
