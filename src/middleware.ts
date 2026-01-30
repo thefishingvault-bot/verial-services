@@ -37,7 +37,7 @@ export default clerkMiddleware((auth, req) => {
   // If you're not using maintenance mode, just let Clerk handle auth normally.
   if (!MAINTENANCE_MODE) {
     // Optional: protect non-public routes explicitly (recommended)
-    if (!isPublicRoute(req)) auth().protect();
+    if (!isPublicRoute(req)) auth.protect();
     return NextResponse.next();
   }
 
