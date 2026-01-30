@@ -1,5 +1,3 @@
-export const runtime = "nodejs";
-
 import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse, type NextRequest } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
