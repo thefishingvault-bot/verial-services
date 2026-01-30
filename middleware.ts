@@ -4,7 +4,7 @@ import { clerkMiddleware, clerkClient, createRouteMatcher } from "@clerk/nextjs/
 import { NextResponse, type NextRequest, type NextFetchEvent } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { db } from "@/lib/db";
-import { providers, users } from "@/db/schema";
+import { users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 const PUBLIC_PATHS = [
@@ -37,6 +37,24 @@ function isAsset(pathname: string) {
   );
 }
 
+function isWaitlistBypassAllowedPath(pathname: string) {
+  // Clerk internals (OAuth callback lives here). If this 404s, clerkMiddleware isn't running.
+  if (pathname.startsWith("/_clerk")) return true;
+  if (pathname === "/waitlist" || pathname.startsWith("/waitlist/")) return true;
+  if (pathname.startsWith("/api/waitlist-bypass")) return true;
+
+  // Next internals/static
+  if (pathname.startsWith("/_next/static")) return true;
+  if (pathname.startsWith("/_next/image")) return true;
+
+  // Common static files
+  if (pathname === "/favicon.ico") return true;
+  if (pathname === "/robots.txt") return true;
+  if (pathname === "/sitemap.xml") return true;
+
+  return false;
+}
+
 // Define routes that are public (accessible without auth)
 const isPublicRoute = createRouteMatcher([
   "/_clerk(.*)",
@@ -63,33 +81,40 @@ const isPublicRoute = createRouteMatcher([
   "/sign-up(.*)",
 ]);
 
-const isAdminRoute = createRouteMatcher([
-  "/api/admin(.*)",
-  "/dashboard/admin(.*)",
-]);
+const isAdminRoute = createRouteMatcher(["/api/admin(.*)", "/dashboard/admin(.*)"]);
 
-const isProviderDashboardRoute = createRouteMatcher([
-  "/dashboard/provider(.*)",
-]);
+const isProviderDashboardRoute = createRouteMatcher(["/dashboard/provider(.*)"]);
 
-const isProviderKycRoute = createRouteMatcher([
-  "/dashboard/provider/kyc(.*)",
-]);
+const isProviderKycRoute = createRouteMatcher(["/dashboard/provider/kyc(.*)"]);
 
-const isProviderServicesRoute = createRouteMatcher([
-  "/dashboard/provider/services(.*)",
-]);
+const isProviderServicesRoute = createRouteMatcher(["/dashboard/provider/services(.*)"]);
 
-const isCustomerDashboardRoute = createRouteMatcher([
-  "/dashboard(.*)",
-]);
+const isCustomerDashboardRoute = createRouteMatcher(["/dashboard(.*)"]);
 
-const isMessagesRoute = createRouteMatcher([
-  "/dashboard/messages(.*)",
-]);
+const isMessagesRoute = createRouteMatcher(["/dashboard/messages(.*)"]);
 
 const clerk = clerkMiddleware(async (auth, req) => {
   const pathname = req.nextUrl.pathname;
+
+  const waitlistMode = process.env.WAITLIST_MODE === "1";
+  if (waitlistMode) {
+    if (isWaitlistBypassAllowedPath(pathname)) {
+      return NextResponse.next();
+    }
+
+    const bypassCookieName = process.env.WAITLIST_BYPASS_COOKIE || "verial_bypass";
+    const bypassKey = process.env.WAITLIST_BYPASS_KEY;
+    const bypassCookieValue = req.cookies.get(bypassCookieName)?.value;
+
+    if (bypassKey && bypassCookieValue === bypassKey) {
+      return NextResponse.next();
+    }
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url, 307);
+  }
 
   const hostname = req.nextUrl.hostname;
   const isStagingHost =
@@ -250,6 +275,8 @@ const clerk = clerkMiddleware(async (auth, req) => {
     }
     return NextResponse.next();
   }
+
+  return NextResponse.next();
 });
 
 export default function middleware(req: NextRequest, event: NextFetchEvent) {
@@ -263,6 +290,9 @@ export default function middleware(req: NextRequest, event: NextFetchEvent) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image).*)"],
+  // From Clerk docs: ensure Clerk endpoints (/_clerk/*) and OAuth callbacks are covered.
+  matcher: [
+    "/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)",
+    "/(api|trpc)(.*)",
+  ],
 };
-
