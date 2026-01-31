@@ -7,7 +7,12 @@ const FALLBACK_SUPPORT_EMAIL = 'support@verial.co.nz';
 
 function getSupportEmail(): string {
   const raw = process.env.SUPPORT_EMAIL;
-  if (raw && raw.trim()) return raw.trim();
+  if (raw && raw.trim()) {
+    const trimmed = raw.trim();
+    // Safety: Help & Support should not route to marketing.
+    if (trimmed.toLowerCase() === 'marketing@verial.co.nz') return FALLBACK_SUPPORT_EMAIL;
+    return trimmed;
+  }
   return FALLBACK_SUPPORT_EMAIL;
 }
 
