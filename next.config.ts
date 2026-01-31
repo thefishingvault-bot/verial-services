@@ -13,7 +13,10 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'pub-07fddd73bf694e92a629c95c885f48ee.r2.dev',
+        // Cloudflare R2 public buckets are typically served from a unique subdomain
+        // like `pub-<uuid>.r2.dev`. In production this changes per bucket, so allow
+        // any `*.r2.dev` host.
+        hostname: '**.r2.dev',
       },
       {
         protocol: 'https',
