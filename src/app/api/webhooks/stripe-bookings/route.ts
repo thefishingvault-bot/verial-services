@@ -180,9 +180,15 @@ async function upsertProviderEarningsHeld(params: {
     return { upserted: false };
   }
 
-  const baseAmountFromMeta = parseStripeMetadataInt(stripeMetadata, "bookingBaseAmountCents");
-  const feeFromMeta = parseStripeMetadataInt(stripeMetadata, "customerServiceFeeCents");
-  const totalFromMeta = parseStripeMetadataInt(stripeMetadata, "totalChargeCents");
+  const baseAmountFromMeta =
+    parseStripeMetadataInt(stripeMetadata, "servicePriceCents") ??
+    parseStripeMetadataInt(stripeMetadata, "bookingBaseAmountCents");
+  const feeFromMeta =
+    parseStripeMetadataInt(stripeMetadata, "serviceFeeCents") ??
+    parseStripeMetadataInt(stripeMetadata, "customerServiceFeeCents");
+  const totalFromMeta =
+    parseStripeMetadataInt(stripeMetadata, "totalCents") ??
+    parseStripeMetadataInt(stripeMetadata, "totalChargeCents");
 
   const baseAmountFromBooking = getFinalBookingAmountCents({
     providerQuotedPrice: booking.providerQuotedPrice,
@@ -212,12 +218,9 @@ async function upsertProviderEarningsHeld(params: {
     return { upserted: false };
   }
 
-  const computedBreakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmountCandidate });
-  const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedBreakdown.customerServiceFeeCents));
-  const totalChargeCents = Math.max(
-    0,
-    Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)),
-  );
+  const computedBreakdown = calculateBookingPaymentBreakdown({ servicePriceCents: baseAmountCandidate });
+  const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedBreakdown.serviceFeeCents));
+  const totalChargeCents = Math.max(0, Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)));
 
   const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
   const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));

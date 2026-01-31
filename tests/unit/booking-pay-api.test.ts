@@ -139,7 +139,8 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7500);
+    // 5% service fee on >= $20 tier: round(7500 * 0.05) = 375
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7875);
   });
 
   it("charges priceAtBooking for from bookings when provider quote is missing", async () => {
@@ -163,6 +164,57 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(5000);
+    // 5% service fee on >= $20 tier: round(5000 * 0.05) = 250
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(5250);
+  });
+
+  it("applies $3 small-order fee when price < $10", async () => {
+    dbMocks.findBooking.mockResolvedValue({
+      id: "bk_1",
+      status: "accepted",
+      priceAtBooking: 900,
+      providerQuotedPrice: null,
+      providerId: "prov_1",
+      serviceId: "svc_1",
+    });
+
+    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findService.mockResolvedValue({ title: "Small job", pricingType: "fixed" });
+
+    stripeMocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/session_123" });
+
+    const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
+    const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
+
+    expect(res.status).toBe(200);
+
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(1200);
+    expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("300");
+  });
+
+  it("applies $5 small-order fee when $10 <= price < $20", async () => {
+    dbMocks.findBooking.mockResolvedValue({
+      id: "bk_1",
+      status: "accepted",
+      priceAtBooking: 1500,
+      providerQuotedPrice: null,
+      providerId: "prov_1",
+      serviceId: "svc_1",
+    });
+
+    dbMocks.findProvider.mockResolvedValue({ id: "prov_1", stripeConnectId: "acct_123" });
+    dbMocks.findService.mockResolvedValue({ title: "Small job", pricingType: "fixed" });
+
+    stripeMocks.sessionsCreate.mockResolvedValue({ url: "https://checkout.stripe.test/session_123" });
+
+    const req = new Request("http://localhost/api/bookings/bk_1/pay", { method: "POST" });
+    const res = await payBooking(req, { params: Promise.resolve({ bookingId: "bk_1" }) });
+
+    expect(res.status).toBe(200);
+
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(2000);
+    expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("500");
   });
 });

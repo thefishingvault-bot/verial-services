@@ -665,9 +665,15 @@ export async function POST(req: Request) {
         const chargesGst = existingService?.chargesGst ?? existingProvider?.chargesGst ?? true;
         const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(existingProvider?.plan));
 
-        const baseAmountFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "bookingBaseAmountCents");
-        const feeFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "customerServiceFeeCents");
-        const totalFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "totalChargeCents");
+        const baseAmountFromMeta =
+          parseStripeMetadataInt(paymentIntent.metadata, "servicePriceCents") ??
+          parseStripeMetadataInt(paymentIntent.metadata, "bookingBaseAmountCents");
+        const feeFromMeta =
+          parseStripeMetadataInt(paymentIntent.metadata, "serviceFeeCents") ??
+          parseStripeMetadataInt(paymentIntent.metadata, "customerServiceFeeCents");
+        const totalFromMeta =
+          parseStripeMetadataInt(paymentIntent.metadata, "totalCents") ??
+          parseStripeMetadataInt(paymentIntent.metadata, "totalChargeCents");
 
         const baseAmountFromBooking = getFinalBookingAmountCents({
           providerQuotedPrice: existing.providerQuotedPrice,
@@ -679,8 +685,8 @@ export async function POST(req: Request) {
           (typeof baseAmountFromBooking === "number" && baseAmountFromBooking > 0 ? baseAmountFromBooking : null) ??
           existing.priceAtBooking;
 
-        const computedPayment = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmountCandidate });
-        const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedPayment.customerServiceFeeCents));
+        const computedPayment = calculateBookingPaymentBreakdown({ servicePriceCents: baseAmountCandidate });
+        const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedPayment.serviceFeeCents));
         const customerTotalChargedAmount = Math.max(
           0,
           Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)),

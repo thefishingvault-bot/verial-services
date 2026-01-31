@@ -7,7 +7,9 @@ import { stripe } from "@/lib/stripe";
 import { bookings, providers, services } from "@/db/schema";
 import { normalizeStatus } from "@/lib/booking-state";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
-import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
+import { calculateBookingPaymentBreakdown } from "@/lib/payments/fees";
+import { calculateEarnings } from "@/lib/earnings";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 export const runtime = "nodejs";
 
@@ -58,7 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
 
   const service = await db.query.services.findFirst({
     where: eq(services.id, booking.serviceId),
-    columns: { title: true, pricingType: true },
+    columns: { title: true, pricingType: true, chargesGst: true },
   });
 
   // Quote-priced services must have an explicit provider quote before the customer can pay.
@@ -75,24 +77,26 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     return new NextResponse("Waiting for provider quote", { status: 400 });
   }
 
-  const minBookingAmountCents = getMinimumBookingAmountCents();
-  if (amount < minBookingAmountCents) {
-    return new NextResponse(
-      `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
-      { status: 400 },
-    );
+  if (amount <= 0) {
+    return new NextResponse("Invalid booking amount", { status: 400 });
   }
 
-  const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: amount });
+  const breakdown = calculateBookingPaymentBreakdown({ servicePriceCents: amount });
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.id, booking.providerId),
-    columns: { id: true, stripeConnectId: true },
+    columns: { id: true, stripeConnectId: true, plan: true, chargesGst: true },
   });
 
   if (!provider?.stripeConnectId) {
     return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
   }
+
+  const earnings = calculateEarnings({
+    amountInCents: breakdown.servicePriceCents,
+    chargesGst: service?.chargesGst ?? provider.chargesGst ?? true,
+    platformFeeBps: getPlatformFeeBpsForPlan(normalizeProviderPlan(provider.plan)),
+  });
 
   const siteUrl = getSiteUrl(req);
 
@@ -104,7 +108,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         quantity: 1,
         price_data: {
           currency: "nzd",
-          unit_amount: breakdown.totalChargeCents,
+          unit_amount: breakdown.totalCents,
           product_data: {
             name: service?.title ? `Booking: ${service.title}` : `Booking ${booking.id}`,
           },
@@ -118,9 +122,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         bookingId: booking.id,
         userId,
         providerId: provider.id,
-        bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
-        customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
-        totalChargeCents: String(breakdown.totalChargeCents),
+        transferGroup: booking.id,
+        servicePriceCents: String(breakdown.servicePriceCents),
+        serviceFeeCents: String(breakdown.serviceFeeCents),
+        totalCents: String(breakdown.totalCents),
+        platformFeeCents: String(earnings.platformFeeAmount),
+        providerPayoutCents: String(earnings.netAmount),
       },
       transfer_group: booking.id,
     },
@@ -128,9 +135,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       bookingId: booking.id,
       userId,
       providerId: provider.id,
-      bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
-      customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
-      totalChargeCents: String(breakdown.totalChargeCents),
+      transferGroup: booking.id,
+      servicePriceCents: String(breakdown.servicePriceCents),
+      serviceFeeCents: String(breakdown.serviceFeeCents),
+      totalCents: String(breakdown.totalCents),
+      platformFeeCents: String(earnings.platformFeeAmount),
+      providerPayoutCents: String(earnings.netAmount),
     },
   });
 

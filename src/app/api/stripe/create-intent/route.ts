@@ -2,11 +2,13 @@ import { stripe } from "@/lib/stripe";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { bookings, providers } from "@/db/schema";
+import { bookings, providers, services } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
-import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
+import { calculateBookingPaymentBreakdown } from "@/lib/payments/fees";
+import { calculateEarnings } from "@/lib/earnings";
+import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
 
 // This route is for creating a Payment Intent for a *platform* charge.
 // This will be adapted later for Connect (destination charges).
@@ -32,6 +34,7 @@ export async function POST(req: Request) {
         priceAtBooking: true,
         providerQuotedPrice: true,
         providerId: true,
+        serviceId: true,
         paymentIntentId: true,
       },
     });
@@ -55,28 +58,35 @@ export async function POST(req: Request) {
       return new NextResponse("This booking needs a final price from the provider before payment.", { status: 400 });
     }
 
-    const minBookingAmountCents = getMinimumBookingAmountCents();
-    if (baseAmount < minBookingAmountCents) {
-      return new NextResponse(
-        `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
-        { status: 400 },
-      );
+    if (baseAmount <= 0) {
+      return new NextResponse("Invalid booking amount", { status: 400 });
     }
 
-    const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmount });
+    const breakdown = calculateBookingPaymentBreakdown({ servicePriceCents: baseAmount });
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.id, booking.providerId),
-      columns: { plan: true, stripeConnectId: true },
+      columns: { plan: true, stripeConnectId: true, chargesGst: true },
     });
 
     if (!provider?.stripeConnectId) {
       return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
     }
 
+    const service = await db.query.services.findFirst({
+      where: eq(services.id, booking.serviceId),
+      columns: { chargesGst: true },
+    });
+
+    const earnings = calculateEarnings({
+      amountInCents: breakdown.servicePriceCents,
+      chargesGst: service?.chargesGst ?? provider.chargesGst ?? true,
+      platformFeeBps: getPlatformFeeBpsForPlan(normalizeProviderPlan(provider.plan)),
+    });
+
     // Create the Payment Intent (platform charge only; transfer happens later).
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: breakdown.totalChargeCents,
+      amount: breakdown.totalCents,
       currency: "nzd", // NZD as per spec
       automatic_payment_methods: { enabled: true },
       transfer_group: booking.id,
@@ -84,9 +94,12 @@ export async function POST(req: Request) {
         bookingId: booking.id,
         userId,
         providerId: booking.providerId,
-        bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
-        customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
-        totalChargeCents: String(breakdown.totalChargeCents),
+        transferGroup: booking.id,
+        servicePriceCents: String(breakdown.servicePriceCents),
+        serviceFeeCents: String(breakdown.serviceFeeCents),
+        totalCents: String(breakdown.totalCents),
+        platformFeeCents: String(earnings.platformFeeAmount),
+        providerPayoutCents: String(earnings.netAmount),
       },
     });
 

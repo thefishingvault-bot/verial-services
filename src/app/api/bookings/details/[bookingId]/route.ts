@@ -6,7 +6,7 @@ import { eq, and } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
 import { asOne } from "@/lib/relations/normalize";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
-import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
+import { calculateBookingPaymentBreakdown } from "@/lib/payments/fees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -58,20 +58,19 @@ export async function GET(
       return new NextResponse('This booking needs a final price from the provider before payment.', { status: 400 });
     }
 
-    const minBookingAmountCents = getMinimumBookingAmountCents();
-    if (baseAmount < minBookingAmountCents) {
-      return new NextResponse(
-        `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
-        { status: 400 },
-      );
-    }
-
-    const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmount });
+    // No minimum booking restriction; use tiered customer service fees instead.
+    const breakdown = calculateBookingPaymentBreakdown({ servicePriceCents: baseAmount });
 
     const provider = asOne(booking.provider);
 
     return NextResponse.json({
       bookingId: booking.id,
+      // New names
+      servicePriceCents: breakdown.servicePriceCents,
+      serviceFeeCents: breakdown.serviceFeeCents,
+      totalCents: breakdown.totalCents,
+
+      // Back-compat for older clients
       bookingBaseAmountCents: breakdown.bookingBaseAmountCents,
       customerServiceFeeCents: breakdown.customerServiceFeeCents,
       totalChargeCents: breakdown.totalChargeCents,
