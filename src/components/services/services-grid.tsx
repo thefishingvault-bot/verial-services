@@ -82,7 +82,7 @@ export default function ServicesGrid({
         {services.map((service) => (
           <Card
             key={service.id}
-            className="group hover:shadow-md transition-shadow duration-200 rounded-2xl border bg-white"
+            className="group py-0 gap-0 overflow-hidden hover:shadow-md transition-shadow duration-200 rounded-2xl border bg-white"
           >
             <CardHeader className="p-0">
               {/* Service Image */}

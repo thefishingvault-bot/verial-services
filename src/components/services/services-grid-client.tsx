@@ -129,7 +129,7 @@ export function ServicesGridClient({
       {/* Services Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {sortedItems.map((service) => (
-          <Card key={service.id} className="group hover:shadow-lg transition-shadow duration-200">
+          <Card key={service.id} className="group py-0 gap-0 overflow-hidden hover:shadow-lg transition-shadow duration-200">
             <CardHeader className="p-0">
               {/* Service Image */}
               <div className="relative aspect-video bg-gray-100 rounded-t-lg overflow-hidden">
