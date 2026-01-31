@@ -8,6 +8,8 @@ import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, normalizeStatus, type BookingStatus } from "@/lib/booking-state";
 import { calculateEarnings } from "@/lib/earnings";
 import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { getFinalBookingAmountCents } from "@/lib/booking-price";
+import { calculateBookingPaymentBreakdown, parseStripeMetadataInt } from "@/lib/payments/fees";
 
 export const runtime = "nodejs";
 
@@ -139,8 +141,16 @@ async function upsertProviderEarningsHeld(params: {
   bookingId: string;
   paymentIntentId: string;
   amountChargedInCents?: number | null;
+  stripeMetadata?: Record<string, unknown> | null;
+  settlement?: {
+    balanceTxId?: string | null;
+    chargeId?: string | null;
+    stripeFeeAmount?: number | null;
+    stripeNetAmount?: number | null;
+    stripeAmount?: number | null;
+  };
 }) {
-  const { source, eventId, bookingId, paymentIntentId, amountChargedInCents } = params;
+  const { source, eventId, bookingId, paymentIntentId, amountChargedInCents, stripeMetadata, settlement } = params;
 
   const booking = await db
     .select({
@@ -148,6 +158,7 @@ async function upsertProviderEarningsHeld(params: {
       providerId: bookings.providerId,
       serviceId: bookings.serviceId,
       priceAtBooking: bookings.priceAtBooking,
+      providerQuotedPrice: bookings.providerQuotedPrice,
       serviceChargesGst: services.chargesGst,
       providerChargesGst: providers.chargesGst,
       providerPlan: providers.plan,
@@ -169,28 +180,50 @@ async function upsertProviderEarningsHeld(params: {
     return { upserted: false };
   }
 
-  const amountCandidate =
-    (Number.isFinite(amountChargedInCents ?? NaN) ? (amountChargedInCents as number) : null) ??
-    (Number.isFinite(booking.priceAtBooking ?? NaN) ? (booking.priceAtBooking as number) : null);
+  const baseAmountFromMeta = parseStripeMetadataInt(stripeMetadata, "bookingBaseAmountCents");
+  const feeFromMeta = parseStripeMetadataInt(stripeMetadata, "customerServiceFeeCents");
+  const totalFromMeta = parseStripeMetadataInt(stripeMetadata, "totalChargeCents");
 
-  if (!amountCandidate || amountCandidate <= 0) {
+  const baseAmountFromBooking = getFinalBookingAmountCents({
+    providerQuotedPrice: booking.providerQuotedPrice,
+    priceAtBooking: booking.priceAtBooking,
+  });
+
+  const baseAmountCandidate =
+    (Number.isFinite(baseAmountFromMeta ?? NaN) && (baseAmountFromMeta as number) > 0 ? (baseAmountFromMeta as number) : null) ??
+    (Number.isFinite(baseAmountFromBooking ?? NaN) && (baseAmountFromBooking as number) > 0
+      ? (baseAmountFromBooking as number)
+      : null) ??
+    (Number.isFinite(amountChargedInCents ?? NaN) && (amountChargedInCents as number) > 0 ? (amountChargedInCents as number) : null);
+
+  if (!baseAmountCandidate || baseAmountCandidate <= 0) {
     console.warn("[API_STRIPE_BOOKINGS_WEBHOOK] Earnings upsert skipped: invalid amount", {
       source,
       eventId,
       bookingId,
       paymentIntentId,
+      baseAmountFromMeta,
+      baseAmountFromBooking: baseAmountFromBooking ?? null,
       amountChargedInCents: amountChargedInCents ?? null,
       priceAtBooking: booking.priceAtBooking ?? null,
+      providerQuotedPrice: booking.providerQuotedPrice ?? null,
       upserted: false,
     });
     return { upserted: false };
   }
 
+  const computedBreakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmountCandidate });
+  const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedBreakdown.customerServiceFeeCents));
+  const totalChargeCents = Math.max(
+    0,
+    Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)),
+  );
+
   const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
   const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));
 
   const breakdown = calculateEarnings({
-    amountInCents: amountCandidate,
+    amountInCents: baseAmountCandidate,
     chargesGst,
     platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
   });
@@ -208,6 +241,13 @@ async function upsertProviderEarningsHeld(params: {
       netAmount: breakdown.netAmount,
       status: "held",
       stripePaymentIntentId: paymentIntentId,
+      stripeBalanceTransactionId: settlement?.balanceTxId ?? null,
+      stripeChargeId: settlement?.chargeId ?? null,
+      stripeFeeAmount: settlement?.stripeFeeAmount ?? null,
+      stripeNetAmount: settlement?.stripeNetAmount ?? null,
+      stripeAmount: settlement?.stripeAmount ?? null,
+      customerServiceFeeAmount: customerServiceFeeCents,
+      customerTotalChargedAmount: totalChargeCents,
       stripeTransferId: null,
       paidAt: new Date(),
       updatedAt: new Date(),
@@ -221,6 +261,13 @@ async function upsertProviderEarningsHeld(params: {
         netAmount: breakdown.netAmount,
         status: "held",
         stripePaymentIntentId: paymentIntentId,
+        stripeBalanceTransactionId: settlement?.balanceTxId ?? null,
+        stripeChargeId: settlement?.chargeId ?? null,
+        stripeFeeAmount: settlement?.stripeFeeAmount ?? null,
+        stripeNetAmount: settlement?.stripeNetAmount ?? null,
+        stripeAmount: settlement?.stripeAmount ?? null,
+        customerServiceFeeAmount: customerServiceFeeCents,
+        customerTotalChargedAmount: totalChargeCents,
         stripeTransferId: null,
         updatedAt: new Date(),
       },
@@ -235,6 +282,42 @@ async function upsertProviderEarningsHeld(params: {
   });
 
   return { upserted: true };
+}
+
+async function retrieveSettlementForPaymentIntent(paymentIntentId: string): Promise<{
+  balanceTxId: string | null;
+  chargeId: string | null;
+  stripeFeeAmount: number | null;
+  stripeNetAmount: number | null;
+  stripeAmount: number | null;
+}> {
+  try {
+    const piWithCharges = (await stripe.paymentIntents.retrieve(paymentIntentId, {
+      expand: ["charges.data.balance_transaction"],
+    })) as Stripe.PaymentIntent & {
+      charges?: { data?: Array<{ id?: string; balance_transaction?: string | Stripe.BalanceTransaction | null }> };
+    };
+
+    const firstCharge = piWithCharges.charges?.data?.[0] ?? null;
+    const bt = firstCharge?.balance_transaction ?? null;
+    const btObj = typeof bt === "string" ? null : bt;
+
+    return {
+      chargeId: typeof firstCharge?.id === "string" ? firstCharge.id : null,
+      balanceTxId: typeof bt === "string" ? bt : btObj?.id ?? null,
+      stripeFeeAmount: typeof btObj?.fee === "number" ? btObj.fee : null,
+      stripeNetAmount: typeof btObj?.net === "number" ? btObj.net : null,
+      stripeAmount: typeof btObj?.amount === "number" ? btObj.amount : null,
+    };
+  } catch {
+    return {
+      balanceTxId: null,
+      chargeId: null,
+      stripeFeeAmount: null,
+      stripeNetAmount: null,
+      stripeAmount: null,
+    };
+  }
 }
 
 export async function POST(req: Request) {
@@ -312,12 +395,15 @@ export async function POST(req: Request) {
         });
 
         if (paymentIntentId) {
+          const settlement = await retrieveSettlementForPaymentIntent(paymentIntentId);
           await upsertProviderEarningsHeld({
             source: event.type,
             eventId: event.id,
             bookingId,
             paymentIntentId,
             amountChargedInCents: typeof session.amount_total === "number" ? session.amount_total : null,
+            stripeMetadata: (session.metadata as Record<string, unknown> | null | undefined) ?? null,
+            settlement,
           });
         }
 
@@ -389,6 +475,8 @@ export async function POST(req: Request) {
             typeof (pi as unknown as { amount_received?: unknown }).amount_received === "number"
               ? ((pi as unknown as { amount_received: number }).amount_received || pi.amount)
               : pi.amount,
+          stripeMetadata: (pi.metadata as Record<string, unknown> | null | undefined) ?? null,
+          settlement: await retrieveSettlementForPaymentIntent(pi.id),
         });
 
         break;

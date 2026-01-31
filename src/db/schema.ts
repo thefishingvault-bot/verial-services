@@ -439,15 +439,24 @@ export const providerEarnings = pgTable("provider_earnings", {
   providerId: varchar("provider_id", { length: 255 }).notNull().references(() => providers.id, { onDelete: "cascade" }),
   serviceId: varchar("service_id", { length: 255 }).references(() => services.id, { onDelete: "set null" }),
 
-  grossAmount: integer("gross_amount").notNull(), // cents charged to customer
+  grossAmount: integer("gross_amount").notNull(), // booking base amount in cents (excludes customer service fee)
   platformFeeAmount: integer("platform_fee_amount").notNull(), // platform fee in cents
   gstAmount: integer("gst_amount").default(0).notNull(), // GST component retained/remitted
   netAmount: integer("net_amount").notNull(), // net to provider in cents
   currency: varchar("currency", { length: 10 }).default("nzd").notNull(),
 
+  // Customer-facing fee charged on top of the booking amount (retained by the platform).
+  customerServiceFeeAmount: integer("customer_service_fee_amount").default(0).notNull(),
+  // Total amount charged to the customer in cents (booking + service fee). Nullable for legacy rows.
+  customerTotalChargedAmount: integer("customer_total_charged_amount"),
+
   status: earningStatusEnum("status").default("pending").notNull(),
   stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }),
   stripeBalanceTransactionId: varchar("stripe_balance_transaction_id", { length: 255 }),
+  stripeChargeId: varchar("stripe_charge_id", { length: 255 }),
+  stripeFeeAmount: integer("stripe_fee_amount"),
+  stripeNetAmount: integer("stripe_net_amount"),
+  stripeAmount: integer("stripe_amount"),
   stripeTransferId: varchar("stripe_transfer_id", { length: 255 }),
   payoutId: varchar("payout_id", { length: 255 }).references(() => providerPayouts.id, { onDelete: "set null" }),
 

@@ -7,8 +7,11 @@ import { CheckoutForm } from '@/components/forms/checkout-form';
 
 interface BookingDetails {
   bookingId: string;
-  amount: number;
-  providerStripeId: string;
+  bookingBaseAmountCents: number;
+  customerServiceFeeCents: number;
+  totalChargeCents: number;
+  currency: string;
+  providerStripeId: string | null;
 }
 
 export default function CheckoutPage() {
@@ -43,9 +46,7 @@ export default function CheckoutPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: bookingDetails.amount,
           bookingId: bookingDetails.bookingId,
-          providerStripeId: bookingDetails.providerStripeId,
         }),
       })
         .then((res) => res.json())
@@ -80,11 +81,29 @@ export default function CheckoutPage() {
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-gray-900">Complete Your Payment</h1>
           <p className="text-sm text-gray-600">
-            You are paying <strong>NZD ${((bookingDetails?.amount ?? 0) / 100).toFixed(2)}</strong>
+            You are paying <strong>NZD ${((bookingDetails?.totalChargeCents ?? 0) / 100).toFixed(2)}</strong>
             <br />
             Booking ID: {bookingId}
           </p>
         </div>
+
+        {bookingDetails ? (
+          <div className="rounded-lg border bg-white p-4 text-sm text-gray-700 shadow-sm">
+            <div className="flex items-center justify-between">
+              <span>Booking price</span>
+              <span>NZD ${((bookingDetails.bookingBaseAmountCents ?? 0) / 100).toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span>Customer service fee</span>
+              <span>NZD ${((bookingDetails.customerServiceFeeCents ?? 0) / 100).toFixed(2)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between border-t pt-2 font-semibold">
+              <span>Total</span>
+              <span>NZD ${((bookingDetails.totalChargeCents ?? 0) / 100).toFixed(2)}</span>
+            </div>
+          </div>
+        ) : null}
+
         <div className="rounded-lg border bg-white p-4 shadow-sm">
           {renderContent()}
         </div>

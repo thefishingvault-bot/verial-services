@@ -31,9 +31,9 @@ export function EarningsSummaryCards({
       hint: "Net earned in the last 30 days.",
     },
     {
-      label: "Pending transfer",
+      label: "Pending payout",
       value: pendingNet,
-      hint: "Earned, not paid out yet.",
+      hint: "Earned, not paid out to your bank yet.",
     },
     {
       label: "Paid out",

@@ -5,12 +5,16 @@ import { bookings } from "@/db/schema";
 
 const stripeMocks = vi.hoisted(() => ({
   constructEvent: vi.fn(),
+  retrievePaymentIntent: vi.fn(),
 }));
 
 vi.mock("@/lib/stripe", () => ({
   stripe: {
     webhooks: {
       constructEvent: stripeMocks.constructEvent,
+    },
+    paymentIntents: {
+      retrieve: stripeMocks.retrievePaymentIntent,
     },
   },
 }));
@@ -99,6 +103,17 @@ describe("POST /api/webhooks/stripe-bookings", () => {
     process.env.STRIPE_BOOKINGS_WEBHOOK_SECRET = "whsec_bookings";
     dbMocks.state.bookingStatus = "accepted";
     dbMocks.state.paymentIntentId = null;
+
+    stripeMocks.retrievePaymentIntent.mockResolvedValue({
+      charges: {
+        data: [
+          {
+            id: "ch_1",
+            balance_transaction: { id: "bt_1", fee: 123, net: 9877, amount: 10000 },
+          },
+        ],
+      },
+    });
   });
 
   it("returns 400 when signature missing", async () => {

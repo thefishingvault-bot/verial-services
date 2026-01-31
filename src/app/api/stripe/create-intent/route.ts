@@ -5,6 +5,8 @@ import { db } from "@/lib/db";
 import { bookings, providers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
+import { getFinalBookingAmountCents } from "@/lib/booking-price";
+import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
 
 // This route is for creating a Payment Intent for a *platform* charge.
 // This will be adapted later for Connect (destination charges).
@@ -28,6 +30,7 @@ export async function POST(req: Request) {
         id: true,
         status: true,
         priceAtBooking: true,
+        providerQuotedPrice: true,
         providerId: true,
         paymentIntentId: true,
       },
@@ -43,11 +46,24 @@ export async function POST(req: Request) {
       return new NextResponse(`Cannot pay for booking with status: ${booking.status}`, { status: 400 });
     }
 
-    const amount = booking.priceAtBooking;
-    // Validate amount (e.g., must be at least $1.00 NZD)
-    if (!amount || amount < 100) {
-      return new NextResponse("Amount must be at least $1.00 NZD", { status: 400 });
+    const baseAmount = getFinalBookingAmountCents({
+      providerQuotedPrice: booking.providerQuotedPrice,
+      priceAtBooking: booking.priceAtBooking,
+    });
+
+    if (!baseAmount) {
+      return new NextResponse("This booking needs a final price from the provider before payment.", { status: 400 });
     }
+
+    const minBookingAmountCents = getMinimumBookingAmountCents();
+    if (baseAmount < minBookingAmountCents) {
+      return new NextResponse(
+        `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
+        { status: 400 },
+      );
+    }
+
+    const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmount });
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.id, booking.providerId),
@@ -60,7 +76,7 @@ export async function POST(req: Request) {
 
     // Create the Payment Intent (platform charge only; transfer happens later).
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount,
+      amount: breakdown.totalChargeCents,
       currency: "nzd", // NZD as per spec
       automatic_payment_methods: { enabled: true },
       transfer_group: booking.id,
@@ -68,6 +84,9 @@ export async function POST(req: Request) {
         bookingId: booking.id,
         userId,
         providerId: booking.providerId,
+        bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
+        customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
+        totalChargeCents: String(breakdown.totalChargeCents),
       },
     });
 

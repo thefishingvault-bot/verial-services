@@ -11,6 +11,8 @@ import { sendEmail } from "@/lib/email";
 import { asOne } from "@/lib/relations/normalize";
 import { clerkClient } from "@clerk/nextjs/server";
 import { calculateEarnings } from "@/lib/earnings";
+import { getFinalBookingAmountCents } from "@/lib/booking-price";
+import { calculateBookingPaymentBreakdown, parseStripeMetadataInt } from "@/lib/payments/fees";
 import {
   getPlatformFeeBpsForPlan,
   isStripeSubscribedStatus,
@@ -602,6 +604,7 @@ export async function POST(req: Request) {
             status: true,
             userId: true,
             priceAtBooking: true,
+            providerQuotedPrice: true,
             providerId: true,
             serviceId: true,
             paymentIntentId: true,
@@ -662,22 +665,54 @@ export async function POST(req: Request) {
         const chargesGst = existingService?.chargesGst ?? existingProvider?.chargesGst ?? true;
         const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(existingProvider?.plan));
 
+        const baseAmountFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "bookingBaseAmountCents");
+        const feeFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "customerServiceFeeCents");
+        const totalFromMeta = parseStripeMetadataInt(paymentIntent.metadata, "totalChargeCents");
+
+        const baseAmountFromBooking = getFinalBookingAmountCents({
+          providerQuotedPrice: existing.providerQuotedPrice,
+          priceAtBooking: existing.priceAtBooking,
+        });
+
+        const baseAmountCandidate =
+          (typeof baseAmountFromMeta === "number" && baseAmountFromMeta > 0 ? baseAmountFromMeta : null) ??
+          (typeof baseAmountFromBooking === "number" && baseAmountFromBooking > 0 ? baseAmountFromBooking : null) ??
+          existing.priceAtBooking;
+
+        const computedPayment = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmountCandidate });
+        const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedPayment.customerServiceFeeCents));
+        const customerTotalChargedAmount = Math.max(
+          0,
+          Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)),
+        );
+
         const breakdown = calculateEarnings({
-          amountInCents: existing.priceAtBooking,
+          amountInCents: baseAmountCandidate,
           chargesGst,
           platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
         });
 
         let balanceTxId: string | undefined = undefined;
+        let chargeId: string | undefined = undefined;
+        let stripeFeeAmount: number | undefined = undefined;
+        let stripeNetAmount: number | undefined = undefined;
+        let stripeAmount: number | undefined = undefined;
         try {
           const piWithCharges = (await stripe.paymentIntents.retrieve(paymentIntent.id, {
             expand: ["charges.data.balance_transaction"],
           })) as Stripe.PaymentIntent & {
-            charges?: { data?: Array<{ balance_transaction?: string | Stripe.BalanceTransaction | null }> };
+            charges?: { data?: Array<{ id?: string; balance_transaction?: string | Stripe.BalanceTransaction | null }> };
           };
 
-          const raw = piWithCharges.charges?.data?.[0]?.balance_transaction ?? null;
-          balanceTxId = typeof raw === "string" ? raw : raw?.id ?? undefined;
+          const firstCharge = piWithCharges.charges?.data?.[0] ?? null;
+          chargeId = typeof firstCharge?.id === "string" ? firstCharge.id : undefined;
+
+          const raw = firstCharge?.balance_transaction ?? null;
+          const btObj = typeof raw === "string" ? null : raw;
+          balanceTxId = typeof raw === "string" ? raw : btObj?.id ?? undefined;
+          stripeFeeAmount = typeof btObj?.fee === "number" ? btObj.fee : undefined;
+          stripeNetAmount = typeof btObj?.net === "number" ? btObj.net : undefined;
+          stripeAmount = typeof btObj?.amount === "number" ? btObj.amount : undefined;
         } catch {
           balanceTxId = undefined;
         }
@@ -698,6 +733,12 @@ export async function POST(req: Request) {
               status: "held",
               stripePaymentIntentId: paymentIntent.id,
               stripeBalanceTransactionId: balanceTxId,
+              stripeChargeId: chargeId,
+              stripeFeeAmount,
+              stripeNetAmount,
+              stripeAmount,
+              customerServiceFeeAmount: customerServiceFeeCents,
+              customerTotalChargedAmount,
               paidAt: new Date(paymentIntent.created * 1000),
             })
             .onConflictDoUpdate({
@@ -709,6 +750,12 @@ export async function POST(req: Request) {
                 status: "held",
                 stripePaymentIntentId: paymentIntent.id,
                 stripeBalanceTransactionId: balanceTxId,
+                stripeChargeId: chargeId,
+                stripeFeeAmount,
+                stripeNetAmount,
+                stripeAmount,
+                customerServiceFeeAmount: customerServiceFeeCents,
+                customerTotalChargedAmount,
                 paidAt: new Date(paymentIntent.created * 1000),
                 updatedAt: new Date(),
               },

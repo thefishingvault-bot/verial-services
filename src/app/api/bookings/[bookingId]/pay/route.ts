@@ -7,6 +7,7 @@ import { stripe } from "@/lib/stripe";
 import { bookings, providers, services } from "@/db/schema";
 import { normalizeStatus } from "@/lib/booking-state";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
+import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
 
 export const runtime = "nodejs";
 
@@ -74,9 +75,15 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     return new NextResponse("Waiting for provider quote", { status: 400 });
   }
 
-  if (amount < 100) {
-    return new NextResponse("Amount must be at least $1.00 NZD", { status: 400 });
+  const minBookingAmountCents = getMinimumBookingAmountCents();
+  if (amount < minBookingAmountCents) {
+    return new NextResponse(
+      `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
+      { status: 400 },
+    );
   }
+
+  const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: amount });
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.id, booking.providerId),
@@ -97,7 +104,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         quantity: 1,
         price_data: {
           currency: "nzd",
-          unit_amount: amount,
+          unit_amount: breakdown.totalChargeCents,
           product_data: {
             name: service?.title ? `Booking: ${service.title}` : `Booking ${booking.id}`,
           },
@@ -111,6 +118,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         bookingId: booking.id,
         userId,
         providerId: provider.id,
+        bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
+        customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
+        totalChargeCents: String(breakdown.totalChargeCents),
       },
       transfer_group: booking.id,
     },
@@ -118,6 +128,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       bookingId: booking.id,
       userId,
       providerId: provider.id,
+      bookingBaseAmountCents: String(breakdown.bookingBaseAmountCents),
+      customerServiceFeeCents: String(breakdown.customerServiceFeeCents),
+      totalChargeCents: String(breakdown.totalChargeCents),
     },
   });
 

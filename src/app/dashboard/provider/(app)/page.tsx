@@ -226,9 +226,9 @@ export default async function ProviderDashboardPage() {
             </div>
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-md border bg-background px-3 py-2">
-                <p className="text-xs text-muted-foreground">Pending transfer</p>
+                <p className="text-xs text-muted-foreground">Pending payout</p>
                 <p className="text-lg font-semibold">{formatPrice(metrics.pendingTransferNetCents)}</p>
-                <p className="text-xs text-muted-foreground">Earned, not paid out yet.</p>
+                <p className="text-xs text-muted-foreground">Earned, not paid out to your bank yet.</p>
               </div>
               <div className="rounded-md border bg-background px-3 py-2">
                 <p className="text-xs text-muted-foreground">Paid out</p>

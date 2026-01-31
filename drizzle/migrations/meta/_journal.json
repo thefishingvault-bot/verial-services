@@ -337,6 +337,13 @@
       "when": 1769720000000,
       "tag": "0042_provider_invite_email_status",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1769900000000,
+      "tag": "0043_provider_earnings_reconciliation",
+      "breakpoints": true
     }
   ]
 }

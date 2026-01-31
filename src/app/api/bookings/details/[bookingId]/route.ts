@@ -5,6 +5,8 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
 import { asOne } from "@/lib/relations/normalize";
+import { getFinalBookingAmountCents } from "@/lib/booking-price";
+import { calculateBookingPaymentBreakdown, getMinimumBookingAmountCents } from "@/lib/payments/fees";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,15 +49,33 @@ export async function GET(
       return new NextResponse(`Cannot pay for booking with status: ${booking.status}`, { status: 400 });
     }
 
-    if (!booking.priceAtBooking || booking.priceAtBooking < 100) {
+    const baseAmount = getFinalBookingAmountCents({
+      providerQuotedPrice: booking.providerQuotedPrice,
+      priceAtBooking: booking.priceAtBooking,
+    });
+
+    if (!baseAmount) {
       return new NextResponse('This booking needs a final price from the provider before payment.', { status: 400 });
     }
+
+    const minBookingAmountCents = getMinimumBookingAmountCents();
+    if (baseAmount < minBookingAmountCents) {
+      return new NextResponse(
+        `Amount must be at least $${(minBookingAmountCents / 100).toFixed(2)} NZD`,
+        { status: 400 },
+      );
+    }
+
+    const breakdown = calculateBookingPaymentBreakdown({ bookingBaseAmountCents: baseAmount });
 
     const provider = asOne(booking.provider);
 
     return NextResponse.json({
       bookingId: booking.id,
-      amount: booking.priceAtBooking,
+      bookingBaseAmountCents: breakdown.bookingBaseAmountCents,
+      customerServiceFeeCents: breakdown.customerServiceFeeCents,
+      totalChargeCents: breakdown.totalChargeCents,
+      currency: breakdown.currency,
       providerStripeId: provider?.stripeConnectId ?? null,
     }, {
       headers: {
