@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CopyEmailButton } from '@/components/help/copy-email-button';
 
-const FALLBACK_SUPPORT_EMAIL = 'marketing@verial.co.nz';
+const FALLBACK_SUPPORT_EMAIL = 'support@verial.co.nz';
 
 function getSupportEmail(): string {
   const raw = process.env.SUPPORT_EMAIL;
