@@ -144,7 +144,7 @@ export function SiteHeader() {
                       Privacy Policy
                     </Link>
                     <Link
-                      href="#"
+                      href="/help"
                       className="flex items-center px-4 py-2 text-sm text-gray-600 rounded-lg hover:bg-gray-50 transition-colors"
                       onClick={() => setIsSheetOpen(false)}
                     >
