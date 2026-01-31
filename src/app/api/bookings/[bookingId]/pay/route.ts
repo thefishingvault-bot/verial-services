@@ -173,9 +173,11 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     });
   } catch (error: unknown) {
     const message =
-      error && typeof error === "object" && "message" in error && typeof (error as any).message === "string"
-        ? (error as any).message
-        : "Stripe error";
+      error instanceof Error
+        ? error.message
+        : error && typeof error === "object" && "message" in error && typeof (error as { message?: unknown }).message === "string"
+          ? String((error as { message?: unknown }).message)
+          : "Stripe error";
 
     console.error("[API_BOOKING_PAY] Failed to create Checkout Session", {
       bookingId: booking.id,

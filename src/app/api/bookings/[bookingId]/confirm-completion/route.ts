@@ -337,8 +337,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
       // do NOT create an additional manual transfer.
       if (effectiveEarning.stripePaymentIntentId) {
         try {
-          const piWithCharges = (await stripe.paymentIntents.retrieve(effectiveEarning.stripePaymentIntentId)) as any;
-          const firstCharge = piWithCharges?.charges?.data?.[0] ?? null;
+          const charges = await stripe.charges.list({
+            payment_intent: effectiveEarning.stripePaymentIntentId,
+            limit: 1,
+            expand: ["data.transfer"],
+          });
+
+          const firstCharge = charges.data[0] ?? null;
           const transfer = firstCharge?.transfer ?? null;
           const transferId = typeof transfer === "string" ? transfer : transfer?.id ?? null;
 

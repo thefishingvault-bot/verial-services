@@ -66,8 +66,8 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {services.map((service) => (
-            <Card key={service.id}>
-              <div className="relative aspect-video w-full overflow-hidden rounded-t-lg bg-muted">
+            <Card key={service.id} className="py-0 gap-0 overflow-hidden">
+              <div className="relative aspect-video w-full bg-muted">
                 {service.coverImageUrl ? (
                   <Image src={service.coverImageUrl} alt={service.title} fill className="object-cover" />
                 ) : (
@@ -76,7 +76,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                   </div>
                 )}
               </div>
-              <CardHeader>
+              <CardHeader className="pt-6">
                 <CardTitle className="truncate" title={service.title}>
                   {service.title}
                 </CardTitle>
@@ -89,7 +89,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                   </Badge>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pb-4">
                 <p className="font-bold">
                   {formatServicePriceLabel({
                     pricingType: service.pricingType,
@@ -102,7 +102,7 @@ export function ProviderServicesList({ services, isDeleting, onDelete }: Provide
                   </p>
                 )}
               </CardContent>
-              <CardFooter className="flex items-center justify-end gap-2">
+              <CardFooter className="flex items-center justify-end gap-2 pb-6">
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/s/${service.slug}`} target="_blank" rel="noreferrer" aria-label="View service">
                     <ExternalLink className="h-4 w-4 sm:mr-2" />
