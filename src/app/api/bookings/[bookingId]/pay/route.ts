@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
+import type Stripe from "stripe";
 
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
@@ -100,21 +101,38 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
 
   const siteUrl = getSiteUrl(req);
 
+  const feeLabel = breakdown.servicePriceCents < 2000 ? "Small order fee" : "Service fee";
+  const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] = [
+    {
+      quantity: 1,
+      price_data: {
+        currency: "nzd",
+        unit_amount: breakdown.servicePriceCents,
+        product_data: {
+          name: "Service",
+          description: service?.title ?? undefined,
+        },
+      },
+    },
+  ];
+
+  if (breakdown.serviceFeeCents > 0) {
+    lineItems.push({
+      quantity: 1,
+      price_data: {
+        currency: "nzd",
+        unit_amount: breakdown.serviceFeeCents,
+        product_data: {
+          name: feeLabel,
+        },
+      },
+    });
+  }
+
   // Platform charge ONLY (separate charges and transfers): no transfer_data.destination and no application_fee_amount.
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
-    line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: "nzd",
-          unit_amount: breakdown.totalCents,
-          product_data: {
-            name: service?.title ? `Booking: ${service.title}` : `Booking ${booking.id}`,
-          },
-        },
-      },
-    ],
+    line_items: lineItems,
     success_url: `${siteUrl}/dashboard/bookings?success=1&bookingId=${encodeURIComponent(booking.id)}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/dashboard/bookings/${encodeURIComponent(booking.id)}`,
     payment_intent_data: {

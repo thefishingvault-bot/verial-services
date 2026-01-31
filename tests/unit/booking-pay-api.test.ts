@@ -139,8 +139,13 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    // Itemized: Service + Service fee
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7500);
+    expect(call?.line_items?.[0]?.price_data?.product_data?.name).toBe("Service");
+
     // 5% service fee on >= $20 tier: round(7500 * 0.05) = 375
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(7875);
+    expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(375);
+    expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Service fee");
   });
 
   it("charges priceAtBooking for from bookings when provider quote is missing", async () => {
@@ -164,8 +169,13 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
+    // Itemized: Service + Service fee
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(5000);
+    expect(call?.line_items?.[0]?.price_data?.product_data?.name).toBe("Service");
+
     // 5% service fee on >= $20 tier: round(5000 * 0.05) = 250
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(5250);
+    expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(250);
+    expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Service fee");
   });
 
   it("applies $3 small-order fee when price < $10", async () => {
@@ -189,7 +199,10 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(1200);
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(900);
+    expect(call?.line_items?.[0]?.price_data?.product_data?.name).toBe("Service");
+    expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(300);
+    expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Small order fee");
     expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("300");
   });
 
@@ -214,7 +227,10 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
 
     const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
-    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(2000);
+    expect(call?.line_items?.[0]?.price_data?.unit_amount).toBe(1500);
+    expect(call?.line_items?.[0]?.price_data?.product_data?.name).toBe("Service");
+    expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(500);
+    expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Small order fee");
     expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("500");
   });
 });
