@@ -7,7 +7,7 @@ import { db } from "@/lib/db";
 import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, normalizeStatus, type BookingStatus } from "@/lib/booking-state";
 import { calculateEarnings } from "@/lib/earnings";
-import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { calculateDestinationChargeAmounts } from "@/lib/payments/platform-fee";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
 import { calculateBookingPaymentBreakdown, parseStripeMetadataInt } from "@/lib/payments/fees";
 
@@ -145,6 +145,8 @@ async function upsertProviderEarningsHeld(params: {
   settlement?: {
     balanceTxId?: string | null;
     chargeId?: string | null;
+    transferId?: string | null;
+    applicationFeeAmount?: number | null;
     stripeFeeAmount?: number | null;
     stripeNetAmount?: number | null;
     stripeAmount?: number | null;
@@ -190,6 +192,9 @@ async function upsertProviderEarningsHeld(params: {
     parseStripeMetadataInt(stripeMetadata, "totalCents") ??
     parseStripeMetadataInt(stripeMetadata, "totalChargeCents");
 
+  const platformFeeFromMeta = parseStripeMetadataInt(stripeMetadata, "platformFeeCents");
+  const providerPayoutFromMeta = parseStripeMetadataInt(stripeMetadata, "providerPayoutCents");
+
   const baseAmountFromBooking = getFinalBookingAmountCents({
     providerQuotedPrice: booking.providerQuotedPrice,
     priceAtBooking: booking.priceAtBooking,
@@ -222,14 +227,33 @@ async function upsertProviderEarningsHeld(params: {
   const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedBreakdown.serviceFeeCents));
   const totalChargeCents = Math.max(0, Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)));
 
-  const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
-  const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));
-
-  const breakdown = calculateEarnings({
-    amountInCents: baseAmountCandidate,
-    chargesGst,
-    platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
+  const amounts = calculateDestinationChargeAmounts({
+    servicePriceCents: baseAmountCandidate,
+    serviceFeeCents: customerServiceFeeCents,
+    providerPlan: booking.providerPlan,
   });
+
+  const platformFeeCents =
+    (typeof platformFeeFromMeta === "number" && platformFeeFromMeta >= 0 ? platformFeeFromMeta : null) ??
+    amounts.platformFeeCents;
+
+  const providerPayoutCents =
+    (typeof providerPayoutFromMeta === "number" && providerPayoutFromMeta >= 0 ? providerPayoutFromMeta : null) ??
+    Math.max(0, baseAmountCandidate - platformFeeCents);
+
+  // Keep GST component for reporting only (provider receives GST-inclusive amounts in destination charges).
+  const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
+  const gstAmount = calculateEarnings({ amountInCents: baseAmountCandidate, chargesGst, platformFeeBps: 0 }).gstAmount;
+
+  const isDestinationCharge = !!settlement?.transferId;
+  const earningStatus = isDestinationCharge ? "transferred" : "held";
+  const destinationTransfer =
+    settlement?.transferId
+      ? {
+          stripeTransferId: settlement.transferId,
+          transferredAt: new Date(),
+        }
+      : {};
 
   await db
     .insert(providerEarnings)
@@ -238,11 +262,11 @@ async function upsertProviderEarningsHeld(params: {
       bookingId,
       providerId: booking.providerId,
       serviceId: booking.serviceId,
-      grossAmount: breakdown.grossAmount,
-      platformFeeAmount: breakdown.platformFeeAmount,
-      gstAmount: breakdown.gstAmount,
-      netAmount: breakdown.netAmount,
-      status: "held",
+      grossAmount: baseAmountCandidate,
+      platformFeeAmount: platformFeeCents,
+      gstAmount,
+      netAmount: providerPayoutCents,
+      status: earningStatus,
       stripePaymentIntentId: paymentIntentId,
       stripeBalanceTransactionId: settlement?.balanceTxId ?? null,
       stripeChargeId: settlement?.chargeId ?? null,
@@ -251,18 +275,19 @@ async function upsertProviderEarningsHeld(params: {
       stripeAmount: settlement?.stripeAmount ?? null,
       customerServiceFeeAmount: customerServiceFeeCents,
       customerTotalChargedAmount: totalChargeCents,
-      stripeTransferId: null,
+      stripeTransferId: settlement?.transferId ?? null,
+      transferredAt: settlement?.transferId ? new Date() : null,
       paidAt: new Date(),
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
       target: providerEarnings.bookingId,
       set: {
-        grossAmount: breakdown.grossAmount,
-        platformFeeAmount: breakdown.platformFeeAmount,
-        gstAmount: breakdown.gstAmount,
-        netAmount: breakdown.netAmount,
-        status: "held",
+        grossAmount: baseAmountCandidate,
+        platformFeeAmount: platformFeeCents,
+        gstAmount,
+        netAmount: providerPayoutCents,
+        status: earningStatus,
         stripePaymentIntentId: paymentIntentId,
         stripeBalanceTransactionId: settlement?.balanceTxId ?? null,
         stripeChargeId: settlement?.chargeId ?? null,
@@ -271,7 +296,7 @@ async function upsertProviderEarningsHeld(params: {
         stripeAmount: settlement?.stripeAmount ?? null,
         customerServiceFeeAmount: customerServiceFeeCents,
         customerTotalChargedAmount: totalChargeCents,
-        stripeTransferId: null,
+        ...destinationTransfer,
         updatedAt: new Date(),
       },
     });
@@ -290,6 +315,8 @@ async function upsertProviderEarningsHeld(params: {
 async function retrieveSettlementForPaymentIntent(paymentIntentId: string): Promise<{
   balanceTxId: string | null;
   chargeId: string | null;
+  transferId: string | null;
+  applicationFeeAmount: number | null;
   stripeFeeAmount: number | null;
   stripeNetAmount: number | null;
   stripeAmount: number | null;
@@ -298,15 +325,26 @@ async function retrieveSettlementForPaymentIntent(paymentIntentId: string): Prom
     const piWithCharges = (await stripe.paymentIntents.retrieve(paymentIntentId, {
       expand: ["charges.data.balance_transaction"],
     })) as Stripe.PaymentIntent & {
-      charges?: { data?: Array<{ id?: string; balance_transaction?: string | Stripe.BalanceTransaction | null }> };
+      charges?: {
+        data?: Array<{
+          id?: string;
+          balance_transaction?: string | Stripe.BalanceTransaction | null;
+          transfer?: string | Stripe.Transfer | null;
+          application_fee_amount?: number | null;
+        }>;
+      };
     };
 
     const firstCharge = piWithCharges.charges?.data?.[0] ?? null;
     const bt = firstCharge?.balance_transaction ?? null;
     const btObj = typeof bt === "string" ? null : bt;
+    const transfer = firstCharge?.transfer ?? null;
 
     return {
       chargeId: typeof firstCharge?.id === "string" ? firstCharge.id : null,
+      transferId: typeof transfer === "string" ? transfer : transfer?.id ?? null,
+      applicationFeeAmount:
+        typeof firstCharge?.application_fee_amount === "number" ? firstCharge.application_fee_amount : null,
       balanceTxId: typeof bt === "string" ? bt : btObj?.id ?? null,
       stripeFeeAmount: typeof btObj?.fee === "number" ? btObj.fee : null,
       stripeNetAmount: typeof btObj?.net === "number" ? btObj.net : null,
@@ -316,6 +354,8 @@ async function retrieveSettlementForPaymentIntent(paymentIntentId: string): Prom
     return {
       balanceTxId: null,
       chargeId: null,
+      transferId: null,
+      applicationFeeAmount: null,
       stripeFeeAmount: null,
       stripeNetAmount: null,
       stripeAmount: null,

@@ -9,8 +9,7 @@ import { bookings, providers, services } from "@/db/schema";
 import { normalizeStatus } from "@/lib/booking-state";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
 import { calculateBookingPaymentBreakdown } from "@/lib/payments/fees";
-import { calculateEarnings } from "@/lib/earnings";
-import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { calculateDestinationChargeAmounts } from "@/lib/payments/platform-fee";
 
 export const runtime = "nodejs";
 
@@ -89,14 +88,19 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     columns: { id: true, stripeConnectId: true, plan: true, chargesGst: true },
   });
 
-  if (!provider?.stripeConnectId) {
-    return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
+  if (!provider) {
+    return new NextResponse("Provider not found", { status: 404 });
   }
 
-  const earnings = calculateEarnings({
-    amountInCents: breakdown.servicePriceCents,
-    chargesGst: service?.chargesGst ?? provider.chargesGst ?? true,
-    platformFeeBps: getPlatformFeeBpsForPlan(normalizeProviderPlan(provider.plan)),
+  const providerStripeAccountId = provider.stripeConnectId ?? null;
+  if (!providerStripeAccountId || !providerStripeAccountId.startsWith("acct_")) {
+    return new NextResponse("Provider is not connected to Stripe yet", { status: 400 });
+  }
+
+  const amounts = calculateDestinationChargeAmounts({
+    servicePriceCents: breakdown.servicePriceCents,
+    serviceFeeCents: breakdown.serviceFeeCents,
+    providerPlan: provider.plan,
   });
 
   const siteUrl = getSiteUrl(req);
@@ -129,38 +133,67 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
     });
   }
 
-  // Platform charge ONLY (separate charges and transfers): no transfer_data.destination and no application_fee_amount.
-  const session = await stripe.checkout.sessions.create({
+  // Destination charge: Checkout Session is created on the *platform* account, and Stripe routes funds to the provider.
+  let session: { url?: string | null };
+  try {
+    session = await stripe.checkout.sessions.create({
     mode: "payment",
     line_items: lineItems,
     success_url: `${siteUrl}/dashboard/bookings?success=1&bookingId=${encodeURIComponent(booking.id)}&session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${siteUrl}/dashboard/bookings/${encodeURIComponent(booking.id)}`,
     payment_intent_data: {
+      application_fee_amount: amounts.applicationFeeCents,
+      transfer_data: { destination: providerStripeAccountId },
+      transfer_group: booking.id,
       metadata: {
         bookingId: booking.id,
-        userId,
         providerId: provider.id,
-        transferGroup: booking.id,
+        userId,
         servicePriceCents: String(breakdown.servicePriceCents),
         serviceFeeCents: String(breakdown.serviceFeeCents),
+        platformFeeCents: String(amounts.platformFeeCents),
+        providerPayoutCents: String(amounts.providerPayoutCents),
         totalCents: String(breakdown.totalCents),
-        platformFeeCents: String(earnings.platformFeeAmount),
-        providerPayoutCents: String(earnings.netAmount),
+        providerTier: String(amounts.providerTier),
+        destinationAccountId: String(providerStripeAccountId),
       },
-      transfer_group: booking.id,
     },
     metadata: {
       bookingId: booking.id,
-      userId,
       providerId: provider.id,
-      transferGroup: booking.id,
+      userId,
       servicePriceCents: String(breakdown.servicePriceCents),
       serviceFeeCents: String(breakdown.serviceFeeCents),
+      platformFeeCents: String(amounts.platformFeeCents),
+      providerPayoutCents: String(amounts.providerPayoutCents),
       totalCents: String(breakdown.totalCents),
-      platformFeeCents: String(earnings.platformFeeAmount),
-      providerPayoutCents: String(earnings.netAmount),
+      providerTier: String(amounts.providerTier),
+      destinationAccountId: String(providerStripeAccountId),
     },
-  });
+    });
+  } catch (error: unknown) {
+    const message =
+      error && typeof error === "object" && "message" in error && typeof (error as any).message === "string"
+        ? (error as any).message
+        : "Stripe error";
+
+    console.error("[API_BOOKING_PAY] Failed to create Checkout Session", {
+      bookingId: booking.id,
+      providerId: provider.id,
+      destination: providerStripeAccountId,
+      message,
+    });
+
+    const normalized = message.toLowerCase();
+    if (normalized.includes("destination") || normalized.includes("transfer_data") || normalized.includes("application_fee")) {
+      return new NextResponse(
+        "Provider Stripe account does not support destination charges (check Express account + Connect settings)",
+        { status: 400 },
+      );
+    }
+
+    return new NextResponse("Failed to create Stripe Checkout Session", { status: 500 });
+  }
 
   if (!session.url) {
     return new NextResponse("Stripe session missing URL", { status: 500 });

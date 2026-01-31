@@ -150,6 +150,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
         netAmount: true,
         status: true,
         stripeTransferId: true,
+        stripePaymentIntentId: true,
       },
     });
 
@@ -220,6 +221,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
               netAmount: true,
               status: true,
               stripeTransferId: true,
+              stripePaymentIntentId: true,
             },
           });
 
@@ -331,6 +333,40 @@ export async function POST(req: Request, { params }: { params: Promise<{ booking
 
     // 4) Best-effort transfer attempt; do not block customer on Stripe balance availability.
     try {
+      // Destination charge safety: if Stripe already created a transfer to the connected account,
+      // do NOT create an additional manual transfer.
+      if (effectiveEarning.stripePaymentIntentId) {
+        try {
+          const piWithCharges = (await stripe.paymentIntents.retrieve(effectiveEarning.stripePaymentIntentId)) as any;
+          const firstCharge = piWithCharges?.charges?.data?.[0] ?? null;
+          const transfer = firstCharge?.transfer ?? null;
+          const transferId = typeof transfer === "string" ? transfer : transfer?.id ?? null;
+
+          if (transferId) {
+            await db
+              .update(providerEarnings)
+              .set({
+                status: "transferred",
+                stripeTransferId: transferId,
+                transferredAt: new Date(),
+                updatedAt: new Date(),
+              })
+              .where(eq(providerEarnings.id, effectiveEarning.id));
+
+            return NextResponse.json({
+              ok: true,
+              booking: completedBooking ?? { id: booking.id, status: "completed" },
+              bookingStatus: "completed",
+              payout: "paid_out",
+              transferId,
+              source: "destination_charge",
+            });
+          }
+        } catch {
+          // Ignore and fall back to legacy transfer flow.
+        }
+      }
+
       const transfer = await stripe.transfers.create(
         {
           amount: effectiveEarning.netAmount,

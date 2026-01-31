@@ -1,13 +1,15 @@
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { and, eq } from "drizzle-orm";
+import Stripe from "stripe";
 
 import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { bookings, providerEarnings, providers, services } from "@/db/schema";
 import { assertTransition, type BookingStatus } from "@/lib/booking-state";
 import { calculateEarnings } from "@/lib/earnings";
-import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { calculateBookingPaymentBreakdown, parseStripeMetadataInt } from "@/lib/payments/fees";
+import { calculateDestinationChargeAmounts } from "@/lib/payments/platform-fee";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -115,14 +117,88 @@ export async function POST(
 
     // Best-effort: if the payment succeeded, ensure the provider earnings ledger row exists.
     const ensureEarningsRecorded = async () => {
-      const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
-      const platformFeeBps = getPlatformFeeBpsForPlan(normalizeProviderPlan(booking.providerPlan));
+      const baseAmountFromMeta =
+        parseStripeMetadataInt(pi.metadata, "servicePriceCents") ??
+        parseStripeMetadataInt(pi.metadata, "bookingBaseAmountCents");
+      const feeFromMeta =
+        parseStripeMetadataInt(pi.metadata, "serviceFeeCents") ??
+        parseStripeMetadataInt(pi.metadata, "customerServiceFeeCents");
+      const totalFromMeta =
+        parseStripeMetadataInt(pi.metadata, "totalCents") ??
+        parseStripeMetadataInt(pi.metadata, "totalChargeCents");
 
-      const breakdown = calculateEarnings({
-        amountInCents: booking.priceAtBooking,
-        chargesGst,
-        platformFeeBps: Number.isFinite(platformFeeBps) ? platformFeeBps : undefined,
+      const platformFeeFromMeta = parseStripeMetadataInt(pi.metadata, "platformFeeCents");
+      const providerPayoutFromMeta = parseStripeMetadataInt(pi.metadata, "providerPayoutCents");
+
+      const baseAmountCandidate =
+        (typeof baseAmountFromMeta === "number" && baseAmountFromMeta > 0 ? baseAmountFromMeta : null) ??
+        booking.priceAtBooking;
+
+      const computedPayment = calculateBookingPaymentBreakdown({ servicePriceCents: baseAmountCandidate });
+      const customerServiceFeeCents = Math.max(0, Math.trunc(feeFromMeta ?? computedPayment.serviceFeeCents));
+      const customerTotalChargedAmount = Math.max(
+        0,
+        Math.trunc(totalFromMeta ?? (baseAmountCandidate + customerServiceFeeCents)),
+      );
+
+      const amounts = calculateDestinationChargeAmounts({
+        servicePriceCents: baseAmountCandidate,
+        serviceFeeCents: customerServiceFeeCents,
+        providerPlan: booking.providerPlan,
       });
+
+      const platformFeeCents =
+        (typeof platformFeeFromMeta === "number" && platformFeeFromMeta >= 0 ? platformFeeFromMeta : null) ??
+        amounts.platformFeeCents;
+
+      const providerPayoutCents =
+        (typeof providerPayoutFromMeta === "number" && providerPayoutFromMeta >= 0 ? providerPayoutFromMeta : null) ??
+        Math.max(0, baseAmountCandidate - platformFeeCents);
+
+      const chargesGst = booking.serviceChargesGst ?? booking.providerChargesGst ?? true;
+      const gstAmount = calculateEarnings({ amountInCents: baseAmountCandidate, chargesGst, platformFeeBps: 0 }).gstAmount;
+
+      // Best-effort: capture auto transfer id and settlement fields.
+      let balanceTxId: string | null = null;
+      let chargeId: string | null = null;
+      let transferId: string | null = null;
+      let stripeFeeAmount: number | null = null;
+      let stripeNetAmount: number | null = null;
+      let stripeAmount: number | null = null;
+      try {
+        const piWithCharges = (await stripe.paymentIntents.retrieve(pi.id, {
+          expand: ["charges.data.balance_transaction"],
+        })) as Stripe.PaymentIntent & {
+          charges?: {
+            data?: Array<{
+              id?: string;
+              balance_transaction?: string | Stripe.BalanceTransaction | null;
+              transfer?: string | Stripe.Transfer | null;
+            }>;
+          };
+        };
+
+        const firstCharge = piWithCharges.charges?.data?.[0] ?? null;
+        chargeId = typeof firstCharge?.id === "string" ? firstCharge.id : null;
+
+        const transfer = firstCharge?.transfer ?? null;
+        transferId = typeof transfer === "string" ? transfer : transfer?.id ?? null;
+
+        const raw = firstCharge?.balance_transaction ?? null;
+        const btObj = typeof raw === "string" ? null : raw;
+        balanceTxId = typeof raw === "string" ? raw : btObj?.id ?? null;
+        stripeFeeAmount = typeof btObj?.fee === "number" ? btObj.fee : null;
+        stripeNetAmount = typeof btObj?.net === "number" ? btObj.net : null;
+        stripeAmount = typeof btObj?.amount === "number" ? btObj.amount : null;
+      } catch {
+        // Ignore.
+      }
+
+      const isDestinationCharge = !!transferId;
+      const earningStatus = isDestinationCharge ? "transferred" : "held";
+      const destinationTransfer = isDestinationCharge
+        ? { stripeTransferId: transferId, transferredAt: new Date(pi.created * 1000) }
+        : {};
 
       await db
         .insert(providerEarnings)
@@ -131,23 +207,39 @@ export async function POST(
           bookingId,
           providerId: booking.providerId,
           serviceId: booking.serviceId,
-          grossAmount: breakdown.grossAmount,
-          platformFeeAmount: breakdown.platformFeeAmount,
-          gstAmount: breakdown.gstAmount,
-          netAmount: breakdown.netAmount,
-          status: "held",
+          grossAmount: baseAmountCandidate,
+          platformFeeAmount: platformFeeCents,
+          gstAmount,
+          netAmount: providerPayoutCents,
+          status: earningStatus,
           stripePaymentIntentId: pi.id,
+          stripeBalanceTransactionId: balanceTxId,
+          stripeChargeId: chargeId,
+          stripeFeeAmount,
+          stripeNetAmount,
+          stripeAmount,
+          customerServiceFeeAmount: customerServiceFeeCents,
+          customerTotalChargedAmount,
+          ...destinationTransfer,
           paidAt: new Date(pi.created * 1000),
         })
         .onConflictDoUpdate({
           target: providerEarnings.bookingId,
           set: {
-            grossAmount: breakdown.grossAmount,
-            platformFeeAmount: breakdown.platformFeeAmount,
-            gstAmount: breakdown.gstAmount,
-            netAmount: breakdown.netAmount,
-            status: "held",
+            grossAmount: baseAmountCandidate,
+            platformFeeAmount: platformFeeCents,
+            gstAmount,
+            netAmount: providerPayoutCents,
+            status: earningStatus,
             stripePaymentIntentId: pi.id,
+            stripeBalanceTransactionId: balanceTxId,
+            stripeChargeId: chargeId,
+            stripeFeeAmount,
+            stripeNetAmount,
+            stripeAmount,
+            customerServiceFeeAmount: customerServiceFeeCents,
+            customerTotalChargedAmount,
+            ...destinationTransfer,
             paidAt: new Date(pi.created * 1000),
             updatedAt: new Date(),
           },

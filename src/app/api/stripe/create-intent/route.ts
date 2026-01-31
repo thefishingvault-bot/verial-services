@@ -2,16 +2,14 @@ import { stripe } from "@/lib/stripe";
 import { auth } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { bookings, providers, services } from "@/db/schema";
+import { bookings, providers } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { normalizeStatus } from "@/lib/booking-state";
 import { getFinalBookingAmountCents } from "@/lib/booking-price";
 import { calculateBookingPaymentBreakdown } from "@/lib/payments/fees";
-import { calculateEarnings } from "@/lib/earnings";
-import { getPlatformFeeBpsForPlan, normalizeProviderPlan } from "@/lib/provider-subscription";
+import { calculateDestinationChargeAmounts } from "@/lib/payments/platform-fee";
 
-// This route is for creating a Payment Intent for a *platform* charge.
-// This will be adapted later for Connect (destination charges).
+// This route creates a PaymentIntent on the *platform* account, using Connect destination charges.
 
 export async function POST(req: Request) {
   try {
@@ -69,37 +67,36 @@ export async function POST(req: Request) {
       columns: { plan: true, stripeConnectId: true, chargesGst: true },
     });
 
-    if (!provider?.stripeConnectId) {
-      return new NextResponse("Provider is not configured for Stripe Connect", { status: 400 });
+    const providerStripeAccountId = provider?.stripeConnectId ?? null;
+    if (!providerStripeAccountId || !providerStripeAccountId.startsWith("acct_")) {
+      return new NextResponse("Provider is not connected to Stripe yet", { status: 400 });
     }
 
-    const service = await db.query.services.findFirst({
-      where: eq(services.id, booking.serviceId),
-      columns: { chargesGst: true },
+    const amounts = calculateDestinationChargeAmounts({
+      servicePriceCents: breakdown.servicePriceCents,
+      serviceFeeCents: breakdown.serviceFeeCents,
+      providerPlan: provider?.plan,
     });
 
-    const earnings = calculateEarnings({
-      amountInCents: breakdown.servicePriceCents,
-      chargesGst: service?.chargesGst ?? provider.chargesGst ?? true,
-      platformFeeBps: getPlatformFeeBpsForPlan(normalizeProviderPlan(provider.plan)),
-    });
-
-    // Create the Payment Intent (platform charge only; transfer happens later).
+    // Create the PaymentIntent (destination charge; Stripe routes funds automatically).
     const paymentIntent = await stripe.paymentIntents.create({
       amount: breakdown.totalCents,
       currency: "nzd", // NZD as per spec
       automatic_payment_methods: { enabled: true },
       transfer_group: booking.id,
+      application_fee_amount: amounts.applicationFeeCents,
+      transfer_data: { destination: providerStripeAccountId },
       metadata: {
         bookingId: booking.id,
         userId,
         providerId: booking.providerId,
-        transferGroup: booking.id,
         servicePriceCents: String(breakdown.servicePriceCents),
         serviceFeeCents: String(breakdown.serviceFeeCents),
         totalCents: String(breakdown.totalCents),
-        platformFeeCents: String(earnings.platformFeeAmount),
-        providerPayoutCents: String(earnings.netAmount),
+        platformFeeCents: String(amounts.platformFeeCents),
+        providerPayoutCents: String(amounts.providerPayoutCents),
+        providerTier: String(amounts.providerTier),
+        destinationAccountId: String(providerStripeAccountId),
       },
     });
 
@@ -113,7 +110,6 @@ export async function POST(req: Request) {
       .where(eq(bookings.id, booking.id));
 
     return NextResponse.json({ clientSecret: paymentIntent.client_secret, paymentIntentId: paymentIntent.id });
-
   } catch (error) {
     console.error("[API_STRIPE_CREATE_INTENT]", error);
     return new NextResponse("Internal Server Error", { status: 500 });

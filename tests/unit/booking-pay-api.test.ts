@@ -90,8 +90,15 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(res.status).toBe(200);
     expect(stripeMocks.sessionsCreate).toHaveBeenCalledTimes(1);
 
-    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as { success_url?: string } | undefined;
+    const call = stripeMocks.sessionsCreate.mock.calls[0]?.[0] as any;
     expect(call?.success_url).toMatch(/session_id=\{CHECKOUT_SESSION_ID\}/);
+
+    // Destination charge
+    expect(call?.payment_intent_data?.transfer_data?.destination).toBe("acct_123");
+    // Starter (default) platform fee: 10% of 5000 = 500, plus service fee 250 => application fee 750
+    expect(call?.payment_intent_data?.application_fee_amount).toBe(750);
+    expect(call?.payment_intent_data?.metadata?.providerTier).toBe("starter");
+    expect(call?.payment_intent_data?.metadata?.destinationAccountId).toBe("acct_123");
 
     const json = await res.json();
     expect(json.url).toMatch(/^https:\/\//);
@@ -146,6 +153,12 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     // 5% service fee on >= $20 tier: round(7500 * 0.05) = 375
     expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(375);
     expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Service fee");
+
+    // Destination charge: application fee = service fee (375) + platform fee (10% of 7500 => 750)
+    expect(call?.payment_intent_data?.transfer_data?.destination).toBe("acct_123");
+    expect(call?.payment_intent_data?.application_fee_amount).toBe(1125);
+    expect(call?.payment_intent_data?.metadata?.platformFeeCents).toBe("750");
+    expect(call?.payment_intent_data?.metadata?.providerPayoutCents).toBe("6750");
   });
 
   it("charges priceAtBooking for from bookings when provider quote is missing", async () => {
@@ -176,6 +189,12 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     // 5% service fee on >= $20 tier: round(5000 * 0.05) = 250
     expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(250);
     expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Service fee");
+
+    // Destination charge: application fee = service fee (250) + platform fee (10% of 5000 => 500)
+    expect(call?.payment_intent_data?.transfer_data?.destination).toBe("acct_123");
+    expect(call?.payment_intent_data?.application_fee_amount).toBe(750);
+    expect(call?.payment_intent_data?.metadata?.platformFeeCents).toBe("500");
+    expect(call?.payment_intent_data?.metadata?.providerPayoutCents).toBe("4500");
   });
 
   it("applies $3 small-order fee when price < $10", async () => {
@@ -204,6 +223,12 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(300);
     expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Small order fee");
     expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("300");
+
+    // Destination charge: application fee = service fee (300) + platform fee (10% of 900 => 90)
+    expect(call?.payment_intent_data?.transfer_data?.destination).toBe("acct_123");
+    expect(call?.payment_intent_data?.application_fee_amount).toBe(390);
+    expect(call?.payment_intent_data?.metadata?.platformFeeCents).toBe("90");
+    expect(call?.payment_intent_data?.metadata?.providerPayoutCents).toBe("810");
   });
 
   it("applies $5 small-order fee when $10 <= price < $20", async () => {
@@ -232,5 +257,11 @@ describe("POST /api/bookings/[bookingId]/pay", () => {
     expect(call?.line_items?.[1]?.price_data?.unit_amount).toBe(500);
     expect(call?.line_items?.[1]?.price_data?.product_data?.name).toBe("Small order fee");
     expect(call?.payment_intent_data?.metadata?.serviceFeeCents).toBe("500");
+
+    // Destination charge: application fee = service fee (500) + platform fee (10% of 1500 => 150)
+    expect(call?.payment_intent_data?.transfer_data?.destination).toBe("acct_123");
+    expect(call?.payment_intent_data?.application_fee_amount).toBe(650);
+    expect(call?.payment_intent_data?.metadata?.platformFeeCents).toBe("150");
+    expect(call?.payment_intent_data?.metadata?.providerPayoutCents).toBe("1350");
   });
 });
