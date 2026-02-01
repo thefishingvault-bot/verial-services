@@ -70,6 +70,8 @@ export function OnboardingForm(props: {
   const [checking, setChecking] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [availability, setAvailability] = useState<null | { available: boolean; normalized?: string; message?: string }>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema) as unknown as Resolver<FormValues>,
@@ -133,8 +135,25 @@ export function OnboardingForm(props: {
 
   const onSubmit = async (values: FormValues) => {
     setIsSaving(true);
+    setSubmitError(null);
+    setSubmitSuccess(false);
+
+    const withTimeout = async <T,>(promise: Promise<T>, ms: number): Promise<T> => {
+      let timeout: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise<T>((_, reject) => {
+            timeout = setTimeout(() => reject(new Error("Request timed out. Please try again.")), ms);
+          }),
+        ]);
+      } finally {
+        if (timeout) clearTimeout(timeout);
+      }
+    };
+
     try {
-      const result = await submitOnboarding(values);
+      const result = await withTimeout(submitOnboarding(values), 20_000);
       if (!result.ok) {
         if ("fieldErrors" in result) {
           for (const [key, message] of Object.entries(result.fieldErrors)) {
@@ -146,10 +165,21 @@ export function OnboardingForm(props: {
       }
 
       toast.success("Welcome to Verial", { description: "Your profile is set up." });
+      setSubmitSuccess(true);
+
+      // Prefer client-side navigation; fall back to a hard redirect if something
+      // (middleware/cache) prevents the router transition from taking effect.
       router.replace("/dashboard");
       router.refresh();
+      setTimeout(() => {
+        if (window.location.pathname !== "/dashboard") {
+          window.location.assign("/dashboard");
+        }
+      }, 500);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to complete onboarding";
+      console.error("[ONBOARDING_SUBMIT]", err);
+      setSubmitError(message);
       toast.error("Onboarding failed", { description: message });
     } finally {
       setIsSaving(false);
@@ -193,6 +223,17 @@ export function OnboardingForm(props: {
       <CardContent>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+            {submitError && (
+              <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+                {submitError}
+              </div>
+            )}
+            {submitSuccess && (
+              <div className="rounded-md border bg-muted p-3 text-sm text-muted-foreground">
+                Profile completed. Redirecting you to your dashboard…
+              </div>
+            )}
+
             {step === 1 && (
               <>
                 <FormField
