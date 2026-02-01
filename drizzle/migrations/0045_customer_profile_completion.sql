@@ -14,6 +14,8 @@ BEGIN
   END IF;
 END $$;
 
+--> statement-breakpoint
+
 -- Default new users to customer; keep existing rows as-is.
 ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'customer';
 
