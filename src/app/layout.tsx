@@ -4,6 +4,7 @@ import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
 import { ToastProvider } from "@/components/ui/use-toast";
 import { Toaster } from "@/components/ui/toaster";
+import { Toaster as SonnerToaster } from "sonner";
 import { PwaInstallPrompt } from "@/components/pwa/pwa-install-prompt";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -39,6 +40,7 @@ export default function RootLayout({
           <ToastProvider>
             {children}
             <Toaster />
+            <SonnerToaster richColors />
             <PwaInstallPrompt />
           </ToastProvider>
         </body>
