@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Ensure local DB user exists so we can set earlyProviderAccess.
-  await ensureUserExistsInDb(userId, "user");
+  await ensureUserExistsInDb(userId, "customer");
 
   const now = new Date();
 

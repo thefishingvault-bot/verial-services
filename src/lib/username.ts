@@ -46,12 +46,12 @@ export function parseUsername(value: unknown, opts?: { allowMissing?: boolean })
     return { ok: false, message: "Username is required" };
   }
 
-  if (normalized.length < 3 || normalized.length > 30) {
-    return { ok: false, message: "Username must be between 3 and 30 characters" };
+  if (normalized.length < 3 || normalized.length > 20) {
+    return { ok: false, message: "Username must be between 3 and 20 characters" };
   }
 
-  if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(normalized)) {
-    return { ok: false, message: "Username can only contain lowercase letters, numbers, and dashes" };
+  if (!/^[a-z0-9_]{3,20}$/.test(normalized)) {
+    return { ok: false, message: "Username can only contain lowercase letters, numbers, and underscores" };
   }
 
   if (RESERVED_USERNAMES.has(normalized)) {

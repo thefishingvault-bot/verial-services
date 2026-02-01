@@ -16,7 +16,7 @@ function isUndefinedColumnError(err: unknown): boolean {
 
 export async function ensureUserExistsInDb(
   userId: string,
-  role: (typeof users.role.enumValues)[number] = "user",
+  role: (typeof users.role.enumValues)[number] = "customer",
 ) {
   // Unit tests mock Clerk/schema/db heavily; don't require a real Clerk key.
   if (process.env.NODE_ENV === "test") return;

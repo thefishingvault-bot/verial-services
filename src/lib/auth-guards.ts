@@ -29,7 +29,7 @@ export const requireCustomer = async () => {
   const role = await getUserRole(userId);
 
   // We intentionally do NOT redirect providers here; middleware handles routing to avoid loops.
-  return { userId, role: role ?? "user" };
+  return { userId, role: role ?? "customer" };
 };
 
 export const requireProvider = async (

@@ -3,7 +3,7 @@ import { normalizeUsername, parseUsername } from "./username";
 
 describe("username", () => {
   it("normalizes username to lowercase", () => {
-    expect(normalizeUsername("  Alice-123 ")).toBe("alice-123");
+    expect(normalizeUsername("  Alice_123 ")).toBe("alice_123");
   });
 
   it("rejects empty usernames", () => {
@@ -13,7 +13,7 @@ describe("username", () => {
   });
 
   it("rejects invalid characters", () => {
-    const res = parseUsername("bad_name");
+    const res = parseUsername("bad-name");
     expect(res.ok).toBe(false);
   });
 
@@ -22,9 +22,9 @@ describe("username", () => {
     expect(res.ok).toBe(false);
   });
 
-  it("accepts dashed usernames", () => {
-    const res = parseUsername("good-name-1");
+  it("accepts underscored usernames", () => {
+    const res = parseUsername("good_name_1");
     expect(res.ok).toBe(true);
-    if (res.ok) expect(res.normalized).toBe("good-name-1");
+    if (res.ok) expect(res.normalized).toBe("good_name_1");
   });
 });

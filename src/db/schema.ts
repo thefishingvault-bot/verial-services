@@ -18,7 +18,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 // --- ENUMS ---
-export const userRoleEnum = pgEnum("user_role", ["user", "provider", "admin"]);
+export const userRoleEnum = pgEnum("user_role", ["user", "customer", "provider", "admin"]);
 export const providerStatusEnum = pgEnum("provider_status", ["pending", "approved", "rejected"]);
 export const trustLevelEnum = pgEnum("trust_level", ["bronze", "silver", "gold", "platinum"]);
 export const kycStatusEnum = pgEnum("kyc_status", [
@@ -51,8 +51,19 @@ export const users = pgTable("users", {
   usernameLower: varchar("username_lower", { length: 50 }),
   firstName: text("first_name"),
   lastName: text("last_name"),
+  phone: text("phone"),
+  addressLine1: text("address_line1"),
+  addressLine2: text("address_line2"),
+  suburb: text("suburb"),
+  city: text("city"),
+  region: text("region"),
+  postcode: text("postcode"),
   avatarUrl: text("avatar_url"),
-  role: userRoleEnum("role").default("user").notNull(),
+  role: userRoleEnum("role").default("customer").notNull(),
+  profileCompleted: boolean("profile_completed").default(false).notNull(),
+  acceptedTermsAt: timestamp("accepted_terms_at", { withTimezone: true }),
+  acceptedPrivacyAt: timestamp("accepted_privacy_at", { withTimezone: true }),
+  confirmed18PlusAt: timestamp("confirmed_18_plus_at", { withTimezone: true }),
   providerId: varchar("provider_id", { length: 255 }),
   earlyProviderAccess: boolean("early_provider_access").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),

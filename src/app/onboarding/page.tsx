@@ -15,7 +15,7 @@ function isUndefinedColumnError(err: unknown): boolean {
   if (anyCause?.code === "42703") return true;
   const msg = typeof anyErr.message === "string" ? anyErr.message : "";
   const causeMsg = typeof anyCause?.message === "string" ? anyCause.message : "";
-  return (msg + "\n" + causeMsg).includes("does not exist") && (msg + "\n" + causeMsg).includes("username");
+  return (msg + "\n" + causeMsg).includes("does not exist") && (msg + "\n" + causeMsg).includes("column");
 }
 
 export const runtime = "nodejs";
@@ -26,13 +26,21 @@ export default async function OnboardingPage() {
     redirect("/sign-in");
   }
 
-  await ensureUserExistsInDb(userId, "user");
+  await ensureUserExistsInDb(userId, "customer");
 
   let user:
     | {
-        usernameLower: string | null;
+        profileCompleted: boolean;
+        username: string | null;
         firstName: string | null;
         lastName: string | null;
+        phone: string | null;
+        addressLine1: string | null;
+        addressLine2: string | null;
+        suburb: string | null;
+        city: string | null;
+        region: string | null;
+        postcode: string | null;
       }
     | undefined;
 
@@ -40,9 +48,17 @@ export default async function OnboardingPage() {
     user = await db.query.users.findFirst({
       where: eq(users.id, userId),
       columns: {
-        usernameLower: true,
+        profileCompleted: true,
+        username: true,
         firstName: true,
         lastName: true,
+        phone: true,
+        addressLine1: true,
+        addressLine2: true,
+        suburb: true,
+        city: true,
+        region: true,
+        postcode: true,
       },
     });
   } catch (err) {
@@ -53,7 +69,7 @@ export default async function OnboardingPage() {
     throw err;
   }
 
-  if (user?.usernameLower) {
+  if (user?.profileCompleted) {
     redirect("/dashboard");
   }
 
@@ -66,11 +82,22 @@ export default async function OnboardingPage() {
         </p>
       </div>
 
-      <OnboardingForm initialFirstName={user?.firstName ?? null} initialLastName={user?.lastName ?? null} />
+      <OnboardingForm
+        initialValues={{
+          username: user?.username ?? "",
+          firstName: user?.firstName ?? "",
+          lastName: user?.lastName ?? "",
+          phone: user?.phone ?? "",
+          addressLine1: user?.addressLine1 ?? "",
+          addressLine2: user?.addressLine2 ?? "",
+          suburb: user?.suburb ?? "",
+          city: user?.city ?? "",
+          region: user?.region ?? "",
+          postcode: user?.postcode ?? "",
+        }}
+      />
 
-      <p className="text-xs text-muted-foreground">
-        Your username will be used for mentions and future profile features.
-      </p>
+      <p className="text-xs text-muted-foreground">Your profile helps providers contact you and serve you in the right area.</p>
     </div>
   );
 }

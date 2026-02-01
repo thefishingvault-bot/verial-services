@@ -14,7 +14,7 @@ function isUndefinedColumnError(err: unknown): boolean {
   if (anyCause?.code === "42703") return true;
   const msg = typeof anyErr.message === "string" ? anyErr.message : "";
   const causeMsg = typeof anyCause?.message === "string" ? anyCause.message : "";
-  return (msg + "\n" + causeMsg).includes("does not exist") && (msg + "\n" + causeMsg).includes("username");
+  return (msg + "\n" + causeMsg).includes("does not exist") && (msg + "\n" + causeMsg).includes("column");
 }
 
 export const runtime = "nodejs";
@@ -29,15 +29,15 @@ export default async function DashboardRootLayout({
     redirect("/sign-in");
   }
 
-  await ensureUserExistsInDb(userId, "user");
+  await ensureUserExistsInDb(userId, "customer");
 
   try {
     const user = await db.query.users.findFirst({
       where: eq(users.id, userId),
-      columns: { usernameLower: true },
+      columns: { profileCompleted: true },
     });
 
-    if (!user?.usernameLower) {
+    if (!user?.profileCompleted) {
       redirect("/onboarding");
     }
   } catch (err) {
