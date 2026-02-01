@@ -1,5 +1,36 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
+import { eq } from "drizzle-orm";
+
+import { db } from "@/lib/db";
+import { users } from "@/db/schema";
+
+// Public routes (no auth required)
+const isPublicRoute = createRouteMatcher([
+  "/_clerk(.*)",
+  "/",
+  "/waitlist(.*)",
+  "/invite/provider(.*)",
+  "/services(.*)",
+  "/s/(.*)",
+  "/p/(.*)",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/favicon.ico",
+  "/robots.txt",
+  "/sitemap.xml",
+  "/manifest.webmanifest",
+  "/api/pwa(.*)",
+  "/api/waitlist(.*)",
+  "/api/services/list",
+  "/api/public/provider/time-offs",
+  "/api/recommendations/providers",
+  "/api/webhooks(.*)",
+  "/api/stripe/webhook(.*)",
+  "/api/health(.*)",
+]);
+
+const isOnboardingRoute = createRouteMatcher(["/onboarding(.*)"]);
 
 const isAlwaysAllowedInMaintenance = createRouteMatcher([
   // Clerk internals
@@ -27,10 +58,53 @@ function readMaintenanceMode(): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
-export default clerkMiddleware((auth, req) => {
+export default clerkMiddleware(async (auth, req) => {
   const maintenance = readMaintenanceMode();
 
-  if (!maintenance) return NextResponse.next();
+  if (!maintenance) {
+    // Explicitly protect non-public routes
+    if (!isPublicRoute(req)) auth.protect();
+
+    const pathname = req.nextUrl.pathname;
+    const isPageRequest = !pathname.startsWith("/api");
+
+    // Avoid redirect loops: /onboarding itself must remain reachable.
+    const shouldCheckOnboarding =
+      isPageRequest &&
+      !isPublicRoute(req) &&
+      !isOnboardingRoute(req);
+
+    if (!shouldCheckOnboarding) {
+      return NextResponse.next();
+    }
+
+    try {
+      const { userId } = await auth();
+      if (!userId) return NextResponse.next();
+
+      const row = await db.query.users.findFirst({
+        where: eq(users.id, userId),
+        columns: { profileCompleted: true, role: true },
+      });
+
+      // Don't block admins/providers on customer onboarding.
+      if (row?.role === "admin" || row?.role === "provider") {
+        return NextResponse.next();
+      }
+
+      if (!row?.profileCompleted) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/onboarding";
+        url.search = "";
+        return NextResponse.redirect(url);
+      }
+    } catch (err) {
+      console.error("[PROXY_PROFILE_GUARD]", err);
+      // Fail open if DB is unreachable.
+    }
+
+    return NextResponse.next();
+  }
 
   // maintenance ON -> allow minimal routes; send everything else to waitlist
   if (!isAlwaysAllowedInMaintenance(req)) {
