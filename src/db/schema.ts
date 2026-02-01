@@ -47,6 +47,8 @@ export const providerInviteStatusEnum = pgEnum("provider_invite_status", ["pendi
 export const users = pgTable("users", {
   id: varchar("id", { length: 255 }).primaryKey(), // Clerk User ID
   email: varchar("email", { length: 255 }).notNull().unique(),
+  username: varchar("username", { length: 50 }),
+  usernameLower: varchar("username_lower", { length: 50 }),
   firstName: text("first_name"),
   lastName: text("last_name"),
   avatarUrl: text("avatar_url"),
@@ -55,7 +57,10 @@ export const users = pgTable("users", {
   earlyProviderAccess: boolean("early_provider_access").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-});
+}, (table) => ({
+  usernameLowerUnique: uniqueIndex("users_username_lower_unique").on(table.usernameLower),
+  usernameLowerIdx: index("users_username_lower_idx").on(table.usernameLower),
+}));
 
 /**
  * Provider Invites

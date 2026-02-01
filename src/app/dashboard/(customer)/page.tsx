@@ -1,6 +1,4 @@
 import { redirect } from "next/navigation";
-import { CustomerDashboardSections } from "@/components/dashboard/customer-dashboard-sections";
-import { getCustomerDashboardData } from "@/lib/dashboard/customer-dashboard";
 import { requireCustomer } from "@/lib/auth-guards";
 
 export default async function DashboardPage() {
@@ -12,6 +10,11 @@ export default async function DashboardPage() {
   if (role === "provider") {
     redirect("/dashboard/provider");
   }
+
+  const [{ getCustomerDashboardData }, { CustomerDashboardSections }] = await Promise.all([
+    import("@/lib/dashboard/customer-dashboard"),
+    import("@/components/dashboard/customer-dashboard-sections"),
+  ]);
 
   const data = await getCustomerDashboardData();
 

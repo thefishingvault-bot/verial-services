@@ -1,37 +1,48 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
-const isPublicRoute = createRouteMatcher([
+const isAlwaysAllowedInMaintenance = createRouteMatcher([
+  // Clerk internals
   "/_clerk(.*)",
-  "/",
+
+  // Waitlist page + the API it uses
   "/waitlist(.*)",
-  "/sign-in(.*)",
-  "/sign-up(.*)",
-  "/invite/provider(.*)",
   "/api/waitlist(.*)",
+
+  // Operational endpoints that must remain reachable
+  "/api/health(.*)",
   "/api/stripe/webhook(.*)",
   "/api/webhooks(.*)",
-  "/api/health(.*)",
 ]);
 
-const MAINTENANCE_MODE =
-  (process.env.MAINTENANCE_MODE ?? "false").toLowerCase() === "true";
+function readMaintenanceMode(): boolean {
+  const raw =
+    process.env.MAINTENANCE_MODE ??
+    // tolerate common typos in env var naming
+    process.env.MAINTENENCE_MODE ??
+    process.env.MAINTENCE_MODE ??
+    "false";
+
+  const normalized = String(raw).trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
+}
 
 export default clerkMiddleware((auth, req) => {
-  // maintenance OFF -> allow normal site
-  if (!MAINTENANCE_MODE) return NextResponse.next();
+  const maintenance = readMaintenanceMode();
 
-  // maintenance ON -> allow public routes; send everything else to waitlist
-  if (!isPublicRoute(req)) {
-    return NextResponse.redirect(new URL("/waitlist", req.url));
+  if (!maintenance) return NextResponse.next();
+
+  // maintenance ON -> allow minimal routes; send everything else to waitlist
+  if (!isAlwaysAllowedInMaintenance(req)) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url);
   }
+
   return NextResponse.next();
 });
 
 export const config = {
-  matcher: [
-    "/((?!_next|.*\\..*).*)",
-    "/(api|trpc)(.*)",
-    "/_clerk(.*)",
-  ],
+  matcher: ["/((?!_next|.*\\..*).*)", "/(api|trpc)(.*)", "/_clerk(.*)"],
 };
