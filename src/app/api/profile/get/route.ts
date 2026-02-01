@@ -1,8 +1,9 @@
 import { db } from '@/lib/db';
-import { users, providers } from '@/db/schema';
-import { auth, clerkClient } from '@clerk/nextjs/server';
+import { users } from '@/db/schema';
+import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
 
 export const runtime = 'nodejs';
 
@@ -13,8 +14,11 @@ export async function GET() {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
+    // Ensure the user exists in our DB (handles recreated Clerk users with same email).
+    await ensureUserExistsInDb(userId, 'customer');
+
     // --- 1. Try to find the user in our DB ---
-    let userProfile = await db.query.users.findFirst({
+    const userProfile = await db.query.users.findFirst({
       where: eq(users.id, userId),
       with: {
         provider: {
@@ -28,41 +32,6 @@ export async function GET() {
         },
       },
     });
-
-    // --- 2. If not found, create (sync) them ---
-    if (!userProfile) {
-      const client = await clerkClient();
-      const user = await client.users.getUser(userId);
-      const userEmail = user.emailAddresses[0]?.emailAddress;
-      if (!userEmail) {
-        return new NextResponse('User email not found', { status: 400 });
-      }
-
-      await db.insert(users).values({
-        id: userId,
-        email: userEmail,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        avatarUrl: user.imageUrl,
-        role: 'user',
-      }).onConflictDoNothing();
-
-      // Try fetching again
-      userProfile = await db.query.users.findFirst({
-        where: eq(users.id, userId),
-        with: {
-          provider: {
-            columns: {
-              bio: true,
-              businessName: true,
-              handle: true,
-              trustLevel: true,
-              trustScore: true,
-            },
-          },
-        },
-      });
-    }
 
     if (!userProfile) {
         return new NextResponse('Failed to create or find user profile', { status: 500 });

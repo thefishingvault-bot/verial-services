@@ -4,6 +4,7 @@ import { auth, clerkClient } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { and, eq, ne } from 'drizzle-orm';
 import { hasOwn, parseUsername } from '@/lib/username';
+import { ensureUserExistsInDb } from '@/lib/user-sync';
 
 export const runtime = 'nodejs';
 
@@ -14,15 +15,41 @@ export async function PATCH(req: Request) {
       return new NextResponse('Unauthorized', { status: 401 });
     }
 
+    // Ensure local user exists (handles recreated Clerk users with same email).
+    await ensureUserExistsInDb(userId, 'customer');
+
     const body = (await req.json().catch(() => ({}))) as unknown;
     const rec = (body && typeof body === 'object' ? (body as Record<string, unknown>) : {}) as Record<string, unknown>;
 
     // Destructure all possible fields
-    const { firstName, lastName, bio, businessName, handle, avatarUrl, username } = rec;
+    const {
+      firstName,
+      lastName,
+      bio,
+      businessName,
+      handle,
+      avatarUrl,
+      username,
+      phone,
+      addressLine1,
+      addressLine2,
+      suburb,
+      city,
+      region,
+      postcode,
+    } = rec;
 
     const firstNameStr = typeof firstName === 'string' ? firstName : undefined;
     const lastNameStr = typeof lastName === 'string' ? lastName : undefined;
     const avatarUrlStr = typeof avatarUrl === 'string' ? avatarUrl : undefined;
+
+    const phoneStr = typeof phone === 'string' ? phone.trim() : undefined;
+    const addressLine1Str = typeof addressLine1 === 'string' ? addressLine1.trim() : undefined;
+    const addressLine2Str = typeof addressLine2 === 'string' ? addressLine2.trim() : undefined;
+    const suburbStr = typeof suburb === 'string' ? suburb.trim() : undefined;
+    const cityStr = typeof city === 'string' ? city.trim() : undefined;
+    const regionStr = typeof region === 'string' ? region.trim() : undefined;
+    const postcodeStr = typeof postcode === 'string' ? postcode.trim() : undefined;
 
     const normalizedHandle = typeof handle === 'string' ? handle.trim().toLowerCase() : undefined;
     const normalizedBusinessName = typeof businessName === 'string' ? businessName.trim() : undefined;
@@ -90,11 +117,22 @@ export async function PATCH(req: Request) {
 
     // --- 1. Update Clerk ---
     const client = await clerkClient();
+    const current = await client.users.getUser(userId);
+
+    const currentPublic =
+      (current.publicMetadata && typeof current.publicMetadata === 'object'
+        ? (current.publicMetadata as Record<string, unknown>)
+        : {}) as Record<string, unknown>;
+
+    const nextPublicMetadata: Record<string, unknown> = {
+      ...currentPublic,
+      ...(avatarUrlStr !== undefined ? { avatar_url: avatarUrlStr } : {}),
+    };
+
     await client.users.updateUser(userId, {
       firstName: firstNameStr,
       lastName: lastNameStr,
-      // We store the avatar URL in public metadata so we can access it easily later
-      publicMetadata: { avatar_url: avatarUrlStr },
+      publicMetadata: nextPublicMetadata,
     });
 
     // --- 2. Update local 'users' table ---
@@ -105,6 +143,15 @@ export async function PATCH(req: Request) {
         lastName: lastNameStr,
         updatedAt: new Date(),
         avatarUrl: avatarUrlStr, // Update avatarUrl column
+        ...(phoneStr !== undefined ? { phone: phoneStr } : {}),
+        ...(addressLine1Str !== undefined ? { addressLine1: addressLine1Str } : {}),
+        ...(addressLine2Str !== undefined
+          ? { addressLine2: addressLine2Str ? addressLine2Str : null }
+          : {}),
+        ...(suburbStr !== undefined ? { suburb: suburbStr } : {}),
+        ...(cityStr !== undefined ? { city: cityStr } : {}),
+        ...(regionStr !== undefined ? { region: regionStr } : {}),
+        ...(postcodeStr !== undefined ? { postcode: postcodeStr } : {}),
         ...(wantsUsernameUpdate && normalizedUsername && normalizedUsername.ok
           ? {
               username: normalizedUsername.normalized,
