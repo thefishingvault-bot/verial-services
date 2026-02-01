@@ -4,7 +4,14 @@ import { clerkClient } from "@clerk/nextjs/server";
 import { sql } from "drizzle-orm";
 
 function isUndefinedColumnError(err: unknown): boolean {
-  return !!err && typeof err === "object" && (err as { code?: unknown }).code === "42703";
+  if (!err || typeof err !== "object") return false;
+  const anyErr = err as { code?: unknown; cause?: unknown; message?: unknown };
+  if (anyErr.code === "42703") return true;
+  const anyCause = anyErr.cause as { code?: unknown; message?: unknown } | undefined;
+  if (anyCause?.code === "42703") return true;
+  const msg = typeof anyErr.message === "string" ? anyErr.message : "";
+  const causeMsg = typeof anyCause?.message === "string" ? anyCause.message : "";
+  return (msg + "\n" + causeMsg).includes("does not exist") && (msg + "\n" + causeMsg).includes("column");
 }
 
 export async function ensureUserExistsInDb(
