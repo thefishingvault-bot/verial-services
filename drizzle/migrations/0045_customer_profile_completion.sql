@@ -16,9 +16,6 @@ END $$;
 
 --> statement-breakpoint
 
--- Default new users to customer; keep existing rows as-is.
-ALTER TABLE "users" ALTER COLUMN "role" SET DEFAULT 'customer';
-
 ALTER TABLE "users"
   ADD COLUMN IF NOT EXISTS "phone" text,
   ADD COLUMN IF NOT EXISTS "address_line1" text,

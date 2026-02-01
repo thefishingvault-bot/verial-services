@@ -358,6 +358,13 @@
       "when": 1769990400000,
       "tag": "0045_customer_profile_completion",
       "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1770000000000,
+      "tag": "0046_users_role_default_customer",
+      "breakpoints": true
     }
   ]
 }
