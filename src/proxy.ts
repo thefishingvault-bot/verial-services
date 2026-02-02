@@ -4,23 +4,6 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { users } from "@/db/schema";
-
-function parseAllowlist(raw: string | undefined | null): Set<string> {
-  const input = String(raw ?? "").trim();
-  if (!input) return new Set();
-
-  return new Set(
-    input
-      .split(",")
-      .map((v) => v.trim().toLowerCase())
-      .filter(Boolean),
-  );
-}
-
-function isPublicPath(pathname: string): boolean {
-  return pathname === "/" || pathname === "/waitlist" || pathname.startsWith("/waitlist/");
-}
-
 function isClerkPath(pathname: string): boolean {
   // Be conservative here: allow Clerk internals + common auth entrypoints/callbacks
   return (
@@ -88,33 +71,6 @@ function readMaintenanceMode(): boolean {
   return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
-function readAdminEmailAllowlist(): Set<string> {
-  const raw = process.env.ADMIN_EMAIL_ALLOWLIST ?? "admin@verial.co.nz";
-  const set = parseAllowlist(raw);
-  // Prevent accidental lock-out if env var is present but blank.
-  if (set.size === 0) return new Set(["admin@verial.co.nz"]);
-  return set;
-}
-
-function getPrimaryEmailFromSessionClaims(sessionClaims: unknown): string | null {
-  if (!sessionClaims || typeof sessionClaims !== "object") return null;
-
-  const claims = sessionClaims as Record<string, unknown>;
-
-  const candidates = [
-    claims.email,
-    claims.primary_email_address,
-    claims.primaryEmail,
-    claims.primary_email,
-  ];
-
-  for (const val of candidates) {
-    if (typeof val === "string" && val.trim()) return val.trim();
-  }
-
-  return null;
-}
-
 export default clerkMiddleware(async (auth, req) => {
   const maintenance = readMaintenanceMode();
   const pathname = req.nextUrl.pathname;
@@ -163,45 +119,14 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
-  // maintenance ON -> only admin allowlist can access non-public paths
-  const adminAllowlist = readAdminEmailAllowlist();
-
-  // Always allow: public pages, Clerk internals/callbacks, and operational endpoints.
-  if (isPublicPath(pathname) || isClerkPath(pathname) || isAlwaysAllowedInMaintenance(req)) {
-    return NextResponse.next();
-  }
-
-  const redirectToWaitlist = () => {
-    // Never redirect when already on /waitlist (extra safety).
-    if (isPublicPath(pathname)) return NextResponse.next();
+  // maintenance ON -> allow minimal routes; send everything else to waitlist
+  // Important: do NOT allow '/' during maintenance, so visitors land on /waitlist.
+  // Also: never redirect Clerk endpoints/callbacks, so auth flows don't break.
+  if (!isAlwaysAllowedInMaintenance(req) && !isClerkPath(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = "/waitlist";
     url.search = "";
     return NextResponse.redirect(url);
-  };
-
-  const { userId, sessionClaims } = await auth();
-  if (!userId) return redirectToWaitlist();
-
-  // Prefer session claims (fast), fall back to DB email if needed.
-  const emailFromClaims = getPrimaryEmailFromSessionClaims(sessionClaims);
-  let email = emailFromClaims?.toLowerCase() ?? null;
-
-  if (!email) {
-    try {
-      const row = await db.query.users.findFirst({
-        where: eq(users.id, userId),
-        columns: { email: true },
-      });
-      email = row?.email?.toLowerCase() ?? null;
-    } catch (err) {
-      console.error("[PROXY_MAINTENANCE_EMAIL_LOOKUP]", err);
-      return redirectToWaitlist();
-    }
-  }
-
-  if (!email || !adminAllowlist.has(email)) {
-    return redirectToWaitlist();
   }
 
   return NextResponse.next();
