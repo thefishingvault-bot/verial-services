@@ -35,6 +35,18 @@ function requireEnv(name: string) {
   return v;
 }
 
+function redactDatabaseUrl(databaseUrl: string) {
+  try {
+    const u = new URL(databaseUrl);
+    // redact password if present
+    if (u.password) u.password = "***";
+    return u.toString();
+  } catch {
+    // Best-effort fallback (don't leak creds)
+    return databaseUrl.replace(/:\/\/([^:]+):([^@]+)@/g, "://$1:***@");
+  }
+}
+
 function assertSafeToRun() {
   if (process.env.SEED_DEMO_OK !== "1") {
     throw new Error("Refusing to run: set SEED_DEMO_OK=1 to enable demo seeding.");
@@ -249,6 +261,50 @@ function makeDb() {
   const databaseUrl = requireEnv("DATABASE_URL");
   const sqlClient = neon(databaseUrl);
   return drizzle(sqlClient, { schema, logger: false });
+}
+
+async function getMissingColumns(db: ReturnType<typeof makeDb>, tableName: string, requiredColumns: string[]) {
+  // Query information_schema so we can fail fast when the DB is behind migrations.
+  const rows = await (db as any).execute(
+    sql`
+      select column_name
+      from information_schema.columns
+      where table_schema = 'public'
+        and table_name = ${tableName}
+        and column_name = any(${requiredColumns}::text[])
+    `,
+  );
+
+  const found = new Set<string>();
+  for (const r of (rows?.rows ?? rows ?? []) as Array<{ column_name?: string }>) {
+    if (r?.column_name) found.add(r.column_name);
+  }
+
+  return requiredColumns.filter((c) => !found.has(c));
+}
+
+async function assertDbSchemaCompatible(db: ReturnType<typeof makeDb>) {
+  const missingUsers = await getMissingColumns(db, "users", [
+    "id",
+    "email",
+    "role",
+    "profile_completed",
+    "early_provider_access",
+    "username",
+    "username_lower",
+  ]);
+
+  if (missingUsers.length > 0) {
+    const msg = [
+      "Target DATABASE_URL is missing expected columns on public.users.",
+      `Missing: ${missingUsers.join(", ")}`,
+      "This usually means the database is behind migrations (common on test/staging).",
+      "\nFix:",
+      "- Run `pnpm drizzle:migrate` with this same DATABASE_URL (or migrate your Neon branch).",
+      "- Then re-run `pnpm seed:demo`.",
+    ].join("\n");
+    throw new Error(msg);
+  }
 }
 
 async function withBestEffortTransaction<T>(
@@ -937,7 +993,13 @@ async function main() {
   const args = parseArgs(process.argv.slice(2));
   assertSafeToRun();
 
+  const databaseUrl = requireEnv("DATABASE_URL");
+  console.log(`[seed-demo] Target DB: ${redactDatabaseUrl(databaseUrl)}`);
+
   const db = makeDb();
+
+  // Fail fast if the DB is behind migrations.
+  await assertDbSchemaCompatible(db);
 
   if (args.wipe) {
     await wipeDemoData(db);
