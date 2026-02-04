@@ -43,7 +43,7 @@ function HomeContent() {
               <Input
                 name="query"
                 type="search"
-                placeholder="What service do you need? (e.g., 'window cleaning')"
+                placeholder="What service do you need?"
                 className="w-full rounded-md px-4 pr-16 h-12 shadow-sm"
               />
               <Button type="submit" variant="default" size="icon" className="absolute right-2.5">

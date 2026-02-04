@@ -183,7 +183,7 @@ const ServicesSearchAndFilters = ({
               <Search className="h-4 w-4 text-slate-400" aria-hidden="true" />
               <input
                 type="search"
-                placeholder="What service do you need? (e.g., 'window cleaning')"
+                placeholder="What service do you need?"
                 className="w-full bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
                 value={searchInput}
                 onChange={(e) => {

@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:demo:wipe": "tsx scripts/seed-demo.ts --wipe",
+    "services:images:demo": "tsx scripts/update-demo-service-images.ts",
     "drizzle:generate": "drizzle-kit generate",
     "drizzle:migrate": "drizzle-kit migrate",
     "drizzle:push": "drizzle-kit push",

@@ -22,6 +22,16 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'img.clerk.com',
       },
+      // Demo/test placeholder images
+      {
+        protocol: 'https',
+        hostname: 'picsum.photos',
+      },
+      // Picsum sometimes redirects through Fastly
+      {
+        protocol: 'https',
+        hostname: 'fastly.picsum.photos',
+      },
     ],
   },
 };

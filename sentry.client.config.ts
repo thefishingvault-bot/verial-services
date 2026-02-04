@@ -1,9 +1,6 @@
-// This file configures the Sentry client-side SDK.
-import * as Sentry from "@sentry/nextjs";
+// Intentionally left blank.
+// Client-side Sentry is initialized in `instrumentation-client.ts`.
+// Keeping init in two places causes: "You are calling Sentry.init() more than once on the client".
 
-Sentry.init({
-  dsn: process.env.NEXT_PUBLIC_SENTRY_DSN,
-  tracesSampleRate: 1.0,
-  // We removed Session Replay to fix console errors
-});
+export {};
 
