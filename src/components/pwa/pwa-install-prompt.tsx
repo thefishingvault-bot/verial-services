@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,23 +18,52 @@ type BeforeInstallPromptEvent = Event & {
 };
 
 const STORAGE_KEY = "verial:pwa-install-prompt:seen:v1";
+const COOKIE_KEY = "verial_pwa_install_prompt_seen_v1";
+
+function readCookie(key: string) {
+  try {
+    const cookies = typeof document === "undefined" ? "" : document.cookie;
+    if (!cookies) return null;
+    const parts = cookies.split(";");
+    for (const part of parts) {
+      const [rawName, ...rest] = part.trim().split("=");
+      if (rawName === key) return decodeURIComponent(rest.join("="));
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCookie(key: string, value: string) {
+  try {
+    const maxAgeSeconds = 60 * 60 * 24 * 365 * 10; // 10 years
+    const secure = typeof location !== "undefined" && location.protocol === "https:" ? "; Secure" : "";
+    document.cookie = `${key}=${encodeURIComponent(value)}; Path=/; Max-Age=${maxAgeSeconds}; SameSite=Lax${secure}`;
+  } catch {
+    // ignore
+  }
+}
 
 function safeGet(key: string) {
   try {
-    return window.localStorage.getItem(key);
+    const v = window.localStorage.getItem(key);
+    if (v != null) return v;
   } catch {
-    try {
-      return window.sessionStorage.getItem(key);
-    } catch {
-      return null;
-    }
+    // ignore
   }
+  try {
+    const v = window.sessionStorage.getItem(key);
+    if (v != null) return v;
+  } catch {
+    // ignore
+  }
+  return readCookie(COOKIE_KEY);
 }
 
 function safeSet(key: string, value: string) {
   try {
     window.localStorage.setItem(key, value);
-    return;
   } catch {
     // ignore
   }
@@ -43,6 +72,7 @@ function safeSet(key: string, value: string) {
   } catch {
     // ignore
   }
+  writeCookie(COOKIE_KEY, value);
 }
 
 function isMobileUA() {
@@ -84,6 +114,7 @@ function isIOS() {
 export function PwaInstallPrompt() {
   const [open, setOpen] = useState(false);
   const [deferred, setDeferred] = useState<BeforeInstallPromptEvent | null>(null);
+  const openedOnceRef = useRef(false);
 
   const mobile = useMemo(() => isMobileUA() && isMobileScreen() && isTouchPrimary(), []);
 
@@ -102,6 +133,11 @@ export function PwaInstallPrompt() {
 
     const onBeforeInstallPrompt = (e: Event) => {
       e.preventDefault();
+      if (openedOnceRef.current) {
+        safeSet(STORAGE_KEY, "1");
+        return;
+      }
+      openedOnceRef.current = true;
       setDeferred(e as BeforeInstallPromptEvent);
       setOpen(true);
       safeSet(STORAGE_KEY, "1");
@@ -112,6 +148,11 @@ export function PwaInstallPrompt() {
 
     // iOS Safari doesn't emit beforeinstallprompt; show a one-time prompt with instructions.
     if (isIOS()) {
+      if (openedOnceRef.current) {
+        safeSet(STORAGE_KEY, "1");
+        return;
+      }
+      openedOnceRef.current = true;
       setOpen(true);
       safeSet(STORAGE_KEY, "1");
     }
