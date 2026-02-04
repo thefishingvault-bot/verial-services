@@ -265,13 +265,17 @@ function makeDb() {
 
 async function getMissingColumns(db: ReturnType<typeof makeDb>, tableName: string, requiredColumns: string[]) {
   // Query information_schema so we can fail fast when the DB is behind migrations.
+  const requiredList = sql.join(
+    requiredColumns.map((c) => sql`${c}`),
+    sql`, `,
+  );
   const rows = await (db as any).execute(
     sql`
       select column_name
       from information_schema.columns
       where table_schema = 'public'
         and table_name = ${tableName}
-        and column_name = any(${requiredColumns}::text[])
+        and column_name in (${requiredList})
     `,
   );
 
