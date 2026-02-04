@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { users } from "@/db/schema";
+
 function isClerkPath(pathname: string): boolean {
   // Be conservative here: allow Clerk internals + common auth entrypoints/callbacks
   return (
@@ -16,6 +17,29 @@ function isClerkPath(pathname: string): boolean {
     pathname === "/sso-callback" ||
     pathname.startsWith("/sso-callback/")
   );
+}
+
+function parseHostAllowlist(raw: string | undefined | null): Set<string> {
+  const input = String(raw ?? "").trim();
+  if (!input) return new Set();
+
+  return new Set(
+    input
+      .split(",")
+      .map((v) => v.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+function isMaintenanceHost(hostname: string): boolean {
+  // Default: only apply maintenance redirects on the public production domain.
+  // This prevents accidentally blocking test/staging custom domains.
+  const allowlist = parseHostAllowlist(
+    process.env.MAINTENANCE_HOST_ALLOWLIST ?? "verial.co.nz,www.verial.co.nz",
+  );
+
+  if (allowlist.size === 0) return true;
+  return allowlist.has(hostname.trim().toLowerCase());
 }
 
 // Public routes (no auth required)
@@ -72,7 +96,8 @@ function readMaintenanceMode(): boolean {
 }
 
 export default clerkMiddleware(async (auth, req) => {
-  const maintenance = readMaintenanceMode();
+  const hostname = req.nextUrl.hostname;
+  const maintenance = isMaintenanceHost(hostname) && readMaintenanceMode();
   const pathname = req.nextUrl.pathname;
 
   if (!maintenance) {
