@@ -41,9 +41,11 @@ export default async function DashboardRootLayout({
       redirect("/onboarding");
     }
   } catch (err) {
-    // If the DB hasn't had the username migration applied yet, fail gracefully.
+    // If the DB hasn't had recent migrations applied yet (common on test/staging),
+    // fail open rather than bouncing signed-in users to /waitlist.
     if (isUndefinedColumnError(err)) {
-      redirect("/waitlist");
+      console.error("[DASHBOARD_LAYOUT_SCHEMA_MISMATCH]", err);
+      return <>{children}</>;
     }
     throw err;
   }
