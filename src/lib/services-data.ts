@@ -222,20 +222,20 @@ export async function getServicesDataFromSearchParams(
     const top = await db
       .select({
         serviceId: services.id,
+        providerId: providers.id,
         title: services.title,
         providerPlan: providers.plan,
         subscriptionStatus: providers.stripeSubscriptionStatus,
         isVerified: providers.isVerified,
-        baseScore: scoring.baseScoreExpr,
-        planBoostPoints: scoring.planBoostPointsExpr,
-        finalScore: scoring.finalScoreExpr,
+        planRank: scoring.planRankExpr,
+        relevanceScore: scoring.baseScoreExpr,
       })
       .from(services)
       .innerJoin(providers, eq(services.providerId, providers.id))
       .innerJoin(users, eq(providers.userId, users.id))
       .where(and(...whereConditions))
       .orderBy(...scoring.orderBy)
-      .limit(20);
+      .limit(10);
 
     const elitePositions = top
       .map((r, idx) => ({ idx: idx + 1, plan: r.providerPlan }))
@@ -247,7 +247,7 @@ export async function getServicesDataFromSearchParams(
       .filter((r) => r.plan === 'pro')
       .map((r) => r.idx);
 
-    console.info('[SERVICES_RELEVANCE_DEBUG] top20', {
+    console.info('[SERVICES_RELEVANCE_DEBUG] top10', {
       q: filters.q || null,
       category: filters.category,
       region: filters.region,
@@ -259,13 +259,13 @@ export async function getServicesDataFromSearchParams(
       results: top.map((r, idx) => ({
         rank: idx + 1,
         serviceId: r.serviceId,
+        providerId: r.providerId,
         title: r.title,
         providerPlan: r.providerPlan,
         subscriptionStatus: r.subscriptionStatus,
         isVerified: r.isVerified,
-        baseScore: Number(r.baseScore ?? 0),
-        planBoostPoints: Number(r.planBoostPoints ?? 0),
-        finalScore: Number(r.finalScore ?? 0),
+        planRank: Number(r.planRank ?? 0),
+        relevanceScore: Number(r.relevanceScore ?? 0),
       })),
     });
   }

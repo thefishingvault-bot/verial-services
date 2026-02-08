@@ -85,8 +85,13 @@ export function ServicesGridClient({
   }, [services]);
 
   const sortedItems = useMemo(() => {
+    // IMPORTANT: For sort=relevance we must preserve server/DB ordering (planRank + relevance)
+    // so paid tiers affect page 1 deterministically.
+    if (searchParams.sort === "relevance") return items;
+
+    // For other sorts, keep the existing UX of pinning user favorites first.
     return [...items].sort((a, b) => Number(b.isFavorite) - Number(a.isFavorite));
-  }, [items]);
+  }, [items, searchParams.sort]);
 
   const handleFavoriteChange = (serviceId: string, next: boolean) => {
     setItems((prev) =>

@@ -24,21 +24,17 @@ function toLikeNeedle(q: string) {
   return `%${q.toLowerCase()}%`;
 }
 
-export function getPlanBoostPoints(params: {
+export function getPlanRank(params: {
   plan: unknown;
   stripeSubscriptionStatus: unknown;
-  isVerified: unknown;
 }): number {
-  const isVerified = params.isVerified === true;
-  if (!isVerified) return 0;
-
   const plan = typeof params.plan === "string" ? params.plan : null;
   const status = typeof params.stripeSubscriptionStatus === "string" ? params.stripeSubscriptionStatus : null;
   const isSubscribed = status === "active" || status === "trialing";
   if (!isSubscribed) return 0;
 
-  if (plan === "elite") return 30;
-  if (plan === "pro") return 15;
+  if (plan === "elite") return 2;
+  if (plan === "pro") return 1;
   return 0;
 }
 
@@ -48,9 +44,8 @@ export function buildMostRelevantScoring(params: {
   reviewCountExpr: SQL<number>;
   favoriteCountExpr: SQL<number>;
 }): {
+  planRankExpr: SQL<number>;
   baseScoreExpr: SQL<number>;
-  planBoostPointsExpr: SQL<number>;
-  finalScoreExpr: SQL<number>;
   orderBy: SQL[];
 } {
   const q = params.q?.trim() ? params.q.trim() : null;
@@ -92,27 +87,28 @@ export function buildMostRelevantScoring(params: {
     + ${favoritesPointsExpr}
   )`;
 
-  // Plan boost: only for active/trialing + recognized plan + verified provider.
-  const planBoostPointsExpr = sql<number>`(
+  // Plan rank: PRIMARY sort key for Most Relevant.
+  // Derived from the same inputs as badges (plan + subscription status).
+  const planRankExpr = sql<number>`(
     CASE
-      WHEN ${providers.isVerified} AND ${providers.stripeSubscriptionStatus} IN ('active', 'trialing') AND ${providers.plan} = 'elite' THEN 30
-      WHEN ${providers.isVerified} AND ${providers.stripeSubscriptionStatus} IN ('active', 'trialing') AND ${providers.plan} = 'pro' THEN 15
+      WHEN ${providers.stripeSubscriptionStatus} IN ('active', 'trialing') AND ${providers.plan} = 'elite' THEN 2
+      WHEN ${providers.stripeSubscriptionStatus} IN ('active', 'trialing') AND ${providers.plan} = 'pro' THEN 1
       ELSE 0
     END
   )`;
 
-  const finalScoreExpr = sql<number>`(${baseScoreExpr} + ${planBoostPointsExpr})`;
-
-  // Deterministic ordering; plan boost breaks ties when final scores match.
+  // Deterministic ordering:
+  // 1) paid tier priority (Elite > Pro > Starter)
+  // 2) existing relevance ordering within the same tier
+  // 3) stable tiebreakers
   const orderBy: SQL[] = [
-    desc(finalScoreExpr),
-    desc(planBoostPointsExpr),
+    desc(planRankExpr),
     desc(baseScoreExpr),
     desc(services.createdAt),
     asc(services.id),
   ];
 
-  return { baseScoreExpr, planBoostPointsExpr, finalScoreExpr, orderBy };
+  return { planRankExpr, baseScoreExpr, orderBy };
 }
 
 export function buildMostRelevantOrderBy(params: {
@@ -126,33 +122,26 @@ export function buildMostRelevantOrderBy(params: {
 
 export type MostRelevantComparable = {
   id: string;
-  baseScore: number;
+  relevanceScore: number;
   plan: ProviderPlan;
   stripeSubscriptionStatus: string | null;
-  isVerified: boolean;
 };
 
 export function compareMostRelevant(a: MostRelevantComparable, b: MostRelevantComparable): number {
-  const aBoost = getPlanBoostPoints({
+  const aRank = getPlanRank({
     plan: a.plan,
     stripeSubscriptionStatus: a.stripeSubscriptionStatus,
-    isVerified: a.isVerified,
   });
-  const bBoost = getPlanBoostPoints({
+  const bRank = getPlanRank({
     plan: b.plan,
     stripeSubscriptionStatus: b.stripeSubscriptionStatus,
-    isVerified: b.isVerified,
   });
-
-  const aFinal = a.baseScore + aBoost;
-  const bFinal = b.baseScore + bBoost;
 
   const cmpDesc = (x: number, y: number) => (x === y ? 0 : x > y ? -1 : 1);
 
   return (
-    cmpDesc(aFinal, bFinal) ||
-    cmpDesc(aBoost, bBoost) ||
-    cmpDesc(a.baseScore, b.baseScore) ||
+    cmpDesc(aRank, bRank) ||
+    cmpDesc(a.relevanceScore, b.relevanceScore) ||
     a.id.localeCompare(b.id)
   );
 }

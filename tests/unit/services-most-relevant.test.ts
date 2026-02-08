@@ -1,46 +1,62 @@
 import { describe, expect, it } from "vitest";
-import { compareMostRelevant, getPlanBoostPoints, type MostRelevantComparable } from "@/lib/services-most-relevant";
+import { compareMostRelevant, getPlanRank, type MostRelevantComparable } from "@/lib/services-most-relevant";
 
 function s(params: {
   id: string;
-  baseScore: number;
+  relevanceScore: number;
   plan: "starter" | "pro" | "elite" | "unknown";
   stripeSubscriptionStatus: string | null;
-  isVerified: boolean;
 }): MostRelevantComparable {
   return {
     id: params.id,
-    baseScore: params.baseScore,
+    relevanceScore: params.relevanceScore,
     plan: params.plan,
     stripeSubscriptionStatus: params.stripeSubscriptionStatus,
-    isVerified: params.isVerified,
   };
 }
 
 describe("Most relevant ordering", () => {
-  it("Case 1: threshold behavior (Elite > Pro > Starter)", () => {
-    const starter = s({ id: "starter", baseScore: 100, plan: "starter", stripeSubscriptionStatus: null, isVerified: true });
-    const pro = s({ id: "pro", baseScore: 90, plan: "pro", stripeSubscriptionStatus: "active", isVerified: true });
-    const elite = s({ id: "elite", baseScore: 80, plan: "elite", stripeSubscriptionStatus: "active", isVerified: true });
+  it("tier grouping: all Elite first, then Pro, then Starter; preserve relevance inside tier", () => {
+    const eliteLow = s({ id: "eliteLow", relevanceScore: 1, plan: "elite", stripeSubscriptionStatus: "active" });
+    const eliteHigh = s({ id: "eliteHigh", relevanceScore: 100, plan: "elite", stripeSubscriptionStatus: "active" });
+    const proLow = s({ id: "proLow", relevanceScore: 2, plan: "pro", stripeSubscriptionStatus: "active" });
+    const proHigh = s({ id: "proHigh", relevanceScore: 200, plan: "pro", stripeSubscriptionStatus: "active" });
+    const starter1 = s({ id: "starter1", relevanceScore: 9999, plan: "starter", stripeSubscriptionStatus: null });
 
-    const sorted = [starter, elite, pro].sort(compareMostRelevant);
-    expect(sorted.map((x) => x.id)).toEqual(["elite", "pro", "starter"]);
+    const sorted = [proLow, starter1, eliteLow, proHigh, eliteHigh].sort(compareMostRelevant);
+    expect(sorted.map((x) => x.id)).toEqual(["eliteHigh", "eliteLow", "proHigh", "proLow", "starter1"]);
   });
 
-  it("Case 2: baseScore dominance (Starter beats Elite)", () => {
-    const starter = s({ id: "starter", baseScore: 200, plan: "starter", stripeSubscriptionStatus: null, isVerified: true });
-    const elite = s({ id: "elite", baseScore: 100, plan: "elite", stripeSubscriptionStatus: "active", isVerified: true });
+  it("Elite always outranks Pro (even if less relevant)", () => {
+    const pro = s({ id: "pro", relevanceScore: 9999, plan: "pro", stripeSubscriptionStatus: "active" });
+    const elite = s({ id: "elite", relevanceScore: 1, plan: "elite", stripeSubscriptionStatus: "active" });
 
-    const sorted = [elite, starter].sort(compareMostRelevant);
-    expect(sorted[0]?.id).toBe("starter");
+    const sorted = [pro, elite].sort(compareMostRelevant);
+    expect(sorted.map((x) => x.id)).toEqual(["elite", "pro"]);
   });
 
-  it("gating: boost only for active/trialing + recognized plan + verified", () => {
-    expect(getPlanBoostPoints({ plan: "pro", stripeSubscriptionStatus: "active", isVerified: true })).toBe(15);
-    expect(getPlanBoostPoints({ plan: "elite", stripeSubscriptionStatus: "trialing", isVerified: true })).toBe(30);
+  it("Pro always outranks Starter (even if less relevant)", () => {
+    const starter = s({ id: "starter", relevanceScore: 9999, plan: "starter", stripeSubscriptionStatus: null });
+    const pro = s({ id: "pro", relevanceScore: 1, plan: "pro", stripeSubscriptionStatus: "trialing" });
 
-    expect(getPlanBoostPoints({ plan: "pro", stripeSubscriptionStatus: "canceled", isVerified: true })).toBe(0);
-    expect(getPlanBoostPoints({ plan: "unknown", stripeSubscriptionStatus: "active", isVerified: true })).toBe(0);
-    expect(getPlanBoostPoints({ plan: "elite", stripeSubscriptionStatus: "active", isVerified: false })).toBe(0);
+    const sorted = [starter, pro].sort(compareMostRelevant);
+    expect(sorted.map((x) => x.id)).toEqual(["pro", "starter"]);
+  });
+
+  it("within the same tier, keep relevance ordering", () => {
+    const pro1 = s({ id: "pro1", relevanceScore: 10, plan: "pro", stripeSubscriptionStatus: "active" });
+    const pro2 = s({ id: "pro2", relevanceScore: 100, plan: "pro", stripeSubscriptionStatus: "active" });
+
+    const sorted = [pro1, pro2].sort(compareMostRelevant);
+    expect(sorted.map((x) => x.id)).toEqual(["pro2", "pro1"]);
+  });
+
+  it("gating: planRank only for active/trialing + recognized plan", () => {
+    expect(getPlanRank({ plan: "pro", stripeSubscriptionStatus: "active" })).toBe(1);
+    expect(getPlanRank({ plan: "elite", stripeSubscriptionStatus: "trialing" })).toBe(2);
+
+    expect(getPlanRank({ plan: "pro", stripeSubscriptionStatus: "canceled" })).toBe(0);
+    expect(getPlanRank({ plan: "starter", stripeSubscriptionStatus: "active" })).toBe(0);
+    expect(getPlanRank({ plan: "unknown", stripeSubscriptionStatus: "active" })).toBe(0);
   });
 });
