@@ -176,11 +176,13 @@ export function WaitlistClient() {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Join the Verial waitlist</h1>
           <p className="text-sm text-muted-foreground">{subtitle}</p>
-          <div className="pt-1">
-            <Button asChild variant="link" className="h-auto p-0 text-sm">
-              <Link href="/sign-in">Already invited? Sign in</Link>
-            </Button>
-          </div>
+          {role === "provider" ? (
+            <div className="pt-1">
+              <Button asChild variant="link" className="h-auto p-0 text-sm">
+                <Link href="/sign-in">Already invited? Sign in</Link>
+              </Button>
+            </div>
+          ) : null}
         </div>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>
