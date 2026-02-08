@@ -1,7 +1,7 @@
 import { db } from '@/lib/db';
 import { services, providers, users, reviews, serviceFavorites, serviceCategoryEnum } from '@/db/schema';
 import { eq, and, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
-import { buildMostRelevantOrderBy, getPublicPlanBadge, type PublicPlanBadge } from '@/lib/services-most-relevant';
+import { buildMostRelevantOrderBy, buildMostRelevantScoring, getPublicPlanBadge, type PublicPlanBadge } from '@/lib/services-most-relevant';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
 
@@ -211,6 +211,65 @@ export async function getServicesDataFromSearchParams(
   const limit = filters.pageSize || 12;
   const offset = (page - 1) * limit;
 
+  if (filters.sort === 'relevance' && process.env.DEBUG_RELEVANCE === '1') {
+    const scoring = buildMostRelevantScoring({
+      q: filters.q || null,
+      avgRatingExpr,
+      reviewCountExpr,
+      favoriteCountExpr,
+    });
+
+    const top = await db
+      .select({
+        serviceId: services.id,
+        title: services.title,
+        providerPlan: providers.plan,
+        subscriptionStatus: providers.stripeSubscriptionStatus,
+        isVerified: providers.isVerified,
+        baseScore: scoring.baseScoreExpr,
+        planBoostPoints: scoring.planBoostPointsExpr,
+        finalScore: scoring.finalScoreExpr,
+      })
+      .from(services)
+      .innerJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(users, eq(providers.userId, users.id))
+      .where(and(...whereConditions))
+      .orderBy(...scoring.orderBy)
+      .limit(20);
+
+    const elitePositions = top
+      .map((r, idx) => ({ idx: idx + 1, plan: r.providerPlan }))
+      .filter((r) => r.plan === 'elite')
+      .map((r) => r.idx);
+
+    const proPositions = top
+      .map((r, idx) => ({ idx: idx + 1, plan: r.providerPlan }))
+      .filter((r) => r.plan === 'pro')
+      .map((r) => r.idx);
+
+    console.info('[SERVICES_RELEVANCE_DEBUG] top20', {
+      q: filters.q || null,
+      category: filters.category,
+      region: filters.region,
+      minPrice: filters.minPrice,
+      maxPrice: filters.maxPrice,
+      rating: filters.rating,
+      elitePositions,
+      proPositions,
+      results: top.map((r, idx) => ({
+        rank: idx + 1,
+        serviceId: r.serviceId,
+        title: r.title,
+        providerPlan: r.providerPlan,
+        subscriptionStatus: r.subscriptionStatus,
+        isVerified: r.isVerified,
+        baseScore: Number(r.baseScore ?? 0),
+        planBoostPoints: Number(r.planBoostPoints ?? 0),
+        finalScore: Number(r.finalScore ?? 0),
+      })),
+    });
+  }
+
   const totalCountResult = await db
     .select({ count: sql<number>`count(*)` })
     .from(services)
@@ -264,16 +323,17 @@ export async function getServicesDataFromSearchParams(
     )
     .where(and(...whereConditions))
     .orderBy(
-      desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`),
-      ...orderBy,
+      ...(filters.sort === 'relevance'
+        ? orderBy
+        : [desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`), ...orderBy]),
     )
     .limit(limit)
     .offset(offset);
 
   const servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
     const planBadge = getPublicPlanBadge({
-      plan: (service as any).providerPlan,
-      stripeSubscriptionStatus: (service as any).providerStripeSubscriptionStatus,
+      plan: service.providerPlan,
+      stripeSubscriptionStatus: service.providerStripeSubscriptionStatus,
     });
 
     return {

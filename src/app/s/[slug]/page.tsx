@@ -221,8 +221,8 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       trustScore: serviceRow.providerTrustScore ?? 0,
       isVerified: serviceRow.providerVerified ?? false,
       planBadge: getPublicPlanBadge({
-        plan: (serviceRow as any).providerPlan,
-        stripeSubscriptionStatus: (serviceRow as any).providerStripeSubscriptionStatus,
+        plan: serviceRow.providerPlan,
+        stripeSubscriptionStatus: serviceRow.providerStripeSubscriptionStatus,
       }),
       // baseSuburb: serviceRow.providerBaseSuburb,
       // baseRegion: serviceRow.providerBaseRegion,

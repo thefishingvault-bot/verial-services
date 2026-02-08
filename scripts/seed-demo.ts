@@ -252,8 +252,8 @@ const MESSAGE_SNIPPETS_PROVIDER = [
   "All good — I’ll update you when I’m on the way.",
 ];
 
-async function countRows(db: ReturnType<typeof makeDb>, table: any) {
-  const res = await db.select({ count: sql<number>`count(*)` }).from(table);
+async function countRows(db: ReturnType<typeof makeDb>, table: unknown) {
+  const res = await db.select({ count: sql<number>`count(*)` }).from(table as never);
   return Number(res[0]?.count ?? 0);
 }
 
@@ -269,7 +269,8 @@ async function getMissingColumns(db: ReturnType<typeof makeDb>, tableName: strin
     requiredColumns.map((c) => sql`${c}`),
     sql`, `,
   );
-  const rows = await (db as any).execute(
+  const dbWithExecute = db as unknown as { execute: (query: unknown) => Promise<unknown> };
+  const rows = await dbWithExecute.execute(
     sql`
       select column_name
       from information_schema.columns
@@ -315,11 +316,11 @@ async function withBestEffortTransaction<T>(
   db: ReturnType<typeof makeDb>,
   fn: (tx: ReturnType<typeof makeDb>) => Promise<T>,
 ): Promise<T> {
-  const anyDb = db as unknown as { transaction?: (cb: (tx: any) => Promise<T>) => Promise<T> };
-  if (typeof anyDb.transaction !== "function") return fn(db);
+  const maybeDb = db as unknown as { transaction?: (cb: (tx: unknown) => Promise<T>) => Promise<T> };
+  if (typeof maybeDb.transaction !== "function") return fn(db);
 
   try {
-    return await anyDb.transaction(async (tx) => fn(tx));
+    return await maybeDb.transaction(async (tx) => fn(tx as ReturnType<typeof makeDb>));
   } catch (err) {
     // Some Neon HTTP setups/drivers can be finicky with transactions. Fallback is still safe because
     // IDs/emails are demo-prefixed and wipe mode exists.
@@ -983,16 +984,16 @@ async function seedDemoData(db: ReturnType<typeof makeDb>) {
 
   // Table counts
     const counts = {
-      users: await countRows(tx as any, schema.users),
-      providers: await countRows(tx as any, schema.providers),
-      services: await countRows(tx as any, schema.services),
-      bookings: await countRows(tx as any, schema.bookings),
-      message_threads: await countRows(tx as any, schema.messageThreads),
-      messages: await countRows(tx as any, schema.messages),
-      notifications: await countRows(tx as any, schema.notifications),
-      reviews: await countRows(tx as any, schema.reviews),
-      provider_earnings: await countRows(tx as any, schema.providerEarnings),
-      waitlist_signups: await countRows(tx as any, schema.waitlistSignups),
+      users: await countRows(tx, schema.users),
+      providers: await countRows(tx, schema.providers),
+      services: await countRows(tx, schema.services),
+      bookings: await countRows(tx, schema.bookings),
+      message_threads: await countRows(tx, schema.messageThreads),
+      messages: await countRows(tx, schema.messages),
+      notifications: await countRows(tx, schema.notifications),
+      reviews: await countRows(tx, schema.reviews),
+      provider_earnings: await countRows(tx, schema.providerEarnings),
+      waitlist_signups: await countRows(tx, schema.waitlistSignups),
     };
 
     return counts;

@@ -1,58 +1,46 @@
 import { describe, expect, it } from "vitest";
-import { compareMostRelevant, type MostRelevantComparable } from "@/lib/services-most-relevant";
+import { compareMostRelevant, getPlanBoostPoints, type MostRelevantComparable } from "@/lib/services-most-relevant";
 
-function baseService(id: string): MostRelevantComparable {
+function s(params: {
+  id: string;
+  baseScore: number;
+  plan: "starter" | "pro" | "elite" | "unknown";
+  stripeSubscriptionStatus: string | null;
+  isVerified: boolean;
+}): MostRelevantComparable {
   return {
-    id,
-    title: "House Cleaning",
-    description: "Great cleaning service",
-    providerBusinessName: "Sparkle Co",
-    providerHandle: "sparkle",
-    avgRating: 4.5,
-    reviewCount: 20,
-    trustScore: 70,
-    isVerified: true,
-    favoriteCount: 10,
-    createdAt: new Date("2024-01-01T00:00:00Z"),
-    planBadge: null,
+    id: params.id,
+    baseScore: params.baseScore,
+    plan: params.plan,
+    stripeSubscriptionStatus: params.stripeSubscriptionStatus,
+    isVerified: params.isVerified,
   };
 }
 
 describe("Most relevant ordering", () => {
-  it("orders Elite > Pro > Starter when otherwise equal", () => {
-    const starter = { ...baseService("starter"), planBadge: null };
-    const pro = { ...baseService("pro"), planBadge: "pro" as const };
-    const elite = { ...baseService("elite"), planBadge: "elite" as const };
+  it("Case 1: threshold behavior (Elite > Pro > Starter)", () => {
+    const starter = s({ id: "starter", baseScore: 100, plan: "starter", stripeSubscriptionStatus: null, isVerified: true });
+    const pro = s({ id: "pro", baseScore: 90, plan: "pro", stripeSubscriptionStatus: "active", isVerified: true });
+    const elite = s({ id: "elite", baseScore: 80, plan: "elite", stripeSubscriptionStatus: "active", isVerified: true });
 
-    const sorted = [starter, elite, pro].sort((a, b) => compareMostRelevant(a, b, null));
-    expect(sorted.map((s) => s.id)).toEqual(["elite", "pro", "starter"]);
+    const sorted = [starter, elite, pro].sort(compareMostRelevant);
+    expect(sorted.map((x) => x.id)).toEqual(["elite", "pro", "starter"]);
   });
 
-  it("does not let plan beat clearly stronger relevance signals (text match)", () => {
-    const q = "emergency";
-    const starter = { ...baseService("starter"), title: "Emergency House Cleaning", planBadge: null };
-    const pro = { ...baseService("pro"), title: "House Cleaning", planBadge: "pro" as const };
-    const elite = { ...baseService("elite"), title: "House Cleaning", planBadge: "elite" as const };
+  it("Case 2: baseScore dominance (Starter beats Elite)", () => {
+    const starter = s({ id: "starter", baseScore: 200, plan: "starter", stripeSubscriptionStatus: null, isVerified: true });
+    const elite = s({ id: "elite", baseScore: 100, plan: "elite", stripeSubscriptionStatus: "active", isVerified: true });
 
-    const sorted = [elite, pro, starter].sort((a, b) => compareMostRelevant(a, b, q));
+    const sorted = [elite, starter].sort(compareMostRelevant);
     expect(sorted[0]?.id).toBe("starter");
   });
 
-  it("does not let plan beat large quality gaps (rating/reviews)", () => {
-    const starterStrong = {
-      ...baseService("starter-strong"),
-      avgRating: 4.95,
-      reviewCount: 120,
-      planBadge: null,
-    };
-    const eliteWeak = {
-      ...baseService("elite-weak"),
-      avgRating: 3.2,
-      reviewCount: 2,
-      planBadge: "elite" as const,
-    };
+  it("gating: boost only for active/trialing + recognized plan + verified", () => {
+    expect(getPlanBoostPoints({ plan: "pro", stripeSubscriptionStatus: "active", isVerified: true })).toBe(15);
+    expect(getPlanBoostPoints({ plan: "elite", stripeSubscriptionStatus: "trialing", isVerified: true })).toBe(30);
 
-    const sorted = [eliteWeak, starterStrong].sort((a, b) => compareMostRelevant(a, b, null));
-    expect(sorted[0]?.id).toBe("starter-strong");
+    expect(getPlanBoostPoints({ plan: "pro", stripeSubscriptionStatus: "canceled", isVerified: true })).toBe(0);
+    expect(getPlanBoostPoints({ plan: "unknown", stripeSubscriptionStatus: "active", isVerified: true })).toBe(0);
+    expect(getPlanBoostPoints({ plan: "elite", stripeSubscriptionStatus: "active", isVerified: false })).toBe(0);
   });
 });

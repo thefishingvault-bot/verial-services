@@ -107,8 +107,8 @@ function ProviderHeader({
   const user = requireOne(provider.user, "Missing provider.user");
   const memberSinceYear = new Date(user.createdAt).getFullYear();
   const planBadge = getPublicPlanBadge({
-    plan: (provider as any).plan,
-    stripeSubscriptionStatus: (provider as any).stripeSubscriptionStatus,
+    plan: provider.plan,
+    stripeSubscriptionStatus: provider.stripeSubscriptionStatus,
   });
 
   return (

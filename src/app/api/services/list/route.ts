@@ -11,7 +11,7 @@ import {
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
-import { buildMostRelevantOrderBy, getPublicPlanBadge } from "@/lib/services-most-relevant";
+import { buildMostRelevantOrderBy, buildMostRelevantScoring, getPublicPlanBadge } from "@/lib/services-most-relevant";
 
 export const runtime = "nodejs";
 
@@ -218,12 +218,68 @@ export async function GET(req: NextRequest) {
 
     const serviceResults = await baseQuery.orderBy(...orderByClause).limit(pageSize).offset(offset);
 
+    if (sort === "relevance" && process.env.DEBUG_RELEVANCE === "1" && page === 1) {
+      const scoring = buildMostRelevantScoring({
+        q: textQuery ?? null,
+        avgRatingExpr,
+        reviewCountExpr,
+        favoriteCountExpr,
+      });
+
+      const top = await db
+        .select({
+          serviceId: services.id,
+          title: services.title,
+          providerPlan: providers.plan,
+          subscriptionStatus: providers.stripeSubscriptionStatus,
+          isVerified: providers.isVerified,
+          baseScore: scoring.baseScoreExpr,
+          planBoostPoints: scoring.planBoostPointsExpr,
+          finalScore: scoring.finalScoreExpr,
+        })
+        .from(services)
+        .innerJoin(providers, eq(services.providerId, providers.id))
+        .innerJoin(users, eq(providers.userId, users.id))
+        .where(and(...conditions))
+        .orderBy(...scoring.orderBy)
+        .limit(20);
+
+      const elitePositions = top
+        .map((r, idx) => ({ idx: idx + 1, plan: r.providerPlan }))
+        .filter((r) => r.plan === "elite")
+        .map((r) => r.idx);
+
+      const proPositions = top
+        .map((r, idx) => ({ idx: idx + 1, plan: r.providerPlan }))
+        .filter((r) => r.plan === "pro")
+        .map((r) => r.idx);
+
+      console.info("[SERVICES_RELEVANCE_DEBUG] api_top20", {
+        q: textQuery ?? null,
+        category: categoryFilter ?? null,
+        region: regionFilter ?? null,
+        elitePositions,
+        proPositions,
+        results: top.map((r, idx) => ({
+          rank: idx + 1,
+          serviceId: r.serviceId,
+          title: r.title,
+          providerPlan: r.providerPlan,
+          subscriptionStatus: r.subscriptionStatus,
+          isVerified: r.isVerified,
+          baseScore: Number(r.baseScore ?? 0),
+          planBoostPoints: Number(r.planBoostPoints ?? 0),
+          finalScore: Number(r.finalScore ?? 0),
+        })),
+      });
+    }
+
     const items: ServiceSummary[] = serviceResults.map((s) => {
       const avgRating = Number(s.avgRating ?? 0);
       const reviewCount = Number(s.reviewCount ?? 0);
       const planBadge = getPublicPlanBadge({
-        plan: (s as any).providerPlan,
-        stripeSubscriptionStatus: (s as any).providerStripeSubscriptionStatus,
+        plan: s.providerPlan,
+        stripeSubscriptionStatus: s.providerStripeSubscriptionStatus,
       });
 
       return {
