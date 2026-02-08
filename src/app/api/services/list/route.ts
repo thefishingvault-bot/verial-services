@@ -11,6 +11,7 @@ import {
 import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { buildMostRelevantOrderBy, getPublicPlanBadge } from "@/lib/services-most-relevant";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,7 @@ type ServiceSummary = {
     avatarUrl: string | null;
     region: string | null;
     suburb: string | null;
+    planBadge: "pro" | "elite" | null;
   };
   user: {
     firstName: string | null;
@@ -140,6 +142,10 @@ export async function GET(req: NextRequest) {
       WHERE r.service_id = ${services.id} AND r.is_hidden = false
     )`;
 
+    const favoriteCountExpr = sql<number>`(
+      SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
+    )`;
+
     if (rating != null) {
       conditions.push(sql`${avgRatingExpr} >= ${rating}`);
     }
@@ -160,7 +166,12 @@ export async function GET(req: NextRequest) {
         break;
       case "relevance":
       default:
-        orderByClause = [desc(services.createdAt)];
+        orderByClause = buildMostRelevantOrderBy({
+          q: textQuery ?? null,
+          avgRatingExpr,
+          reviewCountExpr,
+          favoriteCountExpr,
+        });
         break;
     }
 
@@ -183,6 +194,8 @@ export async function GET(req: NextRequest) {
         providerName: providers.businessName,
         providerTrustScore: providers.trustScore,
         providerVerified: providers.isVerified,
+        providerPlan: providers.plan,
+        providerStripeSubscriptionStatus: providers.stripeSubscriptionStatus,
         providerAvatarUrl: users.avatarUrl,
         providerUserFirstName: users.firstName,
         providerUserLastName: users.lastName,
@@ -190,9 +203,7 @@ export async function GET(req: NextRequest) {
         serviceSuburb: services.suburb,
         avgRating: avgRatingExpr,
         reviewCount: reviewCountExpr,
-        favoriteCount: sql<number>`(
-          SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
-        )`,
+        favoriteCount: favoriteCountExpr,
         isFavorite: userId
           ? sql<boolean>`EXISTS (
               SELECT 1 FROM ${serviceFavorites} sf_user
@@ -210,6 +221,10 @@ export async function GET(req: NextRequest) {
     const items: ServiceSummary[] = serviceResults.map((s) => {
       const avgRating = Number(s.avgRating ?? 0);
       const reviewCount = Number(s.reviewCount ?? 0);
+      const planBadge = getPublicPlanBadge({
+        plan: (s as any).providerPlan,
+        stripeSubscriptionStatus: (s as any).providerStripeSubscriptionStatus,
+      });
 
       return {
         id: s.id,
@@ -231,6 +246,7 @@ export async function GET(req: NextRequest) {
           avatarUrl: s.providerAvatarUrl,
           region: s.serviceRegion,
           suburb: s.serviceSuburb,
+          planBadge,
         },
         user: {
           firstName: s.providerUserFirstName,

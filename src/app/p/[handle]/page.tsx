@@ -13,6 +13,7 @@ import { formatServicePriceLabel } from "@/lib/pricing";
 import { ContactButton } from "@/components/common/contact-button";
 import { auth } from "@clerk/nextjs/server";
 import { requireOne } from "@/lib/relations/normalize";
+import { getPublicPlanBadge } from "@/lib/services-most-relevant";
 
 // This is a Server Component
 
@@ -105,6 +106,10 @@ function ProviderHeader({
   const { Icon, color } = getTrustBadge(provider.trustLevel);
   const user = requireOne(provider.user, "Missing provider.user");
   const memberSinceYear = new Date(user.createdAt).getFullYear();
+  const planBadge = getPublicPlanBadge({
+    plan: (provider as any).plan,
+    stripeSubscriptionStatus: (provider as any).stripeSubscriptionStatus,
+  });
 
   return (
     <Card className="overflow-hidden">
@@ -140,6 +145,11 @@ function ProviderHeader({
                 Verified provider
               </Badge>
             )}
+            {planBadge ? (
+              <Badge variant="secondary" className="w-fit">
+                {planBadge === "elite" ? "Elite" : "Pro"}
+              </Badge>
+            ) : null}
             <Badge variant="secondary" className={`flex w-fit items-center gap-1 ${color}`}>
               <Icon className="h-4 w-4" />
               {provider.trustLevel.charAt(0).toUpperCase() + provider.trustLevel.slice(1)} Trust

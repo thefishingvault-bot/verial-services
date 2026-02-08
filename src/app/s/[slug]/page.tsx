@@ -22,6 +22,7 @@ import { getSimilarServices, type SimilarService } from "@/lib/similar-services"
 import { getTrustBadge } from "@/lib/utils";
 import { getTrustTier } from "@/lib/trust";
 import { providerNotCurrentlySuspendedWhere } from "@/lib/suspension";
+import { getPublicPlanBadge } from "@/lib/services-most-relevant";
 import {
   providers,
   providerTimeOffs,
@@ -54,6 +55,7 @@ type ServiceDetail = {
     trustLevel: (typeof providers.trustLevel.enumValues)[number];
     trustScore: number;
     isVerified: boolean;
+    planBadge: "pro" | "elite" | null;
   };
   avgRating: number;
   reviewCount: number;
@@ -175,6 +177,8 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       providerTrustLevel: providers.trustLevel,
       providerTrustScore: providers.trustScore,
       providerVerified: providers.isVerified,
+      providerPlan: providers.plan,
+      providerStripeSubscriptionStatus: providers.stripeSubscriptionStatus,
       avgRating: sql<number>`COALESCE(AVG(${reviews.rating}) FILTER (WHERE ${reviews.isHidden} = false), 0)`,
       reviewCount: sql<number>`COUNT(${reviews.id}) FILTER (WHERE ${reviews.isHidden} = false)`,
       favoriteCount: sql<number>`COUNT(${serviceFavorites.id})`,
@@ -216,6 +220,10 @@ async function getServiceDetailData(slug: string, userId?: string | null): Promi
       trustLevel: serviceRow.providerTrustLevel,
       trustScore: serviceRow.providerTrustScore ?? 0,
       isVerified: serviceRow.providerVerified ?? false,
+      planBadge: getPublicPlanBadge({
+        plan: (serviceRow as any).providerPlan,
+        stripeSubscriptionStatus: (serviceRow as any).providerStripeSubscriptionStatus,
+      }),
       // baseSuburb: serviceRow.providerBaseSuburb,
       // baseRegion: serviceRow.providerBaseRegion,
       // serviceRadiusKm: serviceRow.providerRadius,
@@ -341,6 +349,11 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
                   Verified provider
                 </Badge>
               )}
+              {service.provider.planBadge ? (
+                <Badge variant="outline" className="gap-1">
+                  {service.provider.planBadge === "elite" ? "Elite" : "Pro"}
+                </Badge>
+              ) : null}
               {showAdminBadge && (
                 <Badge variant="outline" className="gap-1">
                   <CheckCircle className="h-4 w-4 text-primary" /> Admin trusted
@@ -378,6 +391,11 @@ export default async function ServiceDetailPage({ params }: ServiceParams) {
                     <CheckCircle className="h-4 w-4 text-emerald-600" /> Verified provider
                   </Badge>
                 )}
+                {service.provider.planBadge ? (
+                  <Badge variant="outline" className="gap-1">
+                    {service.provider.planBadge === "elite" ? "Elite" : "Pro"}
+                  </Badge>
+                ) : null}
                 <Badge variant="outline" className="gap-1">
                   <Icon className={`h-4 w-4 ${color}`} />
                   {trustTier} trust · {Math.round(trustScore)}/100

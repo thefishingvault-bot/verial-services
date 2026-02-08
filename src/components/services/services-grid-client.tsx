@@ -203,6 +203,11 @@ export function ServicesGridClient({
                     {service.provider.isVerified && (
                       <CheckCircle className="h-4 w-4 text-blue-500 shrink-0" />
                     )}
+                    {service.provider.planBadge ? (
+                      <Badge variant="outline" className="ml-1 h-5 px-2 text-[10px] leading-4">
+                        {service.provider.planBadge === "elite" ? "Elite" : "Pro"}
+                      </Badge>
+                    ) : null}
                   </div>
                   <div className="flex items-center gap-2 text-xs text-gray-500">
                     <span className={`font-medium ${getTrustScoreColor(service.provider.trustScore)}`}>

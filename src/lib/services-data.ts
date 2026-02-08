@@ -1,6 +1,7 @@
 import { db } from '@/lib/db';
 import { services, providers, users, reviews, serviceFavorites, serviceCategoryEnum } from '@/db/schema';
 import { eq, and, sql, desc, asc, gte, lte, type SQL } from 'drizzle-orm';
+import { buildMostRelevantOrderBy, getPublicPlanBadge, type PublicPlanBadge } from '@/lib/services-most-relevant';
 
 export type ServicesSearchParams = Record<string, string | string[] | undefined>;
 
@@ -36,6 +37,7 @@ export interface ServiceWithProvider {
     trustScore: number;
     isVerified: boolean;
     avatarUrl: string | null;
+    planBadge: PublicPlanBadge | null;
     averageResponseTime?: string; // e.g., "2h 15m", "under 1h"
   };
   user: {
@@ -176,6 +178,10 @@ export async function getServicesDataFromSearchParams(
 
   const priceNullsLastExpr = sql<number>`CASE WHEN ${services.priceInCents} IS NULL THEN 1 ELSE 0 END`;
 
+  const favoriteCountExpr = sql<number>`(
+    SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
+  )`;
+
   let orderBy: SQL[] = [desc(services.createdAt)];
   switch (filters.sort) {
     case 'rating_desc':
@@ -192,7 +198,12 @@ export async function getServicesDataFromSearchParams(
       break;
     case 'relevance':
     default:
-      orderBy = [desc(services.createdAt)];
+      orderBy = buildMostRelevantOrderBy({
+        q: filters.q || null,
+        avgRatingExpr,
+        reviewCountExpr,
+        favoriteCountExpr,
+      });
       break;
   }
 
@@ -229,13 +240,13 @@ export async function getServicesDataFromSearchParams(
       trustScore: providers.trustScore,
       trustLevel: providers.trustLevel,
       isVerified: providers.isVerified,
+      providerPlan: providers.plan,
+      providerStripeSubscriptionStatus: providers.stripeSubscriptionStatus,
       avatarUrl: users.avatarUrl,
       firstName: users.firstName,
       lastName: users.lastName,
       isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
-      favoriteCount: sql<number>`(
-        SELECT COUNT(*) FROM ${serviceFavorites} sf_all WHERE sf_all.service_id = ${services.id}
-      )`,
+      favoriteCount: favoriteCountExpr,
       avgRating: avgRatingExpr,
       reviewCount: reviewCountExpr,
     })
@@ -260,6 +271,11 @@ export async function getServicesDataFromSearchParams(
     .offset(offset);
 
   const servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
+    const planBadge = getPublicPlanBadge({
+      plan: (service as any).providerPlan,
+      stripeSubscriptionStatus: (service as any).providerStripeSubscriptionStatus,
+    });
+
     return {
       id: service.id,
       slug: service.slug,
@@ -281,6 +297,7 @@ export async function getServicesDataFromSearchParams(
         trustScore: service.trustScore,
         isVerified: service.isVerified,
         avatarUrl: service.avatarUrl,
+        planBadge,
       },
       user: {
         firstName: service.firstName,
