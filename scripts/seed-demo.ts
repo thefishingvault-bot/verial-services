@@ -253,7 +253,11 @@ const MESSAGE_SNIPPETS_PROVIDER = [
 ];
 
 async function countRows(db: ReturnType<typeof makeDb>, table: unknown) {
-  const res = await db.select({ count: sql<number>`count(*)` }).from(table as never);
+  // Drizzle's `from()` is strongly typed; we only need the runtime table object here.
+  // Cast to a known table type to preserve the select result shape.
+  const res = await db
+    .select({ count: sql<number>`count(*)` })
+    .from(table as unknown as typeof schema.users);
   return Number(res[0]?.count ?? 0);
 }
 
@@ -270,7 +274,7 @@ async function getMissingColumns(db: ReturnType<typeof makeDb>, tableName: strin
     sql`, `,
   );
   const dbWithExecute = db as unknown as { execute: (query: unknown) => Promise<unknown> };
-  const rows = await dbWithExecute.execute(
+  const executeResult = await dbWithExecute.execute(
     sql`
       select column_name
       from information_schema.columns
@@ -280,9 +284,20 @@ async function getMissingColumns(db: ReturnType<typeof makeDb>, tableName: strin
     `,
   );
 
+  const rowsUnknown = (executeResult as { rows?: unknown })?.rows;
+  const rowsArray: unknown[] =
+    Array.isArray(rowsUnknown)
+      ? rowsUnknown
+      : Array.isArray(executeResult)
+        ? executeResult
+        : [];
+
   const found = new Set<string>();
-  for (const r of (rows?.rows ?? rows ?? []) as Array<{ column_name?: string }>) {
-    if (r?.column_name) found.add(r.column_name);
+  for (const r of rowsArray) {
+    if (typeof r === "object" && r !== null && "column_name" in r) {
+      const columnName = (r as { column_name?: unknown }).column_name;
+      if (typeof columnName === "string") found.add(columnName);
+    }
   }
 
   return requiredColumns.filter((c) => !found.has(c));
