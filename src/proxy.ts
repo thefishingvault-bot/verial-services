@@ -1,15 +1,19 @@
 import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
-import { NextResponse } from "next/server";
+import { NextResponse, type NextRequest } from "next/server";
 import { eq } from "drizzle-orm";
 
 import { db } from "@/lib/db";
 import { users } from "@/db/schema";
 
-function isClerkPath(pathname: string): boolean {
-  // Be conservative here: allow Clerk internals + common auth entrypoints/callbacks
+const ADMIN_BYPASS_COOKIE = "__Host-verial_admin_bypass";
+
+function isClerkInternalPath(pathname: string): boolean {
+  return pathname === "/_clerk" || pathname.startsWith("/_clerk/");
+}
+
+function isClerkAuthPath(pathname: string): boolean {
+  // Common auth entrypoints/callbacks
   return (
-    pathname === "/_clerk" ||
-    pathname.startsWith("/_clerk/") ||
     pathname === "/sign-in" ||
     pathname.startsWith("/sign-in/") ||
     pathname === "/sign-up" ||
@@ -17,6 +21,10 @@ function isClerkPath(pathname: string): boolean {
     pathname === "/sso-callback" ||
     pathname.startsWith("/sso-callback/")
   );
+}
+
+function hasAdminBypassCookie(req: NextRequest): boolean {
+  return req.cookies.get(ADMIN_BYPASS_COOKIE)?.value === "1";
 }
 
 function parseHostAllowlist(raw: string | undefined | null): Set<string> {
@@ -72,6 +80,9 @@ const isOnboardingRoute = createRouteMatcher(["/onboarding(.*)"]);
 const isAlwaysAllowedInMaintenance = createRouteMatcher([
   // Clerk internals
   "/_clerk(.*)",
+
+  // Admin bypass (sets the bypass cookie)
+  "/admin-access(.*)",
 
   // Waitlist page + the API it uses
   "/waitlist(.*)",
@@ -146,14 +157,85 @@ export default clerkMiddleware(async (auth, req) => {
 
   // maintenance ON -> allow minimal routes; send everything else to waitlist
   // Important: do NOT allow '/' during maintenance, so visitors land on /waitlist.
-  // Also: never redirect Clerk endpoints/callbacks, so auth flows don't break.
-  if (!isAlwaysAllowedInMaintenance(req) && !isClerkPath(pathname)) {
+  if (isAlwaysAllowedInMaintenance(req) || isClerkInternalPath(pathname)) {
+    return NextResponse.next();
+  }
+
+  const bypassCookie = hasAdminBypassCookie(req);
+
+  // Auth pages/callbacks are only reachable if the bypass cookie is set.
+  if (isClerkAuthPath(pathname)) {
+    if (bypassCookie) return NextResponse.next();
+
     const url = req.nextUrl.clone();
     url.pathname = "/waitlist";
     url.search = "";
     return NextResponse.redirect(url);
   }
 
+  // Everything else during maintenance requires bypass cookie + admin user.
+  if (!bypassCookie) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // If cookie exists but user is not signed in, send them to sign-in.
+  let userId: string | null = null;
+  try {
+    const a = await auth();
+    userId = a.userId ?? null;
+  } catch {
+    userId = null;
+  }
+
+  if (!userId) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/sign-in";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Server-side admin enforcement (role OR email allowlist). Fail closed.
+  try {
+    const allowlist = parseHostAllowlist(process.env.ADMIN_EMAIL_ALLOWLIST);
+    const row = await db.query.users.findFirst({
+      where: eq(users.id, userId),
+      columns: { role: true, email: true },
+    });
+
+    const email = String(row?.email ?? "").trim().toLowerCase();
+    const isAdmin = row?.role === "admin" || (email && allowlist.has(email));
+
+    if (!isAdmin) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/waitlist";
+      url.search = "";
+
+      const res = NextResponse.redirect(url);
+      res.cookies.set({
+        name: ADMIN_BYPASS_COOKIE,
+        value: "",
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+        maxAge: 0,
+      });
+      return res;
+    }
+  } catch (err) {
+    console.error("[PROXY_MAINTENANCE_ADMIN_GUARD]", err);
+
+    const url = req.nextUrl.clone();
+    url.pathname = "/waitlist";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Ensure protected routes still require auth (even in maintenance).
+  if (!isPublicRoute(req)) auth.protect();
   return NextResponse.next();
 });
 
