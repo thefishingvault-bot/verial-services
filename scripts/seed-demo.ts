@@ -10,7 +10,7 @@
 import dotenv from "dotenv";
 import { drizzle } from "drizzle-orm/neon-http";
 import { neon } from "@neondatabase/serverless";
-import { and, eq, inArray, like, or, sql } from "drizzle-orm";
+import { eq, like, or, sql } from "drizzle-orm";
 import * as schema from "../src/db/schema";
 
 // Load env like the app does (.env.local first).
@@ -119,8 +119,6 @@ function chunk<T>(items: T[], size: number) {
 function cents(nzd: number) {
   return Math.round(nzd * 100);
 }
-
-const NZ_REGIONS = ["Auckland", "Wellington", "Canterbury", "Waikato", "Bay of Plenty"] as const;
 
 const AUCKLAND_SUBURBS = [
   "Ponsonby",

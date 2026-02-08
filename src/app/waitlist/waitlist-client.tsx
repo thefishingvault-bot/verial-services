@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { CheckCircle2 } from "lucide-react";
 
@@ -175,6 +176,11 @@ export function WaitlistClient() {
         <div className="space-y-2">
           <h1 className="text-2xl font-semibold">Join the Verial waitlist</h1>
           <p className="text-sm text-muted-foreground">{subtitle}</p>
+          <div className="pt-1">
+            <Button asChild variant="link" className="h-auto p-0 text-sm">
+              <Link href="/sign-in">Already invited? Sign in</Link>
+            </Button>
+          </div>
         </div>
 
         <form className="mt-6 space-y-4" onSubmit={onSubmit}>

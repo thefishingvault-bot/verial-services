@@ -5,8 +5,6 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/db/schema";
 
-const ADMIN_BYPASS_COOKIE = "__Host-verial_admin_bypass";
-
 function isClerkInternalPath(pathname: string): boolean {
   return pathname === "/_clerk" || pathname.startsWith("/_clerk/");
 }
@@ -21,10 +19,6 @@ function isClerkAuthPath(pathname: string): boolean {
     pathname === "/sso-callback" ||
     pathname.startsWith("/sso-callback/")
   );
-}
-
-function hasAdminBypassCookie(req: NextRequest): boolean {
-  return req.cookies.get(ADMIN_BYPASS_COOKIE)?.value === "1";
 }
 
 function parseHostAllowlist(raw: string | undefined | null): Set<string> {
@@ -81,12 +75,20 @@ const isAlwaysAllowedInMaintenance = createRouteMatcher([
   // Clerk internals
   "/_clerk(.*)",
 
+  // Auth routes must remain reachable so invited/early-access users can sign in.
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+  "/sso-callback(.*)",
+
   // Admin bypass (sets the bypass cookie)
   "/admin-access(.*)",
 
   // Waitlist page + the API it uses
   "/waitlist(.*)",
   "/api/waitlist(.*)",
+
+  // Provider invite redemption must remain reachable during gating.
+  "/invite/provider(.*)",
 
   // Operational endpoints that must remain reachable
   "/api/health(.*)",
@@ -161,27 +163,12 @@ export default clerkMiddleware(async (auth, req) => {
     return NextResponse.next();
   }
 
-  const bypassCookie = hasAdminBypassCookie(req);
-
-  // Auth pages/callbacks are only reachable if the bypass cookie is set.
+  // Auth pages/callbacks must remain reachable for everyone during maintenance.
   if (isClerkAuthPath(pathname)) {
-    if (bypassCookie) return NextResponse.next();
-
-    const url = req.nextUrl.clone();
-    url.pathname = "/waitlist";
-    url.search = "";
-    return NextResponse.redirect(url);
+    return NextResponse.next();
   }
 
-  // Everything else during maintenance requires bypass cookie + admin user.
-  if (!bypassCookie) {
-    const url = req.nextUrl.clone();
-    url.pathname = "/waitlist";
-    url.search = "";
-    return NextResponse.redirect(url);
-  }
-
-  // If cookie exists but user is not signed in, send them to sign-in.
+  // Everything else during maintenance requires a signed-in user with admin OR early access.
   let userId: string | null = null;
   let sessionClaims: unknown = null;
   try {
@@ -195,48 +182,37 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (!userId) {
     const url = req.nextUrl.clone();
-    url.pathname = "/sign-in";
+    url.pathname = "/waitlist";
     url.search = "";
     return NextResponse.redirect(url);
   }
 
-  // Server-side admin enforcement (role OR email allowlist). Fail closed.
+  // Server-side gate: allow only admins or users with earlyProviderAccess=true. Fail closed.
   try {
     const sessionRole = (sessionClaims as { publicMetadata?: Record<string, unknown> } | null | undefined)
       ?.publicMetadata?.role;
-    if (typeof sessionRole === "string" && sessionRole === "admin") {
-      if (!isPublicRoute(req)) auth.protect();
-      return NextResponse.next();
-    }
-
     const allowlist = parseHostAllowlist(process.env.ADMIN_EMAIL_ALLOWLIST);
     const row = await db.query.users.findFirst({
       where: eq(users.id, userId),
-      columns: { role: true, email: true },
+      columns: { role: true, email: true, earlyProviderAccess: true },
     });
 
     const email = String(row?.email ?? "").trim().toLowerCase();
-    const isAdmin = row?.role === "admin" || (email && allowlist.has(email));
+    const isAdmin =
+      (typeof sessionRole === "string" && sessionRole === "admin") ||
+      row?.role === "admin" ||
+      (email && allowlist.has(email));
 
-    if (!isAdmin) {
+    const hasEarlyAccess = Boolean(row?.earlyProviderAccess);
+
+    if (!isAdmin && !hasEarlyAccess) {
       const url = req.nextUrl.clone();
       url.pathname = "/waitlist";
       url.search = "";
-
-      const res = NextResponse.redirect(url);
-      res.cookies.set({
-        name: ADMIN_BYPASS_COOKIE,
-        value: "",
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
-        path: "/",
-        maxAge: 0,
-      });
-      return res;
+      return NextResponse.redirect(url);
     }
   } catch (err) {
-    console.error("[PROXY_MAINTENANCE_ADMIN_GUARD]", err);
+    console.error("[PROXY_MAINTENANCE_EARLY_ACCESS_GUARD]", err);
 
     const url = req.nextUrl.clone();
     url.pathname = "/waitlist";
