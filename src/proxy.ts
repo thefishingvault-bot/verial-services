@@ -183,11 +183,14 @@ export default clerkMiddleware(async (auth, req) => {
 
   // If cookie exists but user is not signed in, send them to sign-in.
   let userId: string | null = null;
+  let sessionClaims: unknown = null;
   try {
     const a = await auth();
     userId = a.userId ?? null;
+    sessionClaims = (a as { sessionClaims?: unknown }).sessionClaims ?? null;
   } catch {
     userId = null;
+    sessionClaims = null;
   }
 
   if (!userId) {
@@ -199,6 +202,13 @@ export default clerkMiddleware(async (auth, req) => {
 
   // Server-side admin enforcement (role OR email allowlist). Fail closed.
   try {
+    const sessionRole = (sessionClaims as { publicMetadata?: Record<string, unknown> } | null | undefined)
+      ?.publicMetadata?.role;
+    if (typeof sessionRole === "string" && sessionRole === "admin") {
+      if (!isPublicRoute(req)) auth.protect();
+      return NextResponse.next();
+    }
+
     const allowlist = parseHostAllowlist(process.env.ADMIN_EMAIL_ALLOWLIST);
     const row = await db.query.users.findFirst({
       where: eq(users.id, userId),
