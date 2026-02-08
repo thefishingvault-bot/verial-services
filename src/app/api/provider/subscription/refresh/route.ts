@@ -23,6 +23,17 @@ function maskStripeId(value: string | null): string | null {
   return `${value.slice(0, 8)}…${value.slice(-4)}`;
 }
 
+function maskEmail(value: string | null): string | null {
+  if (!value) return null;
+  const at = value.indexOf("@");
+  if (at <= 0) return null;
+  const name = value.slice(0, at);
+  const domain = value.slice(at + 1);
+  if (!domain) return null;
+  const visible = name.slice(0, 2);
+  return `${visible}${name.length > 2 ? "…" : ""}@${domain}`;
+}
+
 function getSubPeriodEndUnix(sub: Stripe.Subscription): number {
   // Stripe uses seconds since epoch.
   const anySub = sub as unknown as { current_period_end?: number | null };
@@ -156,6 +167,77 @@ async function findStripeCustomerId(params: {
   }
 }
 
+async function listSubscriptionsForCustomer(customerId: string): Promise<Stripe.Subscription[]> {
+  const subsRes = await stripe.subscriptions.list({
+    customer: customerId,
+    status: "all",
+    limit: 100,
+    // NOTE: Avoid deep expands (Stripe enforces a max expansion depth).
+    // Only expand price; fetch product details via a separate call if needed.
+    expand: ["data.items.data.price"],
+  });
+
+  return subsRes.data ?? [];
+}
+
+async function pickBestCustomerByEmail(params: {
+  providerId: string;
+  email: string;
+}): Promise<{
+  customerId: string;
+  best: Stripe.Subscription;
+  resolved: Awaited<ReturnType<typeof resolvePlanFromSubscription>>;
+} | null> {
+  const { providerId, email } = params;
+
+  try {
+    const res = await stripe.customers.search({
+      query: `email:'${email.replace(/'/g, "\\'")}'`,
+      limit: 10,
+    });
+
+    // Prefer customers explicitly tagged for this provider.
+    const prioritized = [...res.data].sort((a, b) => {
+      const aTagged = (a.metadata as Record<string, string> | undefined)?.providerId === providerId;
+      const bTagged = (b.metadata as Record<string, string> | undefined)?.providerId === providerId;
+      return Number(bTagged) - Number(aTagged);
+    });
+
+    let bestCandidate: { customerId: string; best: Stripe.Subscription; resolved: Awaited<ReturnType<typeof resolvePlanFromSubscription>> } | null = null;
+
+    for (const customer of prioritized) {
+      const subs = await listSubscriptionsForCustomer(customer.id);
+      const best = pickBestSubscription(subs);
+      if (!best) continue;
+
+      const subscribed = best.status === "active" || best.status === "trialing";
+      if (!subscribed) continue;
+
+      const resolved = await resolvePlanFromSubscription(best);
+
+      // Pick the best active/trialing subscription by latest period end.
+      if (!bestCandidate) {
+        bestCandidate = { customerId: customer.id, best, resolved };
+        continue;
+      }
+
+      const aEnd = getSubPeriodEndUnix(bestCandidate.best);
+      const bEnd = getSubPeriodEndUnix(best);
+      if (bEnd > aEnd) bestCandidate = { customerId: customer.id, best, resolved };
+    }
+
+    return bestCandidate;
+  } catch (err) {
+    console.warn("[API_PROVIDER_SUBSCRIPTION_REFRESH] Failed to search customers for fallback relink", {
+      providerId,
+      email: maskEmail(email),
+      mode: detectStripeMode(),
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
+  }
+}
+
 export async function POST() {
   try {
     const { userId } = await auth();
@@ -211,11 +293,40 @@ export async function POST() {
       columns: { email: true },
     });
 
+    // Environment sanity: show what Stripe account + mode this deployment is using.
+    try {
+      const acct = await stripe.accounts.retrieve();
+      console.info("[API_PROVIDER_SUBSCRIPTION_REFRESH] Stripe env", {
+        providerId: provider.id,
+        userId,
+        mode: detectStripeMode(),
+        stripeAccountId: acct?.id ?? null,
+        stripeAccountLivemode: (acct as unknown as { livemode?: boolean | null })?.livemode ?? null,
+      });
+    } catch (err) {
+      console.warn("[API_PROVIDER_SUBSCRIPTION_REFRESH] Failed to retrieve Stripe account", {
+        providerId: provider.id,
+        userId,
+        mode: detectStripeMode(),
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     const customerId = await findStripeCustomerId({
       providerId: provider.id,
       existingCustomerId: provider.stripeCustomerId ?? null,
       existingSubscriptionId: provider.stripeSubscriptionId ?? null,
       email: dbUser?.email ?? null,
+    });
+
+    console.info("[API_PROVIDER_SUBSCRIPTION_REFRESH] Starting", {
+      providerId: provider.id,
+      userId,
+      mode: detectStripeMode(),
+      existingStripeCustomerId: provider.stripeCustomerId ?? null,
+      existingStripeSubscriptionId: provider.stripeSubscriptionId ?? null,
+      email: maskEmail(dbUser?.email ?? null),
+      resolvedCustomerId: customerId,
     });
 
     if (!customerId) {
@@ -228,17 +339,28 @@ export async function POST() {
       );
     }
 
-    const subsRes = await stripe.subscriptions.list({
-      customer: customerId,
-      status: "all",
-      limit: 100,
-      // NOTE: Avoid deep expands (Stripe enforces a max expansion depth).
-      // Only expand price; fetch product details via a separate call if needed.
-      expand: ["data.items.data.price"],
-    });
+    let effectiveCustomerId = customerId;
+    let subs = await listSubscriptionsForCustomer(effectiveCustomerId);
+    let best = pickBestSubscription(subs);
 
-    const subs = subsRes.data ?? [];
-    const best = pickBestSubscription(subs);
+    // Fallback relink: If we have a linked customer but it has no active/trialing subs,
+    // try to find the right customer by email (common when subscriptions are created manually
+    // or when a provider ends up with multiple Stripe customers).
+    if ((best?.status !== "active" && best?.status !== "trialing") && dbUser?.email) {
+      const fallback = await pickBestCustomerByEmail({ providerId: provider.id, email: dbUser.email });
+      if (fallback && fallback.customerId !== effectiveCustomerId) {
+        console.warn("[API_PROVIDER_SUBSCRIPTION_REFRESH] Relinking Stripe customer based on email", {
+          providerId: provider.id,
+          userId,
+          mode: detectStripeMode(),
+          fromCustomerId: effectiveCustomerId,
+          toCustomerId: fallback.customerId,
+        });
+        effectiveCustomerId = fallback.customerId;
+        subs = await listSubscriptionsForCustomer(effectiveCustomerId);
+        best = pickBestSubscription(subs);
+      }
+    }
 
     const bestStatus = best?.status ?? null;
     const subscribed = bestStatus === "active" || bestStatus === "trialing";
@@ -253,11 +375,29 @@ export async function POST() {
     const productName = resolved?.matchedProductName ?? null;
     const currentPeriodEnd = best ? getSubPeriodEndUnix(best) : 0;
 
+    // Best-effort: attach metadata to the Stripe customer so webhooks can map in the future.
+    // (Safe even if the customer already has metadata; Stripe merges keys.)
+    try {
+      await stripe.customers.update(effectiveCustomerId, {
+        metadata: {
+          providerId: provider.id,
+          userId,
+        },
+      });
+    } catch (err) {
+      console.warn("[API_PROVIDER_SUBSCRIPTION_REFRESH] Failed to update Stripe customer metadata", {
+        providerId: provider.id,
+        userId,
+        stripeCustomerId: effectiveCustomerId,
+        error: err instanceof Error ? err.message : String(err),
+      });
+    }
+
     await db
       .update(providers)
       .set({
         plan: finalPlan,
-        stripeCustomerId: customerId,
+        stripeCustomerId: effectiveCustomerId,
         stripeSubscriptionId: best?.id ?? null,
         stripeSubscriptionStatus: bestStatus,
         stripeSubscriptionPriceId: priceId,
@@ -270,7 +410,8 @@ export async function POST() {
 
     console.info("[API_PROVIDER_SUBSCRIPTION_REFRESH] Synced", {
       providerId: provider.id,
-      stripeCustomerId: customerId,
+      userId,
+      stripeCustomerId: effectiveCustomerId,
       stripeSubscriptionId: best?.id ?? null,
       status: bestStatus,
       subscribed,
@@ -279,6 +420,7 @@ export async function POST() {
       lookupKey,
       productId,
       productName,
+      subscriptionLivemode: (best as unknown as { livemode?: boolean | null })?.livemode ?? null,
       resolutionSource: resolved?.resolutionSource ?? null,
       expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
       expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
@@ -292,7 +434,7 @@ export async function POST() {
       plan: normalizeProviderPlan(finalPlan),
       stripe: {
         mode: detectStripeMode(),
-        customerId,
+        customerId: effectiveCustomerId,
         subscriptionId: best?.id ?? null,
         status: bestStatus,
         priceId,
@@ -305,6 +447,7 @@ export async function POST() {
         priceResolutionSource: resolved?.resolutionSource ?? null,
         mapping_source: resolved?.resolutionSource ?? null,
         matched: resolved?.matched ?? false,
+        subscriptionLivemode: (best as unknown as { livemode?: boolean | null })?.livemode ?? null,
         expectedProPriceIdMasked: maskStripeId(resolved?.expected.pro ?? null),
         expectedElitePriceIdMasked: maskStripeId(resolved?.expected.elite ?? null),
         expectedEnvSource: resolved?.expected.source ?? null,

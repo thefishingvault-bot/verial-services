@@ -1,6 +1,6 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings, providerEarnings, providers, refunds } from "@/db/schema";
+import { bookings, providerEarnings, providers, refunds, users } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
@@ -15,9 +15,7 @@ import { getFinalBookingAmountCents } from "@/lib/booking-price";
 import { calculateBookingPaymentBreakdown, parseStripeMetadataInt } from "@/lib/payments/fees";
 import { calculateDestinationChargeAmounts } from "@/lib/payments/platform-fee";
 import {
-  getPlatformFeeBpsForPlan,
   isStripeSubscribedStatus,
-  normalizeProviderPlan,
   resolvePlanFromStripeDetails,
   type ProviderPlan,
 } from "@/lib/provider-subscription";
@@ -98,7 +96,57 @@ export async function POST(req: Request) {
     try {
       const customer = await stripe.customers.retrieve(customerId);
       const meta = (customer as unknown as { metadata?: Record<string, string> }).metadata;
-      return meta?.providerId ?? null;
+      const metaProviderId = meta?.providerId ?? null;
+      if (metaProviderId) return metaProviderId;
+
+      // Fallback: manually-created Stripe customers/subscriptions often miss metadata.
+      // Try mapping by customer email -> users.email -> providers.userId.
+      const customerEmail = (customer as unknown as { email?: string | null }).email ?? null;
+      if (!customerEmail) return null;
+
+      const user = await db.query.users.findFirst({
+        where: eq(users.email, customerEmail),
+        columns: { id: true },
+      });
+      if (!user) return null;
+
+      const provider = await db.query.providers.findFirst({
+        where: eq(providers.userId, user.id),
+        columns: { id: true, stripeCustomerId: true },
+      });
+      if (!provider) return null;
+
+      console.warn("[API_STRIPE_WEBHOOK] Resolved provider via customer email fallback", {
+        stripeCustomerId: customerId,
+        providerId: provider.id,
+      });
+
+      // Attach for future events.
+      try {
+        await stripe.customers.update(customerId, {
+          metadata: { providerId: provider.id, userId: user.id },
+        });
+      } catch (err) {
+        console.warn("[API_STRIPE_WEBHOOK] Failed to backfill Stripe customer metadata", {
+          stripeCustomerId: customerId,
+          providerId: provider.id,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+
+      // Ensure the provider row is linked so updates by stripeCustomerId work too.
+      if (!provider.stripeCustomerId || provider.stripeCustomerId !== customerId) {
+        await db
+          .update(providers)
+          .set({
+            stripeCustomerId: customerId,
+            stripeSubscriptionUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(providers.id, provider.id));
+      }
+
+      return provider.id;
     } catch {
       return null;
     }
@@ -506,7 +554,8 @@ export async function POST(req: Request) {
     }
 
     case "invoice.paid":
-    case "invoice.payment_succeeded": {
+    case "invoice.payment_succeeded":
+    case "invoice.payment_failed": {
       // These events can reflect status transitions; resync the linked subscription if present.
       const invoice = event.data.object as Stripe.Invoice;
       const subscriptionRef = (invoice as unknown as { subscription?: string | Stripe.Subscription | null }).subscription;
