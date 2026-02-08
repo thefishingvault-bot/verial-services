@@ -42,7 +42,7 @@ export function buildMostRelevantOrderBy(params: {
           ELSE 0
         END
       )`
-    : sql<number>`0`;
+    : null;
 
   // Only boost active, recognized plans (not starter/unknown/canceled).
   const planRank = sql<number>`(
@@ -54,7 +54,7 @@ export function buildMostRelevantOrderBy(params: {
     )`;
 
   return [
-    desc(textMatchScore),
+    ...(textMatchScore ? [desc(textMatchScore)] : []),
     desc(params.avgRatingExpr),
     desc(params.reviewCountExpr),
     desc(providers.isVerified),
