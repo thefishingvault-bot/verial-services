@@ -7,10 +7,11 @@ import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth, useUser, UserButton, useClerk } from '@clerk/nextjs';
 import { NotificationBell } from '@/components/nav/notification-bell';
+import { BECOME_PROVIDER_NAV_ITEM } from '@/components/nav/header-nav';
 
 // --- Guest Links (Signed Out) ---
 const guestLinks = [
-  { href: '/dashboard/register-provider', label: 'Become a Provider' },
+  BECOME_PROVIDER_NAV_ITEM,
   { href: '/sign-in', label: 'Sign In' },
 ];
 
@@ -21,6 +22,7 @@ export function SiteHeader() {
   const { signOut } = useClerk(); // Get signOut function
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
+  const isProviderUser = role === 'provider' || role === 'admin';
   // Always send providers to /dashboard from the header.
   // Middleware will redirect approved providers to /dashboard/provider,
   // while pending/unapproved providers can still access the customer dashboard.
@@ -81,7 +83,7 @@ export function SiteHeader() {
             side="right" 
             className="w-full sm:w-80 p-0 bg-white/95 backdrop-blur-md"
           >
-            <div className="flex flex-col h-full">
+            <div className="flex flex-col h-full min-h-0">
               {/* Header with Logo and Close */}
               <div className="flex items-center justify-between p-6 border-b">
                 <Link href="/" className="text-2xl font-bold text-primary">
@@ -90,7 +92,7 @@ export function SiteHeader() {
               </div>
 
               {/* Navigation Links */}
-              <div className="flex-1 px-6 py-6">
+              <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
                 <nav className="space-y-2">
                   <Link
                     href="/"
@@ -122,6 +124,15 @@ export function SiteHeader() {
                       onClick={() => setIsSheetOpen(false)}
                     >
                       Favorites
+                    </Link>
+                  )}
+                  {isSignedIn && !isProviderUser && (
+                    <Link
+                      href={BECOME_PROVIDER_NAV_ITEM.href}
+                      className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsSheetOpen(false)}
+                    >
+                      {BECOME_PROVIDER_NAV_ITEM.label}
                     </Link>
                   )}
                 </nav>
