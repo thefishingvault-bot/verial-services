@@ -1,10 +1,29 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import {
+  canCancelCustomerJob,
+  canEditCustomerJob,
+  canReopenCustomerJob,
+  formatCanonicalJobStatus,
+  isPaymentStatusRelevant,
+  normalizeJobStatus,
+  normalizePaymentStatus,
+} from "@/lib/customer-job-meta";
 
 type QuoteItem = {
   id: string;
@@ -31,6 +50,7 @@ type JobViewProps = {
     depositAmount: number | null;
     remainingAmount: number | null;
   };
+  quoteCount: number;
   quotes: QuoteItem[];
   bestValueQuoteId: string | null;
   fastestQuoteId: string | null;
@@ -76,10 +96,15 @@ function phaseState(current: string, phase: (typeof tracker)[number]) {
 }
 
 export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId, topRatedQuoteId, questions }: JobViewProps) {
+  const router = useRouter();
   const [sortBy, setSortBy] = useState<SortBy>("score");
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+
+  const canonicalJobStatus = normalizeJobStatus(job.status, quotes.length);
+  const canonicalPaymentStatus = normalizePaymentStatus(job.paymentStatus, canonicalJobStatus);
 
   const sortedQuotes = useMemo(() => {
     const copy = [...quotes];
@@ -168,49 +193,82 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
     });
   };
 
-  const showTracker = job.status !== "open";
+  const reopenJob = () => {
+    startTransition(async () => {
+      setMessage(null);
+      const res = await fetch(`/api/customer/job-requests/${job.id}/reopen`, {
+        method: "POST",
+      });
+
+      if (!res.ok) {
+        setMessage(await res.text());
+        return;
+      }
+
+      window.location.reload();
+    });
+  };
+
+  const copyShareLink = async () => {
+    try {
+      await navigator.clipboard.writeText(`${window.location.origin}/customer/jobs/${job.id}`);
+      setMessage("Link copied.");
+    } catch {
+      setMessage("Unable to copy link.");
+    }
+  };
 
   return (
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Payment status</CardTitle>
-          <CardDescription>Revenue is captured when the accepted quote payment succeeds.</CardDescription>
+          <CardTitle>Job actions</CardTitle>
+          <CardDescription>Manage this job based on its current lifecycle stage.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge>{job.status}</Badge>
-            <Badge variant="secondary">{job.paymentStatus}</Badge>
-            {job.paymentStatus === "deposit_paid" && <Badge className="bg-emerald-600 text-white">Deposit paid</Badge>}
+            <Badge>{formatCanonicalJobStatus(canonicalJobStatus)}</Badge>
+            {isPaymentStatusRelevant(canonicalPaymentStatus) && <Badge variant="secondary">{canonicalPaymentStatus}</Badge>}
           </div>
           <div className="grid gap-2 sm:grid-cols-3">
             <div>Total: {money(job.totalPrice)}</div>
             <div>Deposit: {money(job.depositAmount)}</div>
             <div>Remaining: {money(job.remainingAmount)}</div>
           </div>
+
+          <div className="flex flex-wrap gap-2">
+            {canEditCustomerJob(canonicalJobStatus) && (
+              <Button variant="outline" onClick={() => router.push(`/customer/jobs/${job.id}/edit`)} disabled={isPending}>
+                Edit job
+              </Button>
+            )}
+
+            {canCancelCustomerJob(canonicalJobStatus) && (
+              <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" disabled={isPending}>Cancel job</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Cancel this job?</DialogTitle>
+                    <DialogDescription>This will stop provider activity for this request.</DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Back</Button>
+                    <Button variant="destructive" onClick={cancelJob} disabled={isPending}>Confirm cancel</Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            )}
+
+            {canReopenCustomerJob(canonicalJobStatus) && (
+              <Button variant="outline" onClick={reopenJob} disabled={isPending}>Re-open job</Button>
+            )}
+
+            <Button variant="outline" onClick={copyShareLink} disabled={isPending}>Copy job link</Button>
+          </div>
         </CardContent>
       </Card>
-
-      {showTracker && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Lifecycle tracker</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 sm:grid-cols-4">
-            {tracker.map((phase) => {
-              const state = phaseState(job.status, phase);
-              return (
-                <div key={phase} className="rounded-md border p-3 text-sm">
-                  <div className="font-medium capitalize">{phase.replace("_", " ")}</div>
-                  <div className="text-muted-foreground">
-                    {state === "done" ? "Done" : state === "current" ? "Current" : "Pending"}
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      )}
 
       <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
         <Card>
@@ -233,42 +291,49 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
             </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {sortedQuotes.map((quote) => (
-              <div key={quote.id} className="rounded-md border p-3">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{quote.providerName}</div>
-                    <div className="text-xs text-muted-foreground">{quote.providerHandle ? `@${quote.providerHandle}` : "Provider"}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-semibold">{money(quote.amountTotal)}</div>
-                    <div className="text-xs text-muted-foreground">Rating {quote.rating.toFixed(1)}</div>
-                  </div>
-                </div>
-
-                <div className="mb-2 flex flex-wrap gap-2">
-                  {quote.id === bestValueQuoteId && <Badge variant="secondary">Best Value</Badge>}
-                  {quote.id === fastestQuoteId && <Badge variant="secondary">Fastest</Badge>}
-                  {quote.id === topRatedQuoteId && <Badge variant="secondary">Top Rated</Badge>}
-                </div>
-
-                <div className="grid gap-1 text-sm">
-                  <div><span className="font-medium">Availability:</span> {quote.availability ?? "Not specified"}</div>
-                  <div><span className="font-medium">Included:</span> {quote.included ?? "Not specified"}</div>
-                  <div><span className="font-medium">Excluded:</span> {quote.excluded ?? "Not specified"}</div>
-                </div>
-
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <Button
-                    disabled={isPending || !!job.acceptedQuoteId || quote.status !== "submitted"}
-                    onClick={() => acceptQuote(quote.id)}
-                  >
-                    Accept & Pay
-                  </Button>
-                  {job.acceptedQuoteId === quote.id && <Badge>Selected</Badge>}
-                </div>
+            {sortedQuotes.length === 0 ? (
+              <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+                <p className="font-medium text-foreground">No quotes yet</p>
+                <p className="mt-1">Add photos, add more detail, or expand your region/suburb to get more quotes.</p>
               </div>
-            ))}
+            ) : (
+              sortedQuotes.map((quote) => (
+                <div key={quote.id} className="rounded-md border p-3">
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <div className="font-medium">{quote.providerName}</div>
+                      <div className="text-xs text-muted-foreground">{quote.providerHandle ? `@${quote.providerHandle}` : "Provider"}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-semibold">{money(quote.amountTotal)}</div>
+                      <div className="text-xs text-muted-foreground">Rating {quote.rating.toFixed(1)}</div>
+                    </div>
+                  </div>
+
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {quote.id === bestValueQuoteId && <Badge variant="secondary">Best Value</Badge>}
+                    {quote.id === fastestQuoteId && <Badge variant="secondary">Fastest</Badge>}
+                    {quote.id === topRatedQuoteId && <Badge variant="secondary">Top Rated</Badge>}
+                  </div>
+
+                  <div className="grid gap-1 text-sm">
+                    <div><span className="font-medium">Availability:</span> {quote.availability ?? "Not specified"}</div>
+                    <div><span className="font-medium">Included:</span> {quote.included ?? "Not specified"}</div>
+                    <div><span className="font-medium">Excluded:</span> {quote.excluded ?? "Not specified"}</div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Button
+                      disabled={isPending || !!job.acceptedQuoteId || quote.status !== "submitted"}
+                      onClick={() => acceptQuote(quote.id)}
+                    >
+                      Accept & Pay
+                    </Button>
+                    {job.acceptedQuoteId === quote.id && <Badge>Selected</Badge>}
+                  </div>
+                </div>
+              ))
+            )}
           </CardContent>
         </Card>
 
@@ -309,23 +374,37 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
                 Pay Remaining Balance
               </Button>
             )}
-            {(job.status === "open" || job.status === "assigned") && (
-              <Button className="w-full" variant="outline" disabled={isPending} onClick={cancelJob}>
-                Cancel Job
-              </Button>
-            )}
             {message && <p className="text-xs text-muted-foreground">{message}</p>}
           </CardContent>
         </Card>
       </div>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Lifecycle tracker</CardTitle>
+        </CardHeader>
+        <CardContent className="grid gap-2 sm:grid-cols-4">
+          {tracker.map((phase) => {
+            const state = phaseState(job.status, phase);
+            return (
+              <div key={phase} className="rounded-md border p-3 text-sm">
+                <div className="font-medium capitalize">{phase.replace("_", " ")}</div>
+                <div className="text-muted-foreground">
+                  {state === "done" ? "Done" : state === "current" ? "Current" : "Pending"}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
       <div className="fixed inset-x-0 bottom-0 z-20 border-t bg-background p-3 lg:hidden">
         <div className="mx-auto flex max-w-screen-sm gap-2">
           <Button className="flex-1" disabled={isPending || !quotes.length || !!job.acceptedQuoteId} onClick={() => acceptQuote(sortedQuotes[0]?.id ?? "")}>Accept Top Quote</Button>
-          {job.paymentStatus === "deposit_paid" && job.remainingAmount && job.remainingAmount > 0 ? (
+          {canonicalPaymentStatus === "DepositPaid" && job.remainingAmount && job.remainingAmount > 0 ? (
             <Button className="flex-1" variant="secondary" disabled={isPending} onClick={payRemaining}>Pay Remaining</Button>
           ) : (
-            <Button className="flex-1" variant="outline" disabled={isPending} onClick={cancelJob}>Cancel</Button>
+            <Button className="flex-1" variant="outline" disabled={isPending || !canCancelCustomerJob(canonicalJobStatus)} onClick={() => setCancelDialogOpen(true)}>Cancel</Button>
           )}
         </div>
       </div>

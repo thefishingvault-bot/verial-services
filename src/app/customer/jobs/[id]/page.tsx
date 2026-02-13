@@ -3,10 +3,18 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
 
 import { CustomerJobView } from "@/components/job-requests/customer-job-view";
+import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestQuestions, jobRequests, reviews } from "@/db/schema";
 import { scoreQuote } from "@/lib/job-requests";
+import {
+  formatCanonicalJobStatus,
+  isPaymentStatusRelevant,
+  normalizeJobStatus,
+  normalizePaymentStatus,
+  parseCustomerJobDescription,
+} from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +52,8 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
   });
 
   if (!job) notFound();
+
+  const parsedDescription = parseCustomerJobDescription(job.description);
 
   const quotes = await db.query.jobQuotes.findMany({
     where: eq(jobQuotes.jobRequestId, id),
@@ -141,19 +151,43 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
     ? quoteRows.reduce((best, current) => (current.rating > best.rating ? current : best)).id
     : null;
 
+  const normalizedStatus = normalizeJobStatus(job.status, quoteRows.length);
+  const normalizedPaymentStatus = normalizePaymentStatus(job.paymentStatus, normalizedStatus);
+
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 md:px-6">
       <Card>
         <CardHeader>
-          <CardTitle>{job.title}</CardTitle>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="space-y-2">
+              <CardTitle>{job.title}</CardTitle>
+              <div className="text-sm text-muted-foreground">{job.region ?? "-"}, {job.suburb ?? "-"}</div>
+            </div>
+            <div className="flex gap-2">
+              <Badge>{formatCanonicalJobStatus(normalizedStatus)}</Badge>
+              {isPaymentStatusRelevant(normalizedPaymentStatus) && (
+                <Badge variant="secondary">{normalizedPaymentStatus}</Badge>
+              )}
+            </div>
+          </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>{job.description ?? "No description provided."}</p>
+          <p>{parsedDescription.description || "No description provided."}</p>
           <div className="flex flex-wrap gap-3 text-muted-foreground">
-            <span>Region: {job.region ?? "-"}</span>
-            <span>Suburb: {job.suburb ?? "-"}</span>
+            <span>Category: {parsedDescription.category}</span>
+            <span>Budget: {parsedDescription.budget}</span>
+            <span>Timing: {parsedDescription.timing}{parsedDescription.requestedDate ? ` (${parsedDescription.requestedDate})` : ""}</span>
             <span>Quotes: {quoteRows.length}</span>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Photos</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-sm text-muted-foreground">No photos yet.</p>
         </CardContent>
       </Card>
 
@@ -167,6 +201,7 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
           depositAmount: job.depositAmount,
           remainingAmount: job.remainingAmount,
         }}
+        quoteCount={quoteRows.length}
         quotes={quoteRows}
         bestValueQuoteId={bestValueQuoteId}
         fastestQuoteId={fastestQuoteId}
