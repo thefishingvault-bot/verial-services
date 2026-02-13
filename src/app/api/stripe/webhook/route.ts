@@ -1,7 +1,7 @@
 import { stripe } from "@/lib/stripe";
 import { db } from "@/lib/db";
-import { bookings, providerEarnings, providers, refunds, users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { bookings, jobPayments, jobQuotes, jobRequests, providerEarnings, providers, refunds, users } from "@/db/schema";
+import { and, eq, ne } from "drizzle-orm";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import Stripe from "stripe";
@@ -20,6 +20,7 @@ import {
   type ProviderPlan,
 } from "@/lib/provider-subscription";
 import { retrieveStripePriceSafe, detectStripeMode } from "@/lib/stripe";
+import { ensureConversationExists } from "@/lib/job-requests";
 
 // Note: We need to use the 'nodejs' runtime for webhooks
 export const runtime = "nodejs";
@@ -439,6 +440,170 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   };
 
+  const parseJobMetadata = (metadata: Stripe.Metadata | null | undefined) => {
+    const md = (metadata ?? {}) as Record<string, string | undefined>;
+    const jobRequestId = md.job_request_id?.trim() ?? "";
+    const quoteId = md.quote_id?.trim() ?? "";
+    const paymentType = md.payment_type?.trim() as "deposit" | "remainder" | "full" | undefined;
+
+    if (!jobRequestId || !quoteId || !paymentType) return null;
+    if (!["deposit", "remainder", "full"].includes(paymentType)) return null;
+
+    return { jobRequestId, quoteId, paymentType };
+  };
+
+  const handleJobPaymentSucceeded = async (paymentIntentObject: Stripe.PaymentIntent) => {
+    const parsed = parseJobMetadata(paymentIntentObject.metadata);
+    if (!parsed) return false;
+
+    const job = await db.query.jobRequests.findFirst({
+      where: eq(jobRequests.id, parsed.jobRequestId),
+      columns: {
+        id: true,
+        customerUserId: true,
+        status: true,
+        paymentStatus: true,
+        acceptedQuoteId: true,
+      },
+    });
+
+    const quote = await db.query.jobQuotes.findFirst({
+      where: and(eq(jobQuotes.id, parsed.quoteId), eq(jobQuotes.jobRequestId, parsed.jobRequestId)),
+      columns: {
+        id: true,
+        providerId: true,
+      },
+    });
+
+    if (!job || !quote) {
+      console.warn("[API_STRIPE_WEBHOOK] Job metadata references missing rows", {
+        paymentIntentId: paymentIntentObject.id,
+        jobRequestId: parsed.jobRequestId,
+        quoteId: parsed.quoteId,
+      });
+      return true;
+    }
+
+    const provider = await db.query.providers.findFirst({
+      where: eq(providers.id, quote.providerId),
+      columns: { id: true, userId: true },
+    });
+
+    if (!provider) {
+      console.warn("[API_STRIPE_WEBHOOK] Job payment provider missing", {
+        paymentIntentId: paymentIntentObject.id,
+        providerId: quote.providerId,
+      });
+      return true;
+    }
+
+    const existingPayment = await db.query.jobPayments.findFirst({
+      where: eq(jobPayments.stripePaymentIntentId, paymentIntentObject.id),
+      columns: {
+        id: true,
+        paymentStatus: true,
+        paymentType: true,
+      },
+    });
+
+    if (!existingPayment) {
+      console.warn("[API_STRIPE_WEBHOOK] Missing job_payments row for PaymentIntent", {
+        paymentIntentId: paymentIntentObject.id,
+      });
+      return true;
+    }
+
+    const alreadyFinalized = ["deposit_paid", "fully_paid", "refunded", "partially_refunded"].includes(existingPayment.paymentStatus);
+    if (alreadyFinalized) return true;
+
+    await db.transaction(async (tx) => {
+      const paymentStatus = parsed.paymentType === "deposit" ? "deposit_paid" : "fully_paid";
+
+      await tx
+        .update(jobPayments)
+        .set({ paymentStatus })
+        .where(eq(jobPayments.id, existingPayment.id));
+
+      if (parsed.paymentType === "deposit" || parsed.paymentType === "full") {
+        await tx
+          .update(jobRequests)
+          .set({
+            status: "assigned",
+            paymentStatus: paymentStatus,
+            acceptedQuoteId: quote.id,
+            assignedProviderId: provider.userId,
+            lifecycleUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(jobRequests.id, job.id));
+
+        await tx
+          .update(jobQuotes)
+          .set({ status: "accepted", updatedAt: new Date() })
+          .where(eq(jobQuotes.id, quote.id));
+
+        await tx
+          .update(jobQuotes)
+          .set({ status: "rejected", updatedAt: new Date() })
+          .where(and(eq(jobQuotes.jobRequestId, job.id), ne(jobQuotes.id, quote.id)));
+      }
+
+      if (parsed.paymentType === "remainder") {
+        await tx
+          .update(jobRequests)
+          .set({
+            paymentStatus: "fully_paid",
+            status: "closed",
+            lifecycleUpdatedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(jobRequests.id, job.id));
+      }
+    });
+
+    if (parsed.paymentType === "deposit" || parsed.paymentType === "full") {
+      await ensureConversationExists(job.customerUserId, provider.userId);
+    }
+
+    console.info("[API_STRIPE_WEBHOOK] Job payment succeeded", {
+      jobRequestId: parsed.jobRequestId,
+      quoteId: parsed.quoteId,
+      paymentType: parsed.paymentType,
+      paymentIntentId: paymentIntentObject.id,
+    });
+
+    return true;
+  };
+
+  const handleJobPaymentFailure = async (paymentIntentObject: Stripe.PaymentIntent) => {
+    const parsed = parseJobMetadata(paymentIntentObject.metadata);
+    if (!parsed) return false;
+
+    const payment = await db.query.jobPayments.findFirst({
+      where: eq(jobPayments.stripePaymentIntentId, paymentIntentObject.id),
+      columns: { id: true, jobRequestId: true },
+    });
+
+    if (!payment) return true;
+
+    await db.transaction(async (tx) => {
+      await tx.update(jobPayments).set({ paymentStatus: "failed" }).where(eq(jobPayments.id, payment.id));
+      await tx
+        .update(jobRequests)
+        .set({ paymentStatus: "failed", updatedAt: new Date() })
+        .where(eq(jobRequests.id, payment.jobRequestId));
+    });
+
+    console.info("[API_STRIPE_WEBHOOK] Job payment failed", {
+      jobRequestId: parsed.jobRequestId,
+      quoteId: parsed.quoteId,
+      paymentType: parsed.paymentType,
+      paymentIntentId: paymentIntentObject.id,
+    });
+
+    return true;
+  };
+
   // Handle the event
   switch (event.type) {
     case "checkout.session.completed": {
@@ -615,6 +780,10 @@ export async function POST(req: Request) {
 
     case "payment_intent.succeeded":
       const paymentIntent = event.data.object as Stripe.PaymentIntent;
+
+      if (await handleJobPaymentSucceeded(paymentIntent)) {
+        break;
+      }
 
       const bookingIdFromMeta = (paymentIntent.metadata as Record<string, string | undefined> | undefined)?.bookingId;
 
@@ -890,6 +1059,11 @@ export async function POST(req: Request) {
 
     case "payment_intent.payment_failed": {
       const paymentFailedIntent = event.data.object as Stripe.PaymentIntent;
+
+      if (await handleJobPaymentFailure(paymentFailedIntent)) {
+        break;
+      }
+
       console.log(
         `[API_STRIPE_WEBHOOK] Payment failed: ${paymentFailedIntent.id}`,
         paymentFailedIntent.last_payment_error?.message,
@@ -961,6 +1135,11 @@ export async function POST(req: Request) {
 
     case "payment_intent.canceled": {
       const canceledPi = event.data.object as Stripe.PaymentIntent;
+
+      if (await handleJobPaymentFailure(canceledPi)) {
+        break;
+      }
+
       const bookingIdMeta = canceledPi.metadata?.bookingId;
       const customerId = canceledPi.metadata?.userId;
 

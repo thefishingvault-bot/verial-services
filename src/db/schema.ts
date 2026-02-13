@@ -295,6 +295,45 @@ export const providerPayoutRequestStatusEnum = pgEnum("provider_payout_request_s
   "failed",
 ]);
 
+export const jobRequestStatusEnum = pgEnum("job_request_status", [
+  "open",
+  "assigned",
+  "in_progress",
+  "completed",
+  "closed",
+  "cancelled",
+  "expired",
+]);
+
+export const quoteStatusEnum = pgEnum("quote_status", [
+  "submitted",
+  "accepted",
+  "rejected",
+  "withdrawn",
+]);
+
+export const paymentStatusEnum = pgEnum("payment_status", [
+  "pending",
+  "deposit_paid",
+  "fully_paid",
+  "refunded",
+  "partially_refunded",
+  "failed",
+]);
+
+export const jobPaymentTypeEnum = pgEnum("job_payment_type", [
+  "deposit",
+  "remainder",
+  "full",
+]);
+
+export const jobInviteStatusEnum = pgEnum("job_invite_status", [
+  "pending",
+  "accepted",
+  "declined",
+  "revoked",
+]);
+
 // --- NEW TABLES ---
 
 /**
@@ -369,6 +408,130 @@ export const bookings = pgTable("bookings", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const jobRequests = pgTable("job_requests", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  customerUserId: varchar("customer_user_id", { length: 255 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  assignedProviderId: varchar("assigned_provider_id", { length: 255 }).references(() => users.id, {
+    onDelete: "set null",
+  }),
+
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  region: varchar("region", { length: 255 }),
+  suburb: varchar("suburb", { length: 255 }),
+
+  status: jobRequestStatusEnum("status").default("open").notNull(),
+  acceptedQuoteId: uuid("accepted_quote_id"),
+  totalPrice: integer("total_price"),
+  depositAmount: integer("deposit_amount"),
+  remainingAmount: integer("remaining_amount"),
+  paymentStatus: paymentStatusEnum("payment_status").default("pending").notNull(),
+  lifecycleUpdatedAt: timestamp("lifecycle_updated_at", { withTimezone: true }).defaultNow().notNull(),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  customerIdx: index("job_requests_customer_idx").on(table.customerUserId),
+  assignedProviderIdx: index("job_requests_assigned_provider_idx").on(table.assignedProviderId),
+  statusIdx: index("job_requests_status_idx").on(table.status),
+  acceptedQuoteIdx: index("job_requests_accepted_quote_idx").on(table.acceptedQuoteId),
+  paymentStatusIdx: index("job_requests_payment_status_idx").on(table.paymentStatus),
+}));
+
+export const jobQuotes = pgTable("job_quotes", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobRequestId: uuid("job_request_id")
+    .notNull()
+    .references(() => jobRequests.id, { onDelete: "cascade" }),
+  providerId: varchar("provider_id", { length: 255 })
+    .notNull()
+    .references(() => providers.id, { onDelete: "cascade" }),
+
+  amountTotal: integer("amount_total").notNull(),
+  availability: text("availability"),
+  included: text("included"),
+  excluded: text("excluded"),
+  responseSpeedHours: integer("response_speed_hours"),
+
+  status: quoteStatusEnum("status").default("submitted").notNull(),
+
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  jobRequestIdx: index("job_quotes_job_request_idx").on(table.jobRequestId),
+  providerIdx: index("job_quotes_provider_idx").on(table.providerId),
+  statusIdx: index("job_quotes_status_idx").on(table.status),
+  jobRequestProviderUnique: uniqueIndex("job_quotes_job_request_provider_unique").on(table.jobRequestId, table.providerId),
+}));
+
+export const jobPayments = pgTable("job_payments", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobRequestId: uuid("job_request_id")
+    .notNull()
+    .references(() => jobRequests.id, { onDelete: "cascade" }),
+  quoteId: uuid("quote_id")
+    .notNull()
+    .references(() => jobQuotes.id, { onDelete: "cascade" }),
+  stripePaymentIntentId: varchar("stripe_payment_intent_id", { length: 255 }).notNull().unique(),
+  paymentType: jobPaymentTypeEnum("payment_type").notNull(),
+  amountTotal: integer("amount_total").notNull(),
+  platformFeeAmount: integer("platform_fee_amount").notNull(),
+  providerAmount: integer("provider_amount").notNull(),
+  paymentStatus: paymentStatusEnum("payment_status").default("pending").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  jobRequestIdx: index("job_payments_job_request_idx").on(table.jobRequestId),
+  quoteIdx: index("job_payments_quote_idx").on(table.quoteId),
+  statusIdx: index("job_payments_status_idx").on(table.paymentStatus),
+}));
+
+export const jobRequestInvites = pgTable("job_request_invites", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobRequestId: uuid("job_request_id")
+    .notNull()
+    .references(() => jobRequests.id, { onDelete: "cascade" }),
+  providerId: varchar("provider_id", { length: 255 })
+    .notNull()
+    .references(() => providers.id, { onDelete: "cascade" }),
+  invitedByUserId: varchar("invited_by_user_id", { length: 255 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  status: jobInviteStatusEnum("status").default("pending").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  jobRequestIdx: index("job_request_invites_job_request_idx").on(table.jobRequestId),
+  providerIdx: index("job_request_invites_provider_idx").on(table.providerId),
+  statusIdx: index("job_request_invites_status_idx").on(table.status),
+  jobRequestProviderUnique: uniqueIndex("job_request_invites_job_request_provider_unique").on(
+    table.jobRequestId,
+    table.providerId,
+  ),
+}));
+
+export const jobRequestQuestions = pgTable("job_request_questions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  jobRequestId: uuid("job_request_id")
+    .notNull()
+    .references(() => jobRequests.id, { onDelete: "cascade" }),
+  askedByUserId: varchar("asked_by_user_id", { length: 255 })
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  question: text("question").notNull(),
+  answer: text("answer"),
+  answeredByUserId: varchar("answered_by_user_id", { length: 255 }).references(() => users.id, {
+    onDelete: "set null",
+  }),
+  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+}, (table) => ({
+  jobRequestIdx: index("job_request_questions_job_request_idx").on(table.jobRequestId),
+  askedByIdx: index("job_request_questions_asked_by_idx").on(table.askedByUserId),
+  answeredByIdx: index("job_request_questions_answered_by_idx").on(table.answeredByUserId),
+}));
 
 /**
  * Provider Earnings
@@ -915,6 +1078,11 @@ export const usersRelations = relations(users, ({ one, many }) => ({
   reviews: many(reviews), // A user can write many reviews
   notifications: many(notifications), // A user can have many notifications
   favoriteProviders: many(favoriteProviders),
+  customerJobRequests: many(jobRequests, { relationName: "job_request_customer" }),
+  assignedJobRequests: many(jobRequests, { relationName: "job_request_assigned_provider_user" }),
+  invitedJobRequests: many(jobRequestInvites, { relationName: "job_request_invited_by_user" }),
+  askedJobRequestQuestions: many(jobRequestQuestions, { relationName: "job_request_question_asked_by" }),
+  answeredJobRequestQuestions: many(jobRequestQuestions, { relationName: "job_request_question_answered_by" }),
 }));
 
 export const providersRelations = relations(providers, ({ one, many }) => ({
@@ -933,6 +1101,85 @@ export const providersRelations = relations(providers, ({ one, many }) => ({
   earnings: many(providerEarnings),
   financialAuditLogs: many(financialAuditLogs),
   savedReplies: many(providerSavedReplies),
+  jobQuotes: many(jobQuotes),
+  jobInvites: many(jobRequestInvites),
+}));
+
+export const jobRequestsRelations = relations(jobRequests, ({ one, many }) => ({
+  customer: one(users, {
+    fields: [jobRequests.customerUserId],
+    references: [users.id],
+    relationName: "job_request_customer",
+  }),
+  assignedProviderUser: one(users, {
+    fields: [jobRequests.assignedProviderId],
+    references: [users.id],
+    relationName: "job_request_assigned_provider_user",
+  }),
+  acceptedQuote: one(jobQuotes, {
+    fields: [jobRequests.acceptedQuoteId],
+    references: [jobQuotes.id],
+  }),
+  quotes: many(jobQuotes),
+  payments: many(jobPayments),
+  invites: many(jobRequestInvites),
+  questions: many(jobRequestQuestions),
+}));
+
+export const jobQuotesRelations = relations(jobQuotes, ({ one, many }) => ({
+  jobRequest: one(jobRequests, {
+    fields: [jobQuotes.jobRequestId],
+    references: [jobRequests.id],
+  }),
+  provider: one(providers, {
+    fields: [jobQuotes.providerId],
+    references: [providers.id],
+  }),
+  payments: many(jobPayments),
+}));
+
+export const jobPaymentsRelations = relations(jobPayments, ({ one }) => ({
+  jobRequest: one(jobRequests, {
+    fields: [jobPayments.jobRequestId],
+    references: [jobRequests.id],
+  }),
+  quote: one(jobQuotes, {
+    fields: [jobPayments.quoteId],
+    references: [jobQuotes.id],
+  }),
+}));
+
+export const jobRequestInvitesRelations = relations(jobRequestInvites, ({ one }) => ({
+  jobRequest: one(jobRequests, {
+    fields: [jobRequestInvites.jobRequestId],
+    references: [jobRequests.id],
+  }),
+  provider: one(providers, {
+    fields: [jobRequestInvites.providerId],
+    references: [providers.id],
+  }),
+  invitedByUser: one(users, {
+    fields: [jobRequestInvites.invitedByUserId],
+    references: [users.id],
+    relationName: "job_request_invited_by_user",
+  }),
+}));
+
+export const jobRequestQuestionsRelations = relations(jobRequestQuestions, ({ one }) => ({
+  jobRequest: one(jobRequests, {
+    fields: [jobRequestQuestions.jobRequestId],
+    references: [jobRequests.id],
+  }),
+  askedByUser: one(users, {
+    fields: [jobRequestQuestions.askedByUserId],
+    references: [users.id],
+    relationName: "job_request_question_asked_by",
+  }),
+  answeredByUser: one(users, {
+    fields: [jobRequestQuestions.answeredByUserId],
+    references: [users.id],
+    relationName: "job_request_question_answered_by",
+  }),
 }));
 
 export const favoriteProvidersRelations = relations(favoriteProviders, ({ one }) => ({

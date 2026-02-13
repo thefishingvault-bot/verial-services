@@ -365,6 +365,20 @@
       "when": 1770000000000,
       "tag": "0046_users_role_default_customer",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1771000000000,
+      "tag": "0047_job_requests_v15",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1771003600000,
+      "tag": "0048_job_request_invites_questions",
+      "breakpoints": true
     }
   ]
 }

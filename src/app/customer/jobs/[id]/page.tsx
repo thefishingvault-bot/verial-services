@@ -1,0 +1,170 @@
+import { auth } from "@clerk/nextjs/server";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { notFound, redirect } from "next/navigation";
+
+import { CustomerJobView } from "@/components/job-requests/customer-job-view";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { db } from "@/lib/db";
+import { jobQuotes, jobRequestQuestions, jobRequests, reviews } from "@/db/schema";
+import { scoreQuote } from "@/lib/job-requests";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+export default async function CustomerJobPage({ params }: { params: Promise<{ id: string }> }) {
+  const { userId } = await auth();
+  if (!userId) redirect("/sign-in");
+
+  const { id } = await params;
+
+  const job = await db.query.jobRequests.findFirst({
+    where: and(eq(jobRequests.id, id), eq(jobRequests.customerUserId, userId)),
+    columns: {
+      id: true,
+      title: true,
+      description: true,
+      region: true,
+      suburb: true,
+      status: true,
+      paymentStatus: true,
+      acceptedQuoteId: true,
+      totalPrice: true,
+      depositAmount: true,
+      remainingAmount: true,
+      createdAt: true,
+    },
+  });
+
+  if (!job) notFound();
+
+  const quotes = await db.query.jobQuotes.findMany({
+    where: eq(jobQuotes.jobRequestId, id),
+    columns: {
+      id: true,
+      providerId: true,
+      amountTotal: true,
+      availability: true,
+      included: true,
+      excluded: true,
+      responseSpeedHours: true,
+      status: true,
+    },
+    with: {
+      provider: {
+        columns: {
+          businessName: true,
+          handle: true,
+        },
+      },
+    },
+  });
+
+  const questions = await db.query.jobRequestQuestions.findMany({
+    where: eq(jobRequestQuestions.jobRequestId, id),
+    columns: {
+      id: true,
+      question: true,
+      answer: true,
+      askedByUserId: true,
+      createdAt: true,
+    },
+  });
+
+  const providerIds = [...new Set(quotes.map((quote) => quote.providerId))];
+  const ratings = providerIds.length
+    ? await db
+        .select({
+          providerId: reviews.providerId,
+          avgRating: sql<number>`coalesce(avg(${reviews.rating}), 0)`,
+        })
+        .from(reviews)
+        .where(inArray(reviews.providerId, providerIds))
+        .groupBy(reviews.providerId)
+    : [];
+
+  const ratingMap = new Map(ratings.map((row) => [row.providerId, Number(row.avgRating ?? 0)]));
+
+  const minAmount = quotes.length ? Math.min(...quotes.map((quote) => quote.amountTotal)) : 0;
+  const maxAmount = quotes.length ? Math.max(...quotes.map((quote) => quote.amountTotal)) : 1;
+  const maxResponseHours = quotes.length
+    ? Math.max(...quotes.map((quote) => Math.max(1, quote.responseSpeedHours ?? 24)))
+    : 24;
+
+  const quoteRows = quotes.map((quote) => {
+    const rating = ratingMap.get(quote.providerId) ?? 0;
+    const score = scoreQuote({
+      rating,
+      amountTotal: quote.amountTotal,
+      minAmount,
+      maxAmount,
+      responseSpeedHours: quote.responseSpeedHours,
+      maxResponseHours,
+    });
+
+    return {
+      id: quote.id,
+      providerId: quote.providerId,
+      providerName: quote.provider.businessName,
+      providerHandle: quote.provider.handle,
+      amountTotal: quote.amountTotal,
+      availability: quote.availability,
+      included: quote.included,
+      excluded: quote.excluded,
+      responseSpeedHours: quote.responseSpeedHours,
+      status: quote.status,
+      rating,
+      score,
+    };
+  });
+
+  const bestValueQuoteId = quoteRows.length
+    ? quoteRows.reduce((best, current) => (current.amountTotal < best.amountTotal ? current : best)).id
+    : null;
+
+  const fastestQuoteId = quoteRows.length
+    ? quoteRows.reduce((best, current) => {
+        const bestHours = best.responseSpeedHours ?? 9999;
+        const currentHours = current.responseSpeedHours ?? 9999;
+        return currentHours < bestHours ? current : best;
+      }).id
+    : null;
+
+  const topRatedQuoteId = quoteRows.length
+    ? quoteRows.reduce((best, current) => (current.rating > best.rating ? current : best)).id
+    : null;
+
+  return (
+    <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 md:px-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>{job.title}</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2 text-sm">
+          <p>{job.description ?? "No description provided."}</p>
+          <div className="flex flex-wrap gap-3 text-muted-foreground">
+            <span>Region: {job.region ?? "-"}</span>
+            <span>Suburb: {job.suburb ?? "-"}</span>
+            <span>Quotes: {quoteRows.length}</span>
+          </div>
+        </CardContent>
+      </Card>
+
+      <CustomerJobView
+        job={{
+          id: job.id,
+          status: job.status,
+          paymentStatus: job.paymentStatus,
+          acceptedQuoteId: job.acceptedQuoteId,
+          totalPrice: job.totalPrice,
+          depositAmount: job.depositAmount,
+          remainingAmount: job.remainingAmount,
+        }}
+        quotes={quoteRows}
+        bestValueQuoteId={bestValueQuoteId}
+        fastestQuoteId={fastestQuoteId}
+        topRatedQuoteId={topRatedQuoteId}
+        questions={questions}
+      />
+    </div>
+  );
+}
