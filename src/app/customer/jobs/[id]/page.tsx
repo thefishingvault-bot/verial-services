@@ -1,10 +1,12 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import Image from "next/image";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { CustomerJobView } from "@/components/job-requests/customer-job-view";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestQuestions, jobRequests, reviews } from "@/db/schema";
@@ -189,7 +191,12 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
         </CardHeader>
         <CardContent>
           {parsedDescription.photoUrls.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No photos yet.</p>
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">No photos yet.</p>
+              <Button variant="outline" asChild>
+                <Link href={`/customer/jobs/${job.id}/edit`}>Add photos</Link>
+              </Button>
+            </div>
           ) : (
             <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
               {parsedDescription.photoUrls.map((url) => (

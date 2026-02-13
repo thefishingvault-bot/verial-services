@@ -19,11 +19,11 @@ import {
   canCancelCustomerJob,
   canEditCustomerJob,
   canReopenCustomerJob,
-  formatCanonicalJobStatus,
   isPaymentStatusRelevant,
   normalizeJobStatus,
   normalizePaymentStatus,
 } from "@/lib/customer-job-meta";
+import { useToast } from "@/components/ui/use-toast";
 
 type QuoteItem = {
   id: string;
@@ -77,19 +77,28 @@ function money(cents: number | null | undefined) {
 
 const tracker = ["assigned", "in_progress", "completed", "closed"] as const;
 
-function phaseState(current: string, phase: (typeof tracker)[number]) {
-  const order: Record<string, number> = {
-    open: 0,
-    assigned: 1,
-    in_progress: 2,
-    completed: 3,
-    closed: 4,
-    cancelled: -1,
-    expired: -1,
+function phaseState(canonicalStatus: string, phase: (typeof tracker)[number]) {
+  const phaseCanonical: Record<(typeof tracker)[number], string> = {
+    assigned: "Assigned",
+    in_progress: "InProgress",
+    completed: "Completed",
+    closed: "Closed",
   };
-  const currentRank = order[current] ?? 0;
-  const phaseRank = order[phase] ?? 0;
-  if (currentRank < 0) return "pending";
+
+  const order: Record<string, number> = {
+    Open: 0,
+    Quoting: 0,
+    Draft: 0,
+    Assigned: 1,
+    InProgress: 2,
+    Completed: 3,
+    Closed: 4,
+  };
+
+  if (canonicalStatus === "Cancelled") return "cancelled";
+
+  const currentRank = order[canonicalStatus] ?? 0;
+  const phaseRank = order[phaseCanonical[phase]] ?? 0;
   if (currentRank > phaseRank) return "done";
   if (currentRank === phaseRank) return "current";
   return "pending";
@@ -97,14 +106,18 @@ function phaseState(current: string, phase: (typeof tracker)[number]) {
 
 export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId, topRatedQuoteId, questions }: JobViewProps) {
   const router = useRouter();
+  const { toast } = useToast();
   const [sortBy, setSortBy] = useState<SortBy>("score");
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+  const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
 
   const canonicalJobStatus = normalizeJobStatus(job.status, quotes.length);
   const canonicalPaymentStatus = normalizePaymentStatus(job.paymentStatus, canonicalJobStatus);
+  const showPaymentStatus = isPaymentStatusRelevant(canonicalPaymentStatus);
+  const showPaymentTotals = !!job.acceptedQuoteId && showPaymentStatus;
 
   const sortedQuotes = useMemo(() => {
     const copy = [...quotes];
@@ -167,7 +180,12 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
         setMessage(await res.text());
         return;
       }
-      window.location.reload();
+      toast({
+        title: "Job cancelled",
+        description: "Your job has been cancelled successfully.",
+      });
+      setCancelDialogOpen(false);
+      router.refresh();
     });
   };
 
@@ -204,15 +222,29 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
         setMessage(await res.text());
         return;
       }
+      toast({
+        title: "Job re-opened",
+        description: "Your job is open for provider quotes again.",
+      });
+      setReopenDialogOpen(false);
 
-      window.location.reload();
+      router.refresh();
     });
   };
 
   const copyShareLink = async () => {
     try {
-      await navigator.clipboard.writeText(`${window.location.origin}/customer/jobs/${job.id}`);
-      setMessage("Link copied.");
+      const res = await fetch(`/api/customer/job-requests/${job.id}/share-link`, { method: "POST" });
+      if (!res.ok) {
+        setMessage(await res.text());
+        return;
+      }
+      const payload = (await res.json()) as { url: string };
+      await navigator.clipboard.writeText(payload.url);
+      toast({
+        title: "Share link copied",
+        description: "Public job link is ready to share.",
+      });
     } catch {
       setMessage("Unable to copy link.");
     }
@@ -222,19 +254,22 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Job actions</CardTitle>
+          <div className="flex items-center justify-between gap-2">
+            <CardTitle>Job actions</CardTitle>
+            {showPaymentStatus && <Badge variant="secondary">Payment status: {canonicalPaymentStatus}</Badge>}
+          </div>
           <CardDescription>Manage this job based on its current lifecycle stage.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge>{formatCanonicalJobStatus(canonicalJobStatus)}</Badge>
-            {isPaymentStatusRelevant(canonicalPaymentStatus) && <Badge variant="secondary">{canonicalPaymentStatus}</Badge>}
-          </div>
-          <div className="grid gap-2 sm:grid-cols-3">
-            <div>Total: {money(job.totalPrice)}</div>
-            <div>Deposit: {money(job.depositAmount)}</div>
-            <div>Remaining: {money(job.remainingAmount)}</div>
-          </div>
+          {showPaymentTotals ? (
+            <div className="grid gap-2 sm:grid-cols-3">
+              <div>Total: {money(job.totalPrice)}</div>
+              <div>Deposit: {money(job.depositAmount)}</div>
+              <div>Remaining: {money(job.remainingAmount)}</div>
+            </div>
+          ) : (
+            <div className="text-muted-foreground">No payment yet — totals appear after you accept a quote.</div>
+          )}
 
           <div className="flex flex-wrap gap-2">
             {canEditCustomerJob(canonicalJobStatus) && (
@@ -255,14 +290,32 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
                   </DialogHeader>
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setCancelDialogOpen(false)}>Back</Button>
-                    <Button variant="destructive" onClick={cancelJob} disabled={isPending}>Confirm cancel</Button>
+                    <Button variant="destructive" onClick={cancelJob} disabled={isPending}>
+                      {isPending ? "Cancelling..." : "Confirm cancel"}
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             )}
 
             {canReopenCustomerJob(canonicalJobStatus) && (
-              <Button variant="outline" onClick={reopenJob} disabled={isPending}>Re-open job</Button>
+              <Dialog open={reopenDialogOpen} onOpenChange={setReopenDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" disabled={isPending}>Re-open job</Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Re-open this job?</DialogTitle>
+                    <DialogDescription>This will make your job visible to providers for fresh quotes.</DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setReopenDialogOpen(false)}>Back</Button>
+                    <Button onClick={reopenJob} disabled={isPending}>
+                      {isPending ? "Re-opening..." : "Confirm re-open"}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             )}
 
             <Button variant="outline" onClick={copyShareLink} disabled={isPending}>Copy job link</Button>
@@ -385,12 +438,12 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
         </CardHeader>
         <CardContent className="grid gap-2 sm:grid-cols-4">
           {tracker.map((phase) => {
-            const state = phaseState(job.status, phase);
+            const state = phaseState(canonicalJobStatus, phase);
             return (
               <div key={phase} className="rounded-md border p-3 text-sm">
                 <div className="font-medium capitalize">{phase.replace("_", " ")}</div>
                 <div className="text-muted-foreground">
-                  {state === "done" ? "Done" : state === "current" ? "Current" : "Pending"}
+                  {state === "done" ? "Done" : state === "current" ? "Current" : state === "cancelled" ? "Cancelled" : "Pending"}
                 </div>
               </div>
             );

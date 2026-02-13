@@ -92,6 +92,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     timing: body?.timing ?? existingMeta.timing,
     requestedDate: body?.requestedDate ?? existingMeta.requestedDate,
     photoUrls: body?.photoUrls ?? existingMeta.photoUrls,
+    publicToken: existingMeta.publicToken,
   });
 
   const [updated] = await db

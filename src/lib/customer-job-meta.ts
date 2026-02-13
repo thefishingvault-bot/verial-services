@@ -25,6 +25,7 @@ export type CustomerJobMeta = {
   timing: string;
   requestedDate: string | null;
   photoUrls: string[];
+  publicToken: string | null;
 };
 
 export type ParsedCustomerJobDescription = CustomerJobMeta & {
@@ -39,7 +40,12 @@ const DEFAULT_META: CustomerJobMeta = {
   timing: "ASAP",
   requestedDate: null,
   photoUrls: [],
+  publicToken: null,
 };
+
+export function generatePublicJobToken() {
+  return `job_${crypto.randomUUID().replaceAll("-", "")}`;
+}
 
 export function buildCustomerJobDescription(rawDescription: string, meta: Partial<CustomerJobMeta>) {
   const description = rawDescription.trim();
@@ -51,6 +57,10 @@ export function buildCustomerJobDescription(rawDescription: string, meta: Partia
     photoUrls: Array.isArray(meta.photoUrls)
       ? meta.photoUrls.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 8)
       : [],
+    publicToken:
+      typeof meta.publicToken === "string" && meta.publicToken.trim().length > 0
+        ? meta.publicToken.trim()
+        : null,
   };
 
   return `${description}\n\n${META_MARKER}\n${JSON.stringify(normalized)}`;
@@ -80,6 +90,10 @@ export function parseCustomerJobDescription(raw: string | null | undefined): Par
       photoUrls: Array.isArray(parsed.photoUrls)
         ? parsed.photoUrls.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 8)
         : [],
+      publicToken:
+        typeof parsed.publicToken === "string" && parsed.publicToken.trim().length > 0
+          ? parsed.publicToken.trim()
+          : null,
     };
   } catch {
     return {

@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 
 import { jobRequests, users } from "@/db/schema";
 import { db } from "@/lib/db";
-import { buildCustomerJobDescription } from "@/lib/customer-job-meta";
+import { buildCustomerJobDescription, generatePublicJobToken } from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
 
@@ -39,6 +39,7 @@ export async function POST(req: Request) {
     timing: body?.timing,
     requestedDate: body?.requestedDate || null,
     photoUrls: body?.photoUrls,
+    publicToken: generatePublicJobToken(),
   });
 
   const [created] = await db

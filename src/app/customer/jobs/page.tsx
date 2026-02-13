@@ -14,6 +14,7 @@ import {
   jobStatusFilterBucket,
   normalizeJobStatus,
   normalizePaymentStatus,
+  parseCustomerJobDescription,
 } from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
@@ -36,6 +37,11 @@ function formatPostedDate(input: Date) {
   if (diffDays < 7) return `Posted ${diffDays}d ago`;
 
   return `Posted ${input.toLocaleDateString("en-NZ", { day: "numeric", month: "short", year: "numeric" })}`;
+}
+
+function makeJobsQuery(status: string, sort: string) {
+  const query = new URLSearchParams({ status, sort });
+  return `/customer/jobs?${query.toString()}`;
 }
 
 function isMissingColumnError(error: unknown): boolean {
@@ -72,6 +78,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
   let rows: Array<{
     id: string;
     title: string;
+    description: string | null;
     status: string;
     paymentStatus: string;
     suburb: string | null;
@@ -85,6 +92,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
       columns: {
         id: true,
         title: true,
+        description: true,
         status: true,
         paymentStatus: true,
         suburb: true,
@@ -106,6 +114,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
         columns: {
           id: true,
           title: true,
+          description: true,
           status: true,
           paymentStatus: true,
           createdAt: true,
@@ -150,6 +159,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
       return {
         ...job,
         quoteCount,
+        parsedDescription: parseCustomerJobDescription(job.description),
         normalizedStatus,
         normalizedPaymentStatus,
       };
@@ -189,16 +199,16 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
                 size="sm"
                 asChild
               >
-                <Link href={`/customer/jobs?status=${item.key}&sort=${sort}`}>{item.label}</Link>
+                <Link href={makeJobsQuery(item.key, sort)}>{item.label}</Link>
               </Button>
             ))}
           </div>
           <div className="flex gap-2">
             <Button size="sm" variant={sort === "newest" ? "default" : "outline"} asChild>
-              <Link href={`/customer/jobs?status=${filter}&sort=newest`}>Newest</Link>
+              <Link href={makeJobsQuery(filter, "newest")}>Newest</Link>
             </Button>
             <Button size="sm" variant={sort === "oldest" ? "default" : "outline"} asChild>
-              <Link href={`/customer/jobs?status=${filter}&sort=oldest`}>Oldest</Link>
+              <Link href={makeJobsQuery(filter, "oldest")}>Oldest</Link>
             </Button>
           </div>
         </CardContent>
@@ -219,18 +229,29 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
             </div>
           ) : (
             normalizedRows.map((job) => (
-              <Link key={job.id} href={`/customer/jobs/${job.id}`} className="block rounded-md border p-3 hover:bg-muted/40">
+              <Link
+                key={job.id}
+                href={`/customer/jobs/${job.id}`}
+                className="block cursor-pointer rounded-md border p-3 transition-colors hover:bg-muted/40 active:bg-muted/60"
+              >
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-1">
                     <div className="font-medium">{job.title}</div>
                     <div className="text-xs text-muted-foreground">{job.region ?? "-"}, {job.suburb ?? "-"}</div>
-                    <div className="text-xs text-muted-foreground">{formatPostedDate(job.createdAt)} · Quotes: {job.quoteCount}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {formatPostedDate(job.createdAt)} · Quotes: {job.quoteCount}
+                      {job.parsedDescription.category ? ` · ${job.parsedDescription.category}` : ""}
+                      {job.parsedDescription.timing ? ` · ${job.parsedDescription.timing}` : ""}
+                    </div>
                   </div>
-                  <div className="flex gap-2">
-                    <Badge>{formatCanonicalJobStatus(job.normalizedStatus)}</Badge>
-                    {isPaymentStatusRelevant(job.normalizedPaymentStatus) && (
-                      <Badge variant="secondary">{job.normalizedPaymentStatus}</Badge>
-                    )}
+                  <div className="space-y-2 text-right">
+                    <div className="flex justify-end gap-2">
+                      <Badge>{formatCanonicalJobStatus(job.normalizedStatus)}</Badge>
+                      {isPaymentStatusRelevant(job.normalizedPaymentStatus) && (
+                        <Badge variant="secondary">{job.normalizedPaymentStatus}</Badge>
+                      )}
+                    </div>
+                    <div className="text-xs font-medium text-muted-foreground">View job →</div>
                   </div>
                 </div>
               </Link>
