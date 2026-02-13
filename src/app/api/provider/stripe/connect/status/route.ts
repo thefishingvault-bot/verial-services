@@ -23,6 +23,7 @@ export async function GET() {
       stripeConnectId: true,
       chargesEnabled: true,
       payoutsEnabled: true,
+      verificationStatus: true,
     },
   });
 
@@ -42,12 +43,15 @@ export async function GET() {
       payoutsEnabled: false,
       detailsSubmitted: false,
       currentlyDueCount: null as number | null,
+      verificationStatus: provider.verificationStatus,
+      verificationRequiredBeforePayout: provider.verificationStatus !== "verified",
     });
   }
 
   const account = await stripe.accounts.retrieve(provider.stripeConnectId);
   const chargesEnabled = !!account.charges_enabled;
   const payoutsEnabled = !!account.payouts_enabled;
+  const effectivePayoutsEnabled = payoutsEnabled && provider.verificationStatus === "verified";
   const detailsSubmitted = !!account.details_submitted;
   const currentlyDueCount = Array.isArray(account.requirements?.currently_due)
     ? account.requirements.currently_due.length
@@ -57,7 +61,7 @@ export async function GET() {
     .update(providers)
     .set({
       chargesEnabled,
-      payoutsEnabled,
+      payoutsEnabled: effectivePayoutsEnabled,
       updatedAt: new Date(),
     })
     .where(eq(providers.id, provider.id));
@@ -75,8 +79,10 @@ export async function GET() {
     providerId: provider.id,
     stripeConnectId: provider.stripeConnectId,
     chargesEnabled,
-    payoutsEnabled,
+    payoutsEnabled: effectivePayoutsEnabled,
     detailsSubmitted,
     currentlyDueCount,
+    verificationStatus: provider.verificationStatus,
+    verificationRequiredBeforePayout: provider.verificationStatus !== "verified",
   });
 }

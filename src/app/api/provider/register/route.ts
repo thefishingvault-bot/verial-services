@@ -123,6 +123,7 @@ export async function POST(req: Request) {
             // Manual upload is deprecated; providers verify in Sumsub.
             identityDocumentUrl: null,
             kycStatus: 'not_started',
+            verificationStatus: 'pending',
             kycSubmittedAt: null,
             kycVerifiedAt: null,
             updatedAt: new Date(),
@@ -154,6 +155,7 @@ export async function POST(req: Request) {
       userId: userId,
       businessName: businessName,
       handle: handle,
+      verificationStatus: 'pending',
       // All other fields (status, trust, etc.) will use their defaults
     }).returning();
 

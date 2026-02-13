@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/button";
 import { Loader2, AlertTriangle } from "lucide-react";
 
 type ProviderKycStatus = "not_started" | "in_progress" | "pending_review" | "verified" | "rejected";
+type ProviderVerificationStatus = "pending" | "verified" | "unavailable" | "rejected";
 
 type AccessTokenResponse = {
+  ok?: boolean;
+  error?: string;
+  message?: string;
   token: string;
   expiresAt?: string;
 };
@@ -44,25 +48,43 @@ export default function ProviderKycPage() {
   const [isLaunching, setIsLaunching] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [kycStatus, setKycStatus] = useState<ProviderKycStatus | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<ProviderVerificationStatus | null>(null);
   const containerId = "sumsub-websdk";
   const launchedRef = useRef(false);
 
-  const refreshStatus = useCallback(async () => {
+  const fetchWithTimeout = useCallback(async (input: RequestInfo | URL, init: RequestInit, timeoutMs = 10000) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      const res = await fetch("/api/provider/kyc/status", { method: "GET" });
-      if (!res.ok) return;
-      const data = (await res.json()) as { kycStatus?: ProviderKycStatus };
-      if (data?.kycStatus) setKycStatus(data.kycStatus);
-    } catch {
-      // ignore
+      return await fetch(input, {
+        ...init,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeout);
     }
   }, []);
 
+  const refreshStatus = useCallback(async () => {
+    try {
+      const res = await fetchWithTimeout("/api/provider/kyc/status", { method: "GET" }, 10000);
+      if (!res.ok) return;
+      const data = (await res.json()) as {
+        kycStatus?: ProviderKycStatus;
+        verificationStatus?: ProviderVerificationStatus;
+      };
+      if (data?.kycStatus) setKycStatus(data.kycStatus);
+      if (data?.verificationStatus) setVerificationStatus(data.verificationStatus);
+    } catch {
+      // ignore
+    }
+  }, [fetchWithTimeout]);
+
   const fetchAccessToken = useCallback(async (): Promise<string> => {
-    const res = await fetch("/api/provider/kyc/sumsub/access-token", {
+    const res = await fetchWithTimeout("/api/provider/kyc/sumsub/access-token", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-    });
+    }, 10000);
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -70,11 +92,14 @@ export default function ProviderKycPage() {
     }
 
     const json = (await res.json()) as AccessTokenResponse;
+    if (json?.ok === false || json?.error === "SUMSUB_UNAVAILABLE") {
+      throw new Error(json.message || "Verification temporarily unavailable.");
+    }
     if (!json?.token) {
       throw new Error("Sumsub access token missing in response.");
     }
     return json.token;
-  }, []);
+  }, [fetchWithTimeout]);
 
   const launchSdk = useCallback(async () => {
     setError(null);
@@ -170,6 +195,11 @@ export default function ProviderKycPage() {
           <p className="mt-1 text-sm text-muted-foreground">
             Complete verification to finish setting up your provider account.
           </p>
+          {verificationStatus === "unavailable" ? (
+            <p className="mt-2 text-xs font-medium text-amber-700 dark:text-amber-400">
+              Verification Required Before Payout
+            </p>
+          ) : null}
           {kycStatus && (
             <p className="mt-2 text-xs text-muted-foreground">
               Status: <span className="font-medium text-foreground">{formatStatus(kycStatus)}</span>

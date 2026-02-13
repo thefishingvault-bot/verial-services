@@ -5,7 +5,7 @@ import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProviderIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
-import { sumsubRequest } from "@/lib/sumsub";
+import { logSumsubError, safeSumsubRequest } from "@/lib/sumsub";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -57,18 +57,21 @@ async function resolveInspectionId(providerId: string): Promise<{ userId: string
   let inspectionId = provider.sumsubInspectionId ?? null;
 
   if (!inspectionId) {
-    try {
-      const applicant = await sumsubRequest<{ id?: string; inspectionId?: string }>({
-        method: "GET",
-        pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(provider.userId)}/one`,
-      });
+    const applicant = await safeSumsubRequest<{ id?: string; inspectionId?: string }>({
+      context: "API_ADMIN_PROVIDER_KYC_IMAGE_RESOLVE_IDS",
+      method: "GET",
+      pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(provider.userId)}/one`,
+      extraLogFields: { providerId, userId: provider.userId },
+    });
 
-      if (typeof applicant?.inspectionId === "string" && applicant.inspectionId.trim()) {
-        inspectionId = applicant.inspectionId;
+    if (applicant.ok) {
+      if (typeof applicant.data?.inspectionId === "string" && applicant.data.inspectionId.trim()) {
+        inspectionId = applicant.data.inspectionId;
       }
 
       // Store best-effort IDs for later.
-      const applicantId = typeof applicant?.id === "string" && applicant.id.trim() ? applicant.id : null;
+      const applicantId =
+        typeof applicant.data?.id === "string" && applicant.data.id.trim() ? applicant.data.id : null;
       if (inspectionId || applicantId) {
         await db
           .update(providers)
@@ -79,8 +82,6 @@ async function resolveInspectionId(providerId: string): Promise<{ userId: string
           })
           .where(eq(providers.id, providerId));
       }
-    } catch {
-      // ignore
     }
   }
 
@@ -112,36 +113,63 @@ export async function GET(_req: Request, { params }: { params: Promise<{ provide
 
   const pathWithQuery = `/resources/inspections/${encodeURIComponent(ids.inspectionId)}/resources/${encodeURIComponent(imageId)}`;
 
-  const { appToken, secretKey, baseUrl } = getSumsubConfig();
+  let appToken: string;
+  let secretKey: string;
+  let baseUrl: string;
+  try {
+    const config = getSumsubConfig();
+    appToken = config.appToken;
+    secretKey = config.secretKey;
+    baseUrl = config.baseUrl;
+  } catch (error) {
+    logSumsubError("API_ADMIN_PROVIDER_KYC_IMAGE_CONFIG", error, { providerId, imageId });
+    return NextResponse.json({ error: "SUMSUB_UNAVAILABLE" }, { status: 502 });
+  }
+
   const ts = Math.floor(Date.now() / 1000);
   const signature = createSignature({ ts, method: "GET", pathWithQuery, secretKey });
 
-  const response = await fetch(`${baseUrl}${pathWithQuery}`, {
-    method: "GET",
-    headers: {
-      Accept: "*/*",
-      "X-App-Token": appToken,
-      "X-App-Access-Ts": String(ts),
-      "X-App-Access-Sig": signature,
-    },
-  });
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort("sumsub-timeout"), 10_000);
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => "");
-    return NextResponse.json(
-      { error: "Sumsub image fetch failed", status: response.status, details: text || undefined },
-      { status: 502 },
-    );
+    const response = await fetch(`${baseUrl}${pathWithQuery}`, {
+      method: "GET",
+      headers: {
+        Accept: "*/*",
+        "X-App-Token": appToken,
+        "X-App-Access-Ts": String(ts),
+        "X-App-Access-Sig": signature,
+      },
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => "");
+      logSumsubError(
+        "API_ADMIN_PROVIDER_KYC_IMAGE_FETCH",
+        new Error(`Sumsub request failed: ${response.status} ${response.statusText}`),
+        { providerId, imageId, statusCode: response.status, details: text || undefined },
+      );
+      return NextResponse.json(
+        { error: "SUMSUB_UNAVAILABLE", status: response.status, details: text || undefined },
+        { status: 502 },
+      );
+    }
+
+    const arrayBuffer = await response.arrayBuffer();
+    const contentType = response.headers.get("content-type") || "application/octet-stream";
+
+    return new Response(arrayBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (error) {
+    logSumsubError("API_ADMIN_PROVIDER_KYC_IMAGE_FETCH", error, { providerId, imageId });
+    return NextResponse.json({ error: "SUMSUB_UNAVAILABLE" }, { status: 502 });
   }
-
-  const arrayBuffer = await response.arrayBuffer();
-  const contentType = response.headers.get("content-type") || "application/octet-stream";
-
-  return new Response(arrayBuffer, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      "Cache-Control": "no-store",
-    },
-  });
 }

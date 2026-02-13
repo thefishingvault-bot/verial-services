@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -35,13 +35,31 @@ type FormValues = z.infer<typeof formSchema>;
 
 type ProviderApplicationStatus = 'none' | 'pending' | 'approved' | 'rejected';
 type ProviderKycStatus = 'not_started' | 'in_progress' | 'pending_review' | 'verified' | 'rejected';
+type ProviderVerificationStatus = 'pending' | 'verified' | 'unavailable' | 'rejected';
+type RegisterProviderState = 'loading' | 'verified' | 'pending' | 'unavailable' | 'error';
+
+async function fetchWithTimeout(input: RequestInfo | URL, init: RequestInit, timeoutMs = 9000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, {
+      ...init,
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export default function RegisterProviderPage() {
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<ProviderApplicationStatus>('none');
   const [statusLoading, setStatusLoading] = useState(true);
   const [kycStatus, setKycStatus] = useState<ProviderKycStatus | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<ProviderVerificationStatus | null>(null);
   const [kycStatusLoading, setKycStatusLoading] = useState(true);
+  const [statusError, setStatusError] = useState<string | null>(null);
+  const [kycError, setKycError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
   const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000';
@@ -54,60 +72,72 @@ export default function RegisterProviderPage() {
     },
   });
 
-  useEffect(() => {
-    let mounted = true;
-    const run = async () => {
+  const refreshOnboardingState = useCallback(async () => {
+      setStatusLoading(true);
+      setKycStatusLoading(true);
+      setStatusError(null);
+      setKycError(null);
+
       try {
-        const res = await fetch('/api/provider/application', { method: 'GET' });
-        if (!mounted) return;
+        const res = await fetchWithTimeout('/api/provider/application', { method: 'GET' }, 9000);
         if (!res.ok) {
-          // If status lookup fails, don't block registration; keep form visible.
           setStatus('none');
-          return;
-        }
-        const data = (await res.json()) as { exists?: boolean; status?: ProviderApplicationStatus };
-        if (data?.status === 'pending' || data?.status === 'approved' || data?.status === 'rejected') {
-          setStatus(data.status);
+          setStatusError('Application status check failed. You can still continue.');
         } else {
-          setStatus('none');
+          const data = (await res.json()) as { exists?: boolean; status?: ProviderApplicationStatus };
+          if (data?.status === 'pending' || data?.status === 'approved' || data?.status === 'rejected') {
+            setStatus(data.status);
+          } else {
+            setStatus('none');
+          }
         }
+      } catch {
+        setStatus('none');
+        setStatusError('Application check timed out. You can still continue.');
       } finally {
-        if (mounted) setStatusLoading(false);
+        setStatusLoading(false);
       }
-    };
 
-    run();
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    const run = async () => {
       try {
-        const res = await fetch('/api/provider/kyc/status', { method: 'GET' });
-        if (!mounted) return;
+        const res = await fetchWithTimeout('/api/provider/kyc/status', { method: 'GET' }, 9000);
         if (!res.ok) {
           setKycStatus(null);
-          return;
+          setVerificationStatus(null);
+          setKycError('Verification status check failed.');
+        } else {
+          const data = (await res.json()) as {
+            exists?: boolean;
+            kycStatus?: ProviderKycStatus | null;
+            verificationStatus?: ProviderVerificationStatus | null;
+          };
+          setKycStatus(data?.exists ? (data.kycStatus ?? null) : null);
+          setVerificationStatus(data?.exists ? (data.verificationStatus ?? null) : null);
         }
-        const data = (await res.json()) as { exists?: boolean; kycStatus?: ProviderKycStatus | null };
-        setKycStatus(data?.exists ? (data.kycStatus ?? null) : null);
+      } catch {
+        setKycStatus(null);
+        setVerificationStatus(null);
+        setKycError('Verification status check timed out.');
       } finally {
-        if (mounted) setKycStatusLoading(false);
+        setKycStatusLoading(false);
       }
-    };
+    }, []);
 
-    run();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+  useEffect(() => {
+    void refreshOnboardingState();
+  }, [refreshOnboardingState]);
+
+  const onboardingState = useMemo<RegisterProviderState>(() => {
+    if (statusLoading || kycStatusLoading) return 'loading';
+    if (verificationStatus === 'unavailable') return 'unavailable';
+    if (verificationStatus === 'verified') return 'verified';
+    if (status === 'pending' || status === 'approved' || verificationStatus === 'pending') return 'pending';
+    if (statusError || kycError) return 'error';
+    return 'pending';
+  }, [kycError, kycStatusLoading, status, statusError, statusLoading, verificationStatus]);
 
   const isFormDisabled = useMemo(() => {
-    return statusLoading || status === 'pending' || status === 'approved';
-  }, [status, statusLoading]);
+    return status === 'pending' || status === 'approved';
+  }, [status]);
 
   const onSubmit = async (values: FormValues) => {
     setIsLoading(true);
@@ -226,9 +256,19 @@ export default function RegisterProviderPage() {
                   <p className="text-sm text-muted-foreground">
                     You’ll complete verification in Sumsub. It usually takes a few minutes.
                   </p>
+                  {verificationStatus !== 'verified' && (
+                    <p className="text-xs font-medium text-amber-700 dark:text-amber-400">
+                      Verification Required Before Payout
+                    </p>
+                  )}
                   {!kycStatusLoading && kycStatus && (
                     <p className="text-xs text-muted-foreground">
                       Status: <span className="font-medium text-foreground">{kycStatus.replace(/_/g, ' ')}</span>
+                    </p>
+                  )}
+                  {!kycStatusLoading && verificationStatus && (
+                    <p className="text-xs text-muted-foreground">
+                      Verification: <span className="font-medium text-foreground">{verificationStatus}</span>
                     </p>
                   )}
                 </div>
@@ -249,12 +289,32 @@ export default function RegisterProviderPage() {
                 </div>
               </div>
 
+              {onboardingState === 'unavailable' && (
+                <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  <p>
+                    Verification temporarily unavailable. You can continue setting up your profile. Verification will
+                    be required before payouts.
+                  </p>
+                  <div className="mt-2">
+                    <Button type="button" size="sm" variant="outline" onClick={() => void refreshOnboardingState()}>
+                      Retry
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              {onboardingState === 'error' && (
+                <div className="rounded-md border bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                  Couldn’t refresh verification status right now. You can continue onboarding and retry later.
+                </div>
+              )}
+
               {error && (
                 <p className="text-sm font-medium text-destructive">{error}</p>
               )}
 
               <Button type="submit" disabled={isFormDisabled || isLoading} className="w-full">
-                {statusLoading
+                {onboardingState === 'loading'
                   ? 'Checking application...'
                   : status === 'pending'
                     ? 'Awaiting approval'

@@ -4,7 +4,7 @@ import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/admin-auth";
 import { ProviderIdSchema, invalidResponse, parseParams } from "@/lib/validation/admin";
-import { sumsubRequest } from "@/lib/sumsub";
+import { safeSumsubRequest } from "@/lib/sumsub";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -59,18 +59,24 @@ async function resolveSumsubIdsForProvider(providerId: string): Promise<{
   let inspectionId = provider.sumsubInspectionId ?? null;
 
   if (!applicantId || !inspectionId) {
-    try {
-      const applicant = await sumsubRequest<{ id?: string; inspectionId?: string }>({
-        method: "GET",
-        pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(provider.userId)}/one`,
-      });
+    const applicant = await safeSumsubRequest<{ id?: string; inspectionId?: string }>({
+      context: "API_ADMIN_PROVIDER_KYC_IMAGES_RESOLVE_IDS",
+      method: "GET",
+      pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(provider.userId)}/one`,
+      extraLogFields: { providerId, userId: provider.userId },
+    });
 
-      if (!applicantId && typeof applicant?.id === "string" && applicant.id.trim()) {
-        applicantId = applicant.id;
+    if (applicant.ok) {
+      if (!applicantId && typeof applicant.data?.id === "string" && applicant.data.id.trim()) {
+        applicantId = applicant.data.id;
       }
 
-      if (!inspectionId && typeof applicant?.inspectionId === "string" && applicant.inspectionId.trim()) {
-        inspectionId = applicant.inspectionId;
+      if (
+        !inspectionId &&
+        typeof applicant.data?.inspectionId === "string" &&
+        applicant.data.inspectionId.trim()
+      ) {
+        inspectionId = applicant.data.inspectionId;
       }
 
       if ((applicantId && applicantId !== provider.sumsubApplicantId) || (inspectionId && inspectionId !== provider.sumsubInspectionId)) {
@@ -83,8 +89,6 @@ async function resolveSumsubIdsForProvider(providerId: string): Promise<{
           })
           .where(eq(providers.id, providerId));
       }
-    } catch {
-      // Best-effort: leave as nulls.
     }
   }
 
@@ -116,12 +120,26 @@ export async function GET(_req: Request, { params }: { params: Promise<{ provide
     });
   }
 
-  const metadata = await sumsubRequest<{ items?: SumsubImageItem[]; totalItems?: number }>({
+  const metadata = await safeSumsubRequest<{ items?: SumsubImageItem[]; totalItems?: number }>({
+    context: "API_ADMIN_PROVIDER_KYC_IMAGES_LIST",
     method: "GET",
     pathWithQuery: `/resources/applicants/${encodeURIComponent(ids.applicantId)}/metadata/resources`,
+    extraLogFields: { providerId, applicantId: ids.applicantId },
   });
 
-  const items = (metadata.items ?? []).map((item) => {
+  if (!metadata.ok) {
+    return NextResponse.json(
+      {
+        error: metadata.error,
+        message: "Failed to load Sumsub KYC images",
+        kind: metadata.kind,
+        statusCode: metadata.statusCode,
+      },
+      { status: 502 },
+    );
+  }
+
+  const items = (metadata.data.items ?? []).map((item) => {
     const previewUrl = item.previewId
       ? `/api/admin/providers/${encodeURIComponent(providerId)}/kyc/images/${encodeURIComponent(item.previewId)}`
       : null;
@@ -139,6 +157,6 @@ export async function GET(_req: Request, { params }: { params: Promise<{ provide
     sumsubInspectionId: ids.inspectionId,
     sumsubCockpitUrl: `https://cockpit.sumsub.com/checkus/#/applicants/${encodeURIComponent(ids.applicantId)}`,
     items,
-    totalItems: Number(metadata.totalItems ?? items.length),
+    totalItems: Number(metadata.data.totalItems ?? items.length),
   });
 }

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { sumsubRequest, type SumsubAccessTokenResponse } from "@/lib/sumsub";
+import { safeSumsubRequest, type SumsubAccessTokenResponse } from "@/lib/sumsub";
 
 export const runtime = "nodejs";
 
@@ -17,7 +17,7 @@ export async function POST() {
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
-      columns: { id: true, userId: true },
+      columns: { id: true, userId: true, verificationStatus: true },
     });
 
     if (!provider) {
@@ -32,7 +32,8 @@ export async function POST() {
 
     const ttlInSecs = Number(process.env.SUMSUB_ACCESS_TOKEN_TTL_SECS || 600);
 
-    const response = await sumsubRequest<SumsubAccessTokenResponse & Record<string, unknown>>({
+    const response = await safeSumsubRequest<SumsubAccessTokenResponse & Record<string, unknown>>({
+      context: "API_SUMSUB_ACCESS_TOKEN",
       method: "POST",
       pathWithQuery: "/resources/accessTokens/sdk",
       body: {
@@ -40,12 +41,46 @@ export async function POST() {
         levelName,
         ttlInSecs,
       },
+      extraLogFields: {
+        userId,
+        providerId: provider.id,
+      },
     });
 
-    return NextResponse.json(response);
+    if (!response.ok) {
+      await db
+        .update(providers)
+        .set({
+          verificationStatus: "unavailable",
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.id, provider.id));
+
+      return NextResponse.json(
+        {
+          ok: false,
+          error: response.error,
+          kind: response.kind,
+          statusCode: response.statusCode,
+          message: "Verification temporarily unavailable. You can continue setting up your profile.",
+        },
+        { status: 200 },
+      );
+    }
+
+    if (provider.verificationStatus === "unavailable") {
+      await db
+        .update(providers)
+        .set({
+          verificationStatus: "pending",
+          updatedAt: new Date(),
+        })
+        .where(eq(providers.id, provider.id));
+    }
+
+    return NextResponse.json({ ok: true, ...response.data });
   } catch (error) {
     console.error("[API_SUMSUB_ACCESS_TOKEN] Error generating access token:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return new NextResponse(message, { status: 500 });
+    return new NextResponse("Internal Server Error", { status: 500 });
   }
 }

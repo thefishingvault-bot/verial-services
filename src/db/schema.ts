@@ -28,6 +28,12 @@ export const kycStatusEnum = pgEnum("kyc_status", [
   "verified",
   "rejected"
 ]);
+export const verificationStatusEnum = pgEnum("verification_status", [
+  "pending",
+  "verified",
+  "unavailable",
+  "rejected",
+]);
 
 export const providerPlanEnum = pgEnum("provider_plan", ["starter", "pro", "elite", "unknown"]);
 
@@ -192,6 +198,7 @@ export const providers = pgTable("providers", {
 
   // KYC / Identity
   kycStatus: kycStatusEnum("kyc_status").default("not_started").notNull(),
+  verificationStatus: verificationStatusEnum("verification_status").default("pending").notNull(),
   identityDocumentUrl: text("identity_document_url"),
   businessDocumentUrl: text("business_document_url"),
   sumsubApplicantId: varchar("sumsub_applicant_id", { length: 255 }),

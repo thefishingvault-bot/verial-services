@@ -379,6 +379,13 @@
       "when": 1771003600000,
       "tag": "0048_job_request_invites_questions",
       "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1771264800000,
+      "tag": "0049_sumsub_verification_fallback",
+      "breakpoints": true
     }
   ]
 }

@@ -21,6 +21,7 @@ export async function GET() {
         handle: true,
         updatedAt: true,
         createdAt: true,
+        verificationStatus: true,
       },
     });
 
@@ -32,6 +33,7 @@ export async function GET() {
         isVerified: false,
         businessName: null,
         handle: null,
+        verificationStatus: null,
         createdAt: null,
         updatedAt: null,
       });
@@ -44,6 +46,7 @@ export async function GET() {
       isVerified: provider.isVerified,
       businessName: provider.businessName,
       handle: provider.handle,
+      verificationStatus: provider.verificationStatus,
       createdAt: provider.createdAt,
       updatedAt: provider.updatedAt,
     });

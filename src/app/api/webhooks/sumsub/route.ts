@@ -4,7 +4,7 @@ import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
 import { headers } from "next/headers";
 import crypto from "crypto";
-import { sumsubRequest } from "@/lib/sumsub";
+import { safeSumsubRequest } from "@/lib/sumsub";
 
 export const runtime = "nodejs";
 
@@ -78,6 +78,7 @@ function pickInspectionId(payload: SumsubWebhookPayload): string | null {
 
 function mapKycStatus(payload: SumsubWebhookPayload): {
   kycStatus: "not_started" | "in_progress" | "pending_review" | "verified" | "rejected";
+  verificationStatus: "pending" | "verified" | "rejected";
   setSubmittedAt: boolean;
   setVerifiedAt: boolean;
 } | null {
@@ -95,29 +96,64 @@ function mapKycStatus(payload: SumsubWebhookPayload): {
     const normalized = reviewStatus.toLowerCase();
 
     if (normalized.includes("pending") || normalized.includes("queued") || normalized.includes("onhold")) {
-      return { kycStatus: "pending_review", setSubmittedAt: true, setVerifiedAt: false };
+      return {
+        kycStatus: "pending_review",
+        verificationStatus: "pending",
+        setSubmittedAt: true,
+        setVerifiedAt: false,
+      };
     }
 
     if (normalized.includes("completed")) {
       if (reviewAnswer === "GREEN") {
-        return { kycStatus: "verified", setSubmittedAt: true, setVerifiedAt: true };
+        return {
+          kycStatus: "verified",
+          verificationStatus: "verified",
+          setSubmittedAt: true,
+          setVerifiedAt: true,
+        };
       }
       if (reviewAnswer === "RED") {
-        return { kycStatus: "rejected", setSubmittedAt: true, setVerifiedAt: false };
+        return {
+          kycStatus: "rejected",
+          verificationStatus: "rejected",
+          setSubmittedAt: true,
+          setVerifiedAt: false,
+        };
       }
-      return { kycStatus: "pending_review", setSubmittedAt: true, setVerifiedAt: false };
+      return {
+        kycStatus: "pending_review",
+        verificationStatus: "pending",
+        setSubmittedAt: true,
+        setVerifiedAt: false,
+      };
     }
   }
 
   if (reviewAnswer === "GREEN") {
-    return { kycStatus: "verified", setSubmittedAt: true, setVerifiedAt: true };
+    return {
+      kycStatus: "verified",
+      verificationStatus: "verified",
+      setSubmittedAt: true,
+      setVerifiedAt: true,
+    };
   }
 
   if (reviewAnswer === "RED") {
-    return { kycStatus: "rejected", setSubmittedAt: true, setVerifiedAt: false };
+    return {
+      kycStatus: "rejected",
+      verificationStatus: "rejected",
+      setSubmittedAt: true,
+      setVerifiedAt: false,
+    };
   }
 
-  return { kycStatus: "in_progress", setSubmittedAt: false, setVerifiedAt: false };
+  return {
+    kycStatus: "in_progress",
+    verificationStatus: "pending",
+    setSubmittedAt: false,
+    setVerifiedAt: false,
+  };
 }
 
 function safeTimingEqualHex(aHex: string, bHex: string): boolean {
@@ -279,6 +315,7 @@ export async function POST(req: Request) {
         kycVerifiedAt: true,
         sumsubApplicantId: true,
         sumsubInspectionId: true,
+        verificationStatus: true,
       },
     });
 
@@ -295,29 +332,31 @@ export async function POST(req: Request) {
     // If webhook didn't carry IDs, try resolving via externalUserId.
     // This keeps admin document retrieval working even if Sumsub webhook schema changes.
     if (!sumsubApplicantId || !sumsubInspectionId) {
-      try {
-        const applicant = await sumsubRequest<{ id?: string; inspectionId?: string }>({
-          method: "GET",
-          pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(externalUserId)}/one`,
-        });
+      const applicant = await safeSumsubRequest<{ id?: string; inspectionId?: string }>({
+        context: "API_SUMSUB_WEBHOOK_RESOLVE_IDS",
+        method: "GET",
+        pathWithQuery: `/resources/applicants/-;externalUserId=${encodeURIComponent(externalUserId)}/one`,
+        extraLogFields: { externalUserId },
+      });
 
-        if (!sumsubApplicantId && typeof applicant?.id === "string" && applicant.id.trim()) {
-          sumsubApplicantId = applicant.id;
+      if (applicant.ok) {
+        if (!sumsubApplicantId && typeof applicant.data?.id === "string" && applicant.data.id.trim()) {
+          sumsubApplicantId = applicant.data.id;
         }
 
-        if (!sumsubInspectionId && typeof applicant?.inspectionId === "string" && applicant.inspectionId.trim()) {
-          sumsubInspectionId = applicant.inspectionId;
+        if (
+          !sumsubInspectionId &&
+          typeof applicant.data?.inspectionId === "string" &&
+          applicant.data.inspectionId.trim()
+        ) {
+          sumsubInspectionId = applicant.data.inspectionId;
         }
-      } catch (error) {
-        console.warn("[API_SUMSUB_WEBHOOK] Failed to resolve applicant IDs via externalUserId", {
-          externalUserId,
-          error: error instanceof Error ? error.message : String(error),
-        });
       }
     }
 
     const updates: {
       kycStatus: "not_started" | "in_progress" | "pending_review" | "verified" | "rejected";
+      verificationStatus: "pending" | "verified" | "unavailable" | "rejected";
       kycSubmittedAt: Date | null;
       kycVerifiedAt: Date | null;
       updatedAt: Date;
@@ -325,6 +364,7 @@ export async function POST(req: Request) {
       sumsubInspectionId?: string | null;
     } = {
       kycStatus: mapped.kycStatus,
+      verificationStatus: mapped.verificationStatus,
       kycSubmittedAt: mapped.setSubmittedAt ? provider.kycSubmittedAt ?? now : provider.kycSubmittedAt,
       kycVerifiedAt: mapped.setVerifiedAt ? provider.kycVerifiedAt ?? now : provider.kycVerifiedAt,
       updatedAt: now,

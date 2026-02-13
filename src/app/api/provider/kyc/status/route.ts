@@ -15,14 +15,18 @@ export async function GET() {
 
     const provider = await db.query.providers.findFirst({
       where: eq(providers.userId, userId),
-      columns: { kycStatus: true },
+      columns: { kycStatus: true, verificationStatus: true },
     });
 
     if (!provider) {
-      return NextResponse.json({ exists: false, kycStatus: null });
+      return NextResponse.json({ exists: false, kycStatus: null, verificationStatus: null });
     }
 
-    return NextResponse.json({ exists: true, kycStatus: provider.kycStatus });
+    return NextResponse.json({
+      exists: true,
+      kycStatus: provider.kycStatus,
+      verificationStatus: provider.verificationStatus,
+    });
   } catch (error) {
     console.error("[API_PROVIDER_KYC_STATUS]", error);
     return new NextResponse("Internal Server Error", { status: 500 });
