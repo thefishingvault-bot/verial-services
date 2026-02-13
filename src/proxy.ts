@@ -115,7 +115,7 @@ export default clerkMiddleware(async (auth, req) => {
 
   if (!maintenance) {
     // Explicitly protect non-public routes
-    if (!isPublicRoute(req)) auth.protect();
+    if (!isPublicRoute(req)) await auth.protect();
 
     const isPageRequest = !pathname.startsWith("/api");
 
@@ -221,7 +221,7 @@ export default clerkMiddleware(async (auth, req) => {
   }
 
   // Ensure protected routes still require auth (even in maintenance).
-  if (!isPublicRoute(req)) auth.protect();
+  if (!isPublicRoute(req)) await auth.protect();
   return NextResponse.next();
 });
 

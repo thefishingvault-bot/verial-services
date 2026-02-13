@@ -21,8 +21,6 @@ export async function GET(req: NextRequest) {
   const maskable = isTruthy(req.nextUrl.searchParams.get("maskable"));
   const padding = maskable ? Math.round(size * 0.16) : Math.round(size * 0.1);
 
-  const logoUrl = new URL("/Verial.jpg", req.url).toString();
-
   const outerStyle: React.CSSProperties = {
     width: size,
     height: size,
@@ -40,6 +38,13 @@ export async function GET(req: NextRequest) {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: Math.round(size * 0.16),
+    background: "linear-gradient(135deg, #1d4ed8 0%, #0ea5e9 100%)",
+    color: "#ffffff",
+    fontFamily: "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+    fontWeight: 700,
+    fontSize: Math.round((size - padding * 2) * 0.52),
+    lineHeight: 1,
   };
 
   const element = React.createElement(
@@ -48,16 +53,7 @@ export async function GET(req: NextRequest) {
     React.createElement(
       "div",
       { style: innerStyle },
-      React.createElement("img", {
-        src: logoUrl,
-        width: size - padding * 2,
-        height: size - padding * 2,
-        style: {
-          width: "100%",
-          height: "100%",
-          objectFit: "contain",
-        },
-      }),
+      React.createElement("span", null, "V"),
     ),
   );
 
