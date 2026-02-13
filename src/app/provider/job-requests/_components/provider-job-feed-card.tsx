@@ -97,6 +97,8 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
 
   const quote = quoteBadge(job.quoteState);
   const detailHref = `/provider/job-requests/${job.id}`;
+  const quoteHref = `/provider/job-requests/${job.id}?tab=quote`;
+  const qaHref = `/provider/job-requests/${job.id}?tab=qa`;
   const photos = job.photos;
   const moreCount = Math.max(0, photos.length - 4);
 
@@ -234,14 +236,14 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
         <div className="flex flex-wrap items-center gap-2 border-t pt-3" onClick={(event) => event.stopPropagation()}>
           {job.quoteState === "none" ? (
             <Button asChild>
-              <Link href={detailHref}>
+              <Link href={quoteHref}>
                 <Send className="mr-2 h-4 w-4" />
                 Send quote
               </Link>
             </Button>
           ) : (
             <Button asChild>
-              <Link href={detailHref}>
+              <Link href={quoteHref}>
                 <Eye className="mr-2 h-4 w-4" />
                 View quote
               </Link>
@@ -258,7 +260,7 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
           </Button>
 
           <Button variant="ghost" asChild>
-            <Link href={`${detailHref}#questions`}>
+            <Link href={qaHref}>
               <MessageCircle className="mr-2 h-4 w-4" />
               Ask a question
             </Link>

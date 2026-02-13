@@ -13,9 +13,18 @@ import { parseCustomerJobDescription } from "@/lib/customer-job-meta";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function ProviderJobRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProviderJobRequestDetailPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ tab?: string }>;
+}) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
+
+  const query = await searchParams;
+  const initialTab = query.tab === "quote" || query.tab === "qa" ? query.tab : "overview";
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
@@ -120,6 +129,7 @@ export default async function ProviderJobRequestDetailPage({ params }: { params:
         isAssignedProvider={isAssignedProvider}
         remainingAmount={job.remainingAmount}
         questions={questions}
+        initialTab={initialTab}
       />
     </div>
   );

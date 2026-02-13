@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ type ProviderJobViewProps = {
   jobId: string;
   status: string;
   paymentStatus: string;
+  initialTab: "overview" | "quote" | "qa";
   myQuote: {
     amountTotal: number;
     availability: string | null;
@@ -34,6 +35,9 @@ type ProviderJobViewProps = {
 export function ProviderJobView(props: ProviderJobViewProps) {
   const [isPending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const quoteSectionRef = useRef<HTMLDivElement | null>(null);
+  const qaSectionRef = useRef<HTMLDivElement | null>(null);
+  const qaInputRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [amountTotal, setAmountTotal] = useState(String(props.myQuote?.amountTotal ?? ""));
   const [availability, setAvailability] = useState(props.myQuote?.availability ?? "");
@@ -41,6 +45,37 @@ export function ProviderJobView(props: ProviderJobViewProps) {
   const [excluded, setExcluded] = useState(props.myQuote?.excluded ?? "");
   const [responseSpeedHours, setResponseSpeedHours] = useState(String(props.myQuote?.responseSpeedHours ?? 24));
   const [newQuestion, setNewQuestion] = useState("");
+
+  useEffect(() => {
+    if (props.initialTab === "overview") return;
+
+    const raf = window.requestAnimationFrame(() => {
+      if (props.initialTab === "quote") {
+        const target = quoteSectionRef.current;
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          return;
+        }
+      }
+
+      if (props.initialTab === "qa") {
+        const target = qaSectionRef.current;
+        if (target) {
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          window.setTimeout(() => {
+            qaInputRef.current?.focus({ preventScroll: true });
+          }, 250);
+          return;
+        }
+      }
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+    };
+  }, [props.initialTab]);
 
   const submitQuote = () => {
     startTransition(async () => {
@@ -128,7 +163,7 @@ export function ProviderJobView(props: ProviderJobViewProps) {
           <CardTitle>Quote form</CardTitle>
           <CardDescription>Submit a structured quote for this request.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3" id="quote" ref={quoteSectionRef}>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <label className="mb-1 block text-sm">Price (cents)</label>
@@ -186,7 +221,7 @@ export function ProviderJobView(props: ProviderJobViewProps) {
         <CardHeader>
           <CardTitle>Public Q&A</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-3" id="qa" ref={qaSectionRef}>
           <div className="space-y-2">
             {props.questions.length === 0 ? (
               <p className="text-sm text-muted-foreground">No questions yet.</p>
@@ -200,7 +235,7 @@ export function ProviderJobView(props: ProviderJobViewProps) {
             )}
           </div>
           <div className="space-y-2">
-            <Textarea value={newQuestion} onChange={(event) => setNewQuestion(event.target.value)} rows={2} />
+            <Textarea ref={qaInputRef} value={newQuestion} onChange={(event) => setNewQuestion(event.target.value)} rows={2} />
             <Button disabled={isPending} onClick={submitQuestion}>Ask Question</Button>
           </div>
         </CardContent>
