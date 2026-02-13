@@ -28,23 +28,32 @@ export const viewport = {
   themeColor: "#0b1220",
 };
 
+const clerkPublishableKey =
+  process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY;
+
+function AppBody({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en">
+      <body className={inter.className}>
+        <ToastProvider>
+          {children}
+          <Toaster />
+          <SonnerToaster richColors />
+          <PwaInstallPrompt />
+        </ToastProvider>
+      </body>
+    </html>
+  );
+}
+
 export default function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
   return (
-    <ClerkProvider>
-      <html lang="en">
-        <body className={inter.className}>
-          <ToastProvider>
-            {children}
-            <Toaster />
-            <SonnerToaster richColors />
-            <PwaInstallPrompt />
-          </ToastProvider>
-        </body>
-      </html>
+    <ClerkProvider publishableKey={clerkPublishableKey}>
+      <AppBody>{children}</AppBody>
     </ClerkProvider>
   );
 }

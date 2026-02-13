@@ -3,6 +3,10 @@ import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   typedRoutes: false,
+  env: {
+    NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY:
+      process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? process.env.CLERK_PUBLISHABLE_KEY,
+  },
   typescript: {
     // Never ship with TypeScript errors.
     // If you need temporary local lenience, set ALLOW_BUILD_ERRORS=true in non-production only.
