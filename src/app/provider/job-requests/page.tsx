@@ -1,19 +1,57 @@
-import Link from "next/link";
 import { auth } from "@clerk/nextjs/server";
-import { desc, eq, or } from "drizzle-orm";
+import { desc, eq, inArray, or } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequests, providers } from "@/db/schema";
+import {
+  normalizeJobStatus,
+  parseCustomerJobDescription,
+  type CanonicalJobStatus,
+} from "@/lib/customer-job-meta";
+import { ProviderJobFeedList } from "./_components/provider-job-feed-list";
+import type { ProviderFeedFilter, ProviderFeedJob, ProviderFeedSort, ProviderQuoteState } from "./_components/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-export default async function ProviderJobRequestsPage() {
+type ProviderJobFeedSearchParams = {
+  filter?: string;
+  sort?: string;
+};
+
+function normalizeFilter(input: string | undefined): ProviderFeedFilter {
+  if (input === "open" || input === "assigned" || input === "completed" || input === "saved") return input;
+  return "all";
+}
+
+function normalizeSort(input: string | undefined): ProviderFeedSort {
+  return input === "oldest" ? "oldest" : "newest";
+}
+
+function mapQuoteState(status: string | undefined): ProviderQuoteState {
+  if (status === "submitted") return "submitted";
+  if (status === "accepted") return "accepted";
+  if (status === "rejected") return "rejected";
+  return "none";
+}
+
+function canProviderSeeInFeed(jobStatus: CanonicalJobStatus, hasMyQuote: boolean, isAssignedToMe: boolean) {
+  if (isAssignedToMe || hasMyQuote) return true;
+  return jobStatus === "Open" || jobStatus === "Quoting";
+}
+
+export default async function ProviderJobRequestsPage({
+  searchParams,
+}: {
+  searchParams: Promise<ProviderJobFeedSearchParams>;
+}) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
+
+  const query = await searchParams;
+  const initialFilter = normalizeFilter(query.filter);
+  const initialSort = normalizeSort(query.sort);
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
@@ -22,15 +60,30 @@ export default async function ProviderJobRequestsPage() {
 
   if (!provider) redirect("/dashboard");
 
+  const myQuotes = await db.query.jobQuotes.findMany({
+    where: eq(jobQuotes.providerId, provider.id),
+    columns: { id: true, jobRequestId: true, status: true },
+  });
+
+  const quotedJobIds = myQuotes.map((quote) => quote.jobRequestId);
+
+  const visibilityWhere = quotedJobIds.length > 0
+    ? or(
+        eq(jobRequests.status, "open"),
+        eq(jobRequests.assignedProviderId, userId),
+        inArray(jobRequests.id, quotedJobIds),
+      )
+    : or(eq(jobRequests.status, "open"), eq(jobRequests.assignedProviderId, userId));
+
   const jobs = await db.query.jobRequests.findMany({
-    where: or(eq(jobRequests.status, "open"), eq(jobRequests.assignedProviderId, userId)),
+    where: visibilityWhere,
     columns: {
       id: true,
       title: true,
+      description: true,
       suburb: true,
       region: true,
       status: true,
-      paymentStatus: true,
       createdAt: true,
       assignedProviderId: true,
     },
@@ -38,46 +91,51 @@ export default async function ProviderJobRequestsPage() {
     limit: 100,
   });
 
-  const myQuotes = await db.query.jobQuotes.findMany({
-    where: eq(jobQuotes.providerId, provider.id),
-    columns: { id: true, jobRequestId: true, status: true, amountTotal: true },
-  });
+  let quoteCountByJobId = new Map<string, number>();
+  if (jobs.length > 0) {
+    const quoteRows = await db.query.jobQuotes.findMany({
+      where: inArray(jobQuotes.jobRequestId, jobs.map((job) => job.id)),
+      columns: { jobRequestId: true },
+    });
 
-  const quoteMap = new Map(myQuotes.map((quote) => [quote.jobRequestId, quote]));
+    quoteCountByJobId = quoteRows.reduce((map, quote) => {
+      map.set(quote.jobRequestId, (map.get(quote.jobRequestId) ?? 0) + 1);
+      return map;
+    }, new Map<string, number>());
+  }
+
+  const myQuoteByJobId = new Map(myQuotes.map((quote) => [quote.jobRequestId, quote]));
+  const assignedByJobId = new Map(jobs.map((job) => [job.id, job.assignedProviderId === userId]));
+
+  const feedJobs: ProviderFeedJob[] = jobs
+    .map((job) => {
+      const quoteCount = quoteCountByJobId.get(job.id) ?? 0;
+      const jobStatus = normalizeJobStatus(job.status, quoteCount);
+      const myQuote = myQuoteByJobId.get(job.id);
+      const parsed = parseCustomerJobDescription(job.description);
+
+      return {
+        id: job.id,
+        title: job.title,
+        description: parsed.description,
+        suburb: job.suburb,
+        region: job.region,
+        createdAt: job.createdAt.toISOString(),
+        category: parsed.category,
+        budget: parsed.budget,
+        timing: parsed.timing,
+        jobStatus,
+        quoteState: mapQuoteState(myQuote?.status),
+        photos: parsed.photoUrls.map((url, index) => ({ url, sortOrder: index })),
+      };
+    })
+    .filter((job) => {
+      const hasMyQuote = job.quoteState !== "none";
+      const isAssignedToMe = assignedByJobId.get(job.id) ?? false;
+      return canProviderSeeInFeed(job.jobStatus, hasMyQuote, isAssignedToMe);
+    });
 
   return (
-    <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Job requests</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {jobs.map((job) => {
-            const myQuote = quoteMap.get(job.id);
-            return (
-              <Link key={job.id} href={`/provider/job-requests/${job.id}`} className="block rounded-md border p-3 hover:bg-muted/40">
-                <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <div className="font-medium">{job.title}</div>
-                    <div className="text-xs text-muted-foreground">{job.suburb ?? "-"}, {job.region ?? "-"}</div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Badge>{job.status}</Badge>
-                    <Badge variant="secondary">{job.paymentStatus}</Badge>
-                  </div>
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {myQuote
-                    ? `Your quote: NZ$${(myQuote.amountTotal / 100).toFixed(2)} (${myQuote.status})`
-                    : job.status === "open"
-                      ? "No quote submitted yet"
-                      : "Job assigned"}
-                </div>
-              </Link>
-            );
-          })}
-        </CardContent>
-      </Card>
-    </div>
+    <ProviderJobFeedList jobs={feedJobs} initialFilter={initialFilter} initialSort={initialSort} />
   );
 }
