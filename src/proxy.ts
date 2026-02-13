@@ -5,6 +5,11 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { users } from "@/db/schema";
 
+function withProxyHeader(response: NextResponse): NextResponse {
+  response.headers.set("x-verial-proxy", "1");
+  return response;
+}
+
 function isClerkInternalPath(pathname: string): boolean {
   return pathname === "/_clerk" || pathname.startsWith("/_clerk/");
 }
@@ -126,12 +131,12 @@ export default clerkMiddleware(async (auth, req) => {
       !isOnboardingRoute(req);
 
     if (!shouldCheckOnboarding) {
-      return NextResponse.next();
+      return withProxyHeader(NextResponse.next());
     }
 
     try {
       const { userId } = await auth();
-      if (!userId) return NextResponse.next();
+      if (!userId) return withProxyHeader(NextResponse.next());
 
       const row = await db.query.users.findFirst({
         where: eq(users.id, userId),
@@ -140,32 +145,32 @@ export default clerkMiddleware(async (auth, req) => {
 
       // Don't block admins/providers on customer onboarding.
       if (row?.role === "admin" || row?.role === "provider") {
-        return NextResponse.next();
+        return withProxyHeader(NextResponse.next());
       }
 
       if (!row?.profileCompleted) {
         const url = req.nextUrl.clone();
         url.pathname = "/onboarding";
         url.search = "";
-        return NextResponse.redirect(url);
+        return withProxyHeader(NextResponse.redirect(url));
       }
     } catch (err) {
       console.error("[PROXY_PROFILE_GUARD]", err);
       // Fail open if DB is unreachable.
     }
 
-    return NextResponse.next();
+    return withProxyHeader(NextResponse.next());
   }
 
   // maintenance ON -> allow minimal routes; send everything else to waitlist
   // Important: do NOT allow '/' during maintenance, so visitors land on /waitlist.
   if (isAlwaysAllowedInMaintenance(req) || isClerkInternalPath(pathname)) {
-    return NextResponse.next();
+    return withProxyHeader(NextResponse.next());
   }
 
   // Auth pages/callbacks must remain reachable for everyone during maintenance.
   if (isClerkAuthPath(pathname)) {
-    return NextResponse.next();
+    return withProxyHeader(NextResponse.next());
   }
 
   // Everything else during maintenance requires a signed-in user with admin OR early access.
@@ -184,7 +189,7 @@ export default clerkMiddleware(async (auth, req) => {
     const url = req.nextUrl.clone();
     url.pathname = "/waitlist";
     url.search = "";
-    return NextResponse.redirect(url);
+    return withProxyHeader(NextResponse.redirect(url));
   }
 
   // Server-side gate: allow only admins or users with earlyProviderAccess=true. Fail closed.
@@ -209,7 +214,7 @@ export default clerkMiddleware(async (auth, req) => {
       const url = req.nextUrl.clone();
       url.pathname = "/waitlist";
       url.search = "";
-      return NextResponse.redirect(url);
+      return withProxyHeader(NextResponse.redirect(url));
     }
   } catch (err) {
     console.error("[PROXY_MAINTENANCE_EARLY_ACCESS_GUARD]", err);
@@ -217,12 +222,12 @@ export default clerkMiddleware(async (auth, req) => {
     const url = req.nextUrl.clone();
     url.pathname = "/waitlist";
     url.search = "";
-    return NextResponse.redirect(url);
+    return withProxyHeader(NextResponse.redirect(url));
   }
 
   // Ensure protected routes still require auth (even in maintenance).
   if (!isPublicRoute(req)) await auth.protect();
-  return NextResponse.next();
+  return withProxyHeader(NextResponse.next());
 });
 
 export const config = {
