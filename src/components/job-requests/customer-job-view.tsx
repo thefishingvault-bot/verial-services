@@ -24,6 +24,7 @@ import {
   normalizePaymentStatus,
 } from "@/lib/customer-job-meta";
 import { useToast } from "@/components/ui/use-toast";
+import { JobPaymentDialog } from "@/components/job-requests/job-payment-dialog";
 
 type QuoteItem = {
   id: string;
@@ -113,6 +114,9 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
   const [reopenDialogOpen, setReopenDialogOpen] = useState(false);
+  const [paymentClientSecret, setPaymentClientSecret] = useState<string | null>(null);
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [paymentType, setPaymentType] = useState<"deposit" | "full" | "remainder">("deposit");
 
   const canonicalJobStatus = normalizeJobStatus(job.status, quotes.length);
   const canonicalPaymentStatus = normalizePaymentStatus(job.paymentStatus, canonicalJobStatus);
@@ -144,14 +148,36 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
         body: JSON.stringify({ quoteId }),
       });
 
-      const payload = await res.json().catch(() => ({}));
+      const bodyText = await res.text().catch(() => "");
+      const payload = ((): {
+        error?: string;
+        clientSecret?: string | null;
+        paymentType?: "deposit" | "full";
+      } | null => {
+        if (!bodyText) return null;
+        try {
+          return JSON.parse(bodyText) as {
+            error?: string;
+            clientSecret?: string | null;
+            paymentType?: "deposit" | "full";
+          };
+        } catch {
+          return null;
+        }
+      })();
       if (!res.ok) {
-        setMessage(typeof payload === "object" && payload && "error" in payload ? String(payload.error) : "Unable to accept quote");
+        setMessage((payload?.error ?? bodyText) || "Unable to accept quote");
         return;
       }
 
-      setMessage("Quote accepted. Stripe PaymentIntent created; complete payment to assign the job.");
-      window.location.reload();
+      if (!payload?.clientSecret) {
+        setMessage("Payment form could not be prepared. Please try again.");
+        return;
+      }
+
+      setPaymentType(payload.paymentType ?? "deposit");
+      setPaymentClientSecret(payload.clientSecret);
+      setPaymentDialogOpen(true);
     });
   };
 
@@ -160,11 +186,22 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
       setMessage(null);
       const res = await fetch(`/api/customer/job-requests/${job.id}/pay-remaining`, { method: "POST" });
       if (!res.ok) {
-        setMessage(await res.text());
+        setMessage((await res.text().catch(() => "")) || "Unable to create remaining payment.");
         return;
       }
-      setMessage("Remaining payment intent created. Complete payment to close this job.");
-      window.location.reload();
+
+      const payload = (await res.json().catch(() => null)) as {
+        clientSecret?: string | null;
+      } | null;
+
+      if (!payload?.clientSecret) {
+        setMessage("Payment form could not be prepared. Please try again.");
+        return;
+      }
+
+      setPaymentType("remainder");
+      setPaymentClientSecret(payload.clientSecret);
+      setPaymentDialogOpen(true);
     });
   };
 
@@ -461,6 +498,27 @@ export function CustomerJobView({ job, quotes, bestValueQuoteId, fastestQuoteId,
           )}
         </div>
       </div>
+
+      <JobPaymentDialog
+        open={paymentDialogOpen}
+        onOpenChange={setPaymentDialogOpen}
+        clientSecret={paymentClientSecret}
+        title={paymentType === "remainder" ? "Pay remaining balance" : "Complete deposit payment"}
+        description={
+          paymentType === "remainder"
+            ? "Confirm your remaining payment to close this job."
+            : "Securely complete payment to lock in this quote."
+        }
+        confirmLabel={paymentType === "remainder" ? "Pay remaining" : "Pay now"}
+        onSuccess={() => {
+          toast({
+            title: "Payment submitted",
+            description: "Your payment is processing. Refreshing job details...",
+          });
+          setPaymentDialogOpen(false);
+          router.refresh();
+        }}
+      />
     </div>
   );
 }

@@ -79,6 +79,7 @@ export async function POST(_: Request, { params }: { params: Promise<{ jobId: st
   });
 
   if (split.amountTotal <= 0) return new NextResponse("No remaining amount to charge", { status: 400 });
+  if (split.amountTotal < 50) return new NextResponse("Payment amount must be at least NZ$0.50", { status: 400 });
 
   const paymentIntent = await stripe.paymentIntents.create({
     amount: split.amountTotal,

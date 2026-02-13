@@ -39,7 +39,9 @@ export function ProviderJobView(props: ProviderJobViewProps) {
   const qaSectionRef = useRef<HTMLDivElement | null>(null);
   const qaInputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  const [amountTotal, setAmountTotal] = useState(String(props.myQuote?.amountTotal ?? ""));
+  const [amountTotal, setAmountTotal] = useState(
+    props.myQuote?.amountTotal ? (props.myQuote.amountTotal / 100).toFixed(2) : "",
+  );
   const [availability, setAvailability] = useState(props.myQuote?.availability ?? "");
   const [included, setIncluded] = useState(props.myQuote?.included ?? "");
   const [excluded, setExcluded] = useState(props.myQuote?.excluded ?? "");
@@ -78,13 +80,22 @@ export function ProviderJobView(props: ProviderJobViewProps) {
   }, [props.initialTab]);
 
   const submitQuote = () => {
+    const normalizedAmount = amountTotal.replace(/,/g, "").trim();
+    const amountInDollars = Number(normalizedAmount);
+    const amountInCents = Math.round(amountInDollars * 100);
+
+    if (!Number.isFinite(amountInDollars) || amountInCents <= 0) {
+      setMessage("Enter a valid amount in NZD, for example 150.00.");
+      return;
+    }
+
     startTransition(async () => {
       setMessage(null);
       const res = await fetch(`/api/provider/job-requests/${props.jobId}/quote`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          amountTotal: Number(amountTotal),
+          amountTotal: amountInCents,
           availability,
           included,
           excluded,
@@ -166,8 +177,18 @@ export function ProviderJobView(props: ProviderJobViewProps) {
         <CardContent className="space-y-3" id="quote" ref={quoteSectionRef}>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-sm">Price (cents)</label>
-              <Input value={amountTotal} onChange={(event) => setAmountTotal(event.target.value)} disabled={isPending || !props.canEditQuote} />
+              <label className="mb-1 block text-sm">Price (NZD)</label>
+              <Input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="0.01"
+                value={amountTotal}
+                onChange={(event) => setAmountTotal(event.target.value)}
+                disabled={isPending || !props.canEditQuote}
+                placeholder="150.00"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">Enter dollars (e.g. 150.00). We store this in cents automatically.</p>
             </div>
             <div>
               <label className="mb-1 block text-sm">Response speed (hours)</label>
