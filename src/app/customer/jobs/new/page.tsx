@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { Loader2, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -28,6 +30,8 @@ export default function NewCustomerJobPage() {
   const [budget, setBudget] = useState<(typeof JOB_BUDGET_OPTIONS)[number]>("Not sure / Get quotes");
   const [timing, setTiming] = useState<(typeof JOB_TIMING_OPTIONS)[number]>("ASAP");
   const [requestedDate, setRequestedDate] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -63,6 +67,7 @@ export default function NewCustomerJobPage() {
           budget,
           timing,
           requestedDate: timing === "Choose date" ? requestedDate || null : null,
+          photoUrls,
         }),
       });
 
@@ -78,6 +83,60 @@ export default function NewCustomerJobPage() {
       });
       router.push(`/customer/jobs/${created.id}`);
     });
+  };
+
+  const uploadPhotos = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const incoming = Array.from(files);
+    if (photoUrls.length + incoming.length > 8) {
+      setError("You can upload up to 8 photos.");
+      return;
+    }
+
+    setError(null);
+    setIsUploadingPhotos(true);
+
+    try {
+      const uploaded: string[] = [];
+      for (const file of incoming) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error("Each photo must be 5MB or smaller.");
+        }
+
+        const presignRes = await fetch("/api/uploads/presign-job-photo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileType: file.type, fileSize: file.size }),
+        });
+
+        if (!presignRes.ok) {
+          throw new Error(await presignRes.text());
+        }
+
+        const { uploadUrl, publicUrl } = (await presignRes.json()) as { uploadUrl: string; publicUrl: string };
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload photo.");
+        }
+
+        uploaded.push(publicUrl);
+      }
+
+      setPhotoUrls((prev) => [...prev, ...uploaded].slice(0, 8));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload photos.");
+    } finally {
+      setIsUploadingPhotos(false);
+    }
   };
 
   return (
@@ -110,6 +169,42 @@ export default function NewCustomerJobPage() {
             <div className="mt-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
               Tip: Include photos, measurements, access notes, and when you need it done.
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="mb-1 block text-sm">Photos (optional)</label>
+            <div className="flex items-center gap-2">
+              <Input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                multiple
+                disabled={isPending || isUploadingPhotos || photoUrls.length >= 8}
+                onChange={(event) => {
+                  void uploadPhotos(event.target.files);
+                  event.currentTarget.value = "";
+                }}
+              />
+              {isUploadingPhotos && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+            </div>
+            <p className="text-xs text-muted-foreground">Upload up to 8 photos. JPG, PNG, or WEBP. Max 5MB each.</p>
+
+            {photoUrls.length > 0 && (
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                {photoUrls.map((url) => (
+                  <div key={url} className="relative h-24 overflow-hidden rounded-md border">
+                    <Image src={url} alt="Job photo" fill className="object-cover" unoptimized />
+                    <button
+                      type="button"
+                      className="absolute right-1 top-1 rounded bg-background/90 p-1"
+                      onClick={() => setPhotoUrls((prev) => prev.filter((item) => item !== url))}
+                      aria-label="Remove photo"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
@@ -200,7 +295,10 @@ export default function NewCustomerJobPage() {
 
           <p className="text-xs text-muted-foreground">Only suburb is shown publicly until you accept a quote.</p>
 
-          <Button disabled={isPending} onClick={submit}>Post job</Button>
+          <Button disabled={isPending || isUploadingPhotos} onClick={submit}>
+            {isUploadingPhotos ? <Upload className="mr-2 h-4 w-4" /> : null}
+            Post job
+          </Button>
           {error && <p className="text-sm text-destructive">{error}</p>}
         </CardContent>
       </Card>

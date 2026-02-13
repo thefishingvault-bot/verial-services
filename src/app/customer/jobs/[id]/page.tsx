@@ -1,5 +1,6 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
+import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 
 import { CustomerJobView } from "@/components/job-requests/customer-job-view";
@@ -187,7 +188,17 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
           <CardTitle>Photos</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground">No photos yet.</p>
+          {parsedDescription.photoUrls.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No photos yet.</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+              {parsedDescription.photoUrls.map((url) => (
+                <a key={url} href={url} target="_blank" rel="noreferrer" className="relative h-28 overflow-hidden rounded-md border">
+                  <Image src={url} alt="Job photo" fill className="object-cover" unoptimized />
+                </a>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 

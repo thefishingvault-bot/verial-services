@@ -41,6 +41,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       budget: parsedDescription.budget,
       timing: parsedDescription.timing,
       requestedDate: parsedDescription.requestedDate,
+      photoUrls: parsedDescription.photoUrls,
     },
     quotes,
     questions,
@@ -62,6 +63,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     budget?: string;
     timing?: string;
     requestedDate?: string | null;
+    photoUrls?: string[];
   } | null;
 
   const existing = await db.query.jobRequests.findFirst({
@@ -69,6 +71,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     columns: {
       id: true,
       status: true,
+      description: true,
     },
   });
 
@@ -81,11 +84,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!title || title.length < 5 || title.length > 255) return new NextResponse("Invalid title", { status: 400 });
   if (!description || description.length < 20) return new NextResponse("Invalid description", { status: 400 });
 
+  const existingMeta = parseCustomerJobDescription(existing.description);
+
   const persistedDescription = buildCustomerJobDescription(description, {
-    category: body?.category,
-    budget: body?.budget,
-    timing: body?.timing,
-    requestedDate: body?.requestedDate || null,
+    category: body?.category ?? existingMeta.category,
+    budget: body?.budget ?? existingMeta.budget,
+    timing: body?.timing ?? existingMeta.timing,
+    requestedDate: body?.requestedDate ?? existingMeta.requestedDate,
+    photoUrls: body?.photoUrls ?? existingMeta.photoUrls,
   });
 
   const [updated] = await db

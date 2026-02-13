@@ -24,6 +24,7 @@ export type CustomerJobMeta = {
   budget: string;
   timing: string;
   requestedDate: string | null;
+  photoUrls: string[];
 };
 
 export type ParsedCustomerJobDescription = CustomerJobMeta & {
@@ -37,6 +38,7 @@ const DEFAULT_META: CustomerJobMeta = {
   budget: "Not sure / Get quotes",
   timing: "ASAP",
   requestedDate: null,
+  photoUrls: [],
 };
 
 export function buildCustomerJobDescription(rawDescription: string, meta: Partial<CustomerJobMeta>) {
@@ -46,6 +48,9 @@ export function buildCustomerJobDescription(rawDescription: string, meta: Partia
     budget: (meta.budget || DEFAULT_META.budget).trim(),
     timing: (meta.timing || DEFAULT_META.timing).trim(),
     requestedDate: meta.requestedDate || null,
+    photoUrls: Array.isArray(meta.photoUrls)
+      ? meta.photoUrls.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 8)
+      : [],
   };
 
   return `${description}\n\n${META_MARKER}\n${JSON.stringify(normalized)}`;
@@ -72,6 +77,9 @@ export function parseCustomerJobDescription(raw: string | null | undefined): Par
       budget: (parsed.budget || DEFAULT_META.budget).trim(),
       timing: (parsed.timing || DEFAULT_META.timing).trim(),
       requestedDate: parsed.requestedDate || null,
+      photoUrls: Array.isArray(parsed.photoUrls)
+        ? parsed.photoUrls.filter((item) => typeof item === "string" && item.trim().length > 0).slice(0, 8)
+        : [],
     };
   } catch {
     return {

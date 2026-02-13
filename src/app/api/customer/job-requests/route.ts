@@ -24,6 +24,7 @@ export async function POST(req: Request) {
     budget?: string;
     timing?: string;
     requestedDate?: string | null;
+    photoUrls?: string[];
   } | null;
 
   const title = body?.title?.trim() ?? "";
@@ -37,6 +38,7 @@ export async function POST(req: Request) {
     budget: body?.budget,
     timing: body?.timing,
     requestedDate: body?.requestedDate || null,
+    photoUrls: body?.photoUrls,
   });
 
   const [created] = await db
