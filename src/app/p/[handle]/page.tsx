@@ -12,7 +12,6 @@ import { getTrustBadge } from "@/lib/utils";
 import { formatServicePriceLabel } from "@/lib/pricing";
 import { ContactButton } from "@/components/common/contact-button";
 import { auth } from "@clerk/nextjs/server";
-import { requireOne } from "@/lib/relations/normalize";
 import { getPublicPlanBadge } from "@/lib/services-most-relevant";
 
 // This is a Server Component
@@ -104,8 +103,8 @@ function ProviderHeader({
   bookingCount: number;
 }) {
   const { Icon, color } = getTrustBadge(provider.trustLevel);
-  const user = requireOne(provider.user, "Missing provider.user");
-  const memberSinceYear = new Date(user.createdAt).getFullYear();
+  const user = provider.user;
+  const memberSinceYear = new Date(user?.createdAt ?? provider.createdAt).getFullYear();
   const planBadge = getPublicPlanBadge({
     plan: provider.plan,
     stripeSubscriptionStatus: provider.stripeSubscriptionStatus,
@@ -116,7 +115,7 @@ function ProviderHeader({
       <CardHeader className="flex flex-col items-start gap-6 p-6 md:flex-row">
         <div className="relative h-32 w-32 shrink-0">
           <Image
-            src={user.avatarUrl || '/default-avatar.png'}
+            src={user?.avatarUrl || '/default-avatar.png'}
             alt={provider.businessName}
             fill
             className="rounded-full border object-cover"

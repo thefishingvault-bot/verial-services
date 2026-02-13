@@ -125,8 +125,14 @@ export function exportToCSV(data: ProviderHealthData[], filename: string = 'prov
   link.setAttribute('download', filename);
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    if (link.parentNode) {
+      link.parentNode.removeChild(link);
+    }
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function exportToJSON(data: ProviderHealthData[], filename: string = 'provider-health-report.json') {
@@ -142,8 +148,14 @@ export function exportToJSON(data: ProviderHealthData[], filename: string = 'pro
   link.setAttribute('download', filename);
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    if (link.parentNode) {
+      link.parentNode.removeChild(link);
+    }
+    URL.revokeObjectURL(url);
+  }
 }
 
 type AnalyticsData = {
@@ -281,8 +293,14 @@ export async function generatePDFReport(data: ProviderHealthData[], analytics: A
   link.setAttribute('download', filename.replace('.pdf', '.html'));
   link.style.visibility = 'hidden';
   document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
+  try {
+    link.click();
+  } finally {
+    if (link.parentNode) {
+      link.parentNode.removeChild(link);
+    }
+    URL.revokeObjectURL(url);
+  }
 }
 
 export function scheduleReport(email: string, frequency: 'daily' | 'weekly' | 'monthly', reportType: 'summary' | 'detailed') {

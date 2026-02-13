@@ -12,23 +12,64 @@ import { jobRequests } from "@/db/schema";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const pg = error as { code?: string; message?: string };
+  if (pg.code === "42703") return true;
+  return typeof pg.message === "string" && /column .* does not exist/i.test(pg.message);
+}
+
 export default async function CustomerJobsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
-  const rows = await db.query.jobRequests.findMany({
-    where: eq(jobRequests.customerUserId, userId),
-    columns: {
-      id: true,
-      title: true,
-      status: true,
-      paymentStatus: true,
-      suburb: true,
-      region: true,
-      createdAt: true,
-    },
-    orderBy: [desc(jobRequests.createdAt)],
-  });
+  let rows: Array<{
+    id: string;
+    title: string;
+    status: string;
+    paymentStatus: string;
+    suburb: string | null;
+    region: string | null;
+    createdAt: Date;
+  }>;
+
+  try {
+    rows = await db.query.jobRequests.findMany({
+      where: eq(jobRequests.customerUserId, userId),
+      columns: {
+        id: true,
+        title: true,
+        status: true,
+        paymentStatus: true,
+        suburb: true,
+        region: true,
+        createdAt: true,
+      },
+      orderBy: [desc(jobRequests.createdAt)],
+    });
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    const fallbackRows = await db.query.jobRequests.findMany({
+      where: eq(jobRequests.customerUserId, userId),
+      columns: {
+        id: true,
+        title: true,
+        status: true,
+        paymentStatus: true,
+        createdAt: true,
+      },
+      orderBy: [desc(jobRequests.createdAt)],
+    });
+
+    rows = fallbackRows.map((job) => ({
+      ...job,
+      suburb: null,
+      region: null,
+    }));
+  }
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">

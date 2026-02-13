@@ -124,6 +124,13 @@ export type ServicesDataResult = {
   };
 };
 
+function isMissingColumnError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const pg = error as { code?: string; message?: string };
+  if (pg.code === '42703') return true;
+  return typeof pg.message === 'string' && /column .* does not exist/i.test(pg.message);
+}
+
 export async function getServicesDataFromSearchParams(
   searchParams: ServicesSearchParams,
   userId?: string | null,
@@ -279,56 +286,143 @@ export async function getServicesDataFromSearchParams(
 
   const totalCount = totalCountResult[0]?.count || 0;
 
-  const servicesData = await db
-    .select({
-      id: services.id,
-      slug: services.slug,
-      title: services.title,
-      description: services.description,
-      pricingType: services.pricingType,
-      priceInCents: services.priceInCents,
-      priceNote: services.priceNote,
-      category: services.category,
-      coverImageUrl: services.coverImageUrl,
-      createdAt: services.createdAt,
-      providerId: services.providerId,
-      businessName: providers.businessName,
-      handle: providers.handle,
-      region: services.region,
-      suburb: services.suburb,
-      trustScore: providers.trustScore,
-      trustLevel: providers.trustLevel,
-      isVerified: providers.isVerified,
-      providerPlan: providers.plan,
-      providerStripeSubscriptionStatus: providers.stripeSubscriptionStatus,
-      avatarUrl: users.avatarUrl,
-      firstName: users.firstName,
-      lastName: users.lastName,
-      isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
-      favoriteCount: favoriteCountExpr,
-      avgRating: avgRatingExpr,
-      reviewCount: reviewCountExpr,
-    })
-    .from(services)
-    .innerJoin(providers, eq(services.providerId, providers.id))
-    .innerJoin(users, eq(providers.userId, users.id))
-    .leftJoin(
-      serviceFavorites,
-      userId
-        ? and(
-            eq(serviceFavorites.serviceId, services.id),
-            eq(serviceFavorites.userId, userId),
-          )
-        : and(eq(serviceFavorites.serviceId, services.id), sql`1 = 0`),
-    )
-    .where(and(...whereConditions))
-    .orderBy(
-      ...(filters.sort === 'relevance'
-        ? orderBy
-        : [desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`), ...orderBy]),
-    )
-    .limit(limit)
-    .offset(offset);
+  let servicesData: Array<{
+    id: string;
+    slug: string;
+    title: string;
+    description: string | null;
+    pricingType: 'fixed' | 'from' | 'quote';
+    priceInCents: number | null;
+    priceNote: string | null;
+    category: string;
+    coverImageUrl: string | null;
+    createdAt: Date;
+    providerId: string;
+    businessName: string | null;
+    handle: string | null;
+    region: string | null;
+    suburb: string | null;
+    trustScore: number;
+    trustLevel: string;
+    isVerified: boolean;
+    providerPlan: string | null;
+    providerStripeSubscriptionStatus: string | null;
+    avatarUrl: string | null;
+    firstName: string | null;
+    lastName: string | null;
+    isFavorite: boolean;
+    favoriteCount: number;
+    avgRating: number;
+    reviewCount: number;
+  }>;
+
+  try {
+    servicesData = await db
+      .select({
+        id: services.id,
+        slug: services.slug,
+        title: services.title,
+        description: services.description,
+        pricingType: services.pricingType,
+        priceInCents: services.priceInCents,
+        priceNote: services.priceNote,
+        category: services.category,
+        coverImageUrl: services.coverImageUrl,
+        createdAt: services.createdAt,
+        providerId: services.providerId,
+        businessName: providers.businessName,
+        handle: providers.handle,
+        region: services.region,
+        suburb: services.suburb,
+        trustScore: providers.trustScore,
+        trustLevel: providers.trustLevel,
+        isVerified: providers.isVerified,
+        providerPlan: providers.plan,
+        providerStripeSubscriptionStatus: providers.stripeSubscriptionStatus,
+        avatarUrl: users.avatarUrl,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
+        favoriteCount: favoriteCountExpr,
+        avgRating: avgRatingExpr,
+        reviewCount: reviewCountExpr,
+      })
+      .from(services)
+      .innerJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(users, eq(providers.userId, users.id))
+      .leftJoin(
+        serviceFavorites,
+        userId
+          ? and(
+              eq(serviceFavorites.serviceId, services.id),
+              eq(serviceFavorites.userId, userId),
+            )
+          : and(eq(serviceFavorites.serviceId, services.id), sql`1 = 0`),
+      )
+      .where(and(...whereConditions))
+      .orderBy(
+        ...(filters.sort === 'relevance'
+          ? orderBy
+          : [desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`), ...orderBy]),
+      )
+      .limit(limit)
+      .offset(offset);
+  } catch (error) {
+    if (!isMissingColumnError(error)) {
+      throw error;
+    }
+
+    servicesData = await db
+      .select({
+        id: services.id,
+        slug: services.slug,
+        title: services.title,
+        description: services.description,
+        pricingType: services.pricingType,
+        priceInCents: services.priceInCents,
+        priceNote: services.priceNote,
+        category: services.category,
+        coverImageUrl: services.coverImageUrl,
+        createdAt: services.createdAt,
+        providerId: services.providerId,
+        businessName: providers.businessName,
+        handle: providers.handle,
+        region: sql<string | null>`NULL`,
+        suburb: sql<string | null>`NULL`,
+        trustScore: providers.trustScore,
+        trustLevel: providers.trustLevel,
+        isVerified: providers.isVerified,
+        providerPlan: sql<string | null>`NULL`,
+        providerStripeSubscriptionStatus: sql<string | null>`NULL`,
+        avatarUrl: users.avatarUrl,
+        firstName: users.firstName,
+        lastName: users.lastName,
+        isFavorite: sql<boolean>`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN true ELSE false END`,
+        favoriteCount: favoriteCountExpr,
+        avgRating: avgRatingExpr,
+        reviewCount: reviewCountExpr,
+      })
+      .from(services)
+      .innerJoin(providers, eq(services.providerId, providers.id))
+      .innerJoin(users, eq(providers.userId, users.id))
+      .leftJoin(
+        serviceFavorites,
+        userId
+          ? and(
+              eq(serviceFavorites.serviceId, services.id),
+              eq(serviceFavorites.userId, userId),
+            )
+          : and(eq(serviceFavorites.serviceId, services.id), sql`1 = 0`),
+      )
+      .where(and(...whereConditions))
+      .orderBy(
+        ...(filters.sort === 'relevance'
+          ? orderBy
+          : [desc(sql`CASE WHEN ${serviceFavorites.id} IS NOT NULL THEN 1 ELSE 0 END`), ...orderBy]),
+      )
+      .limit(limit)
+      .offset(offset);
+  }
 
   const servicesWithProviders: ServiceWithProviderAndFavorite[] = servicesData.map((service) => {
     const planBadge = getPublicPlanBadge({

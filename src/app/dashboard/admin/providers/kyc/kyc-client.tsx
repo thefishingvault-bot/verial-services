@@ -506,8 +506,14 @@ export default function AdminKycStatusPage() {
       link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        link.click();
+      } finally {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      }
 
       setShowExportMenu(false);
     } catch (error) {
@@ -527,8 +533,14 @@ export default function AdminKycStatusPage() {
       link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        link.click();
+      } finally {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      }
       setShowExportMenu(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -628,8 +640,14 @@ export default function AdminKycStatusPage() {
       link.setAttribute('download', filename);
       link.style.visibility = 'hidden';
       document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      try {
+        link.click();
+      } finally {
+        if (link.parentNode) {
+          link.parentNode.removeChild(link);
+        }
+        URL.revokeObjectURL(url);
+      }
 
       setShowExportMenu(false);
     } catch (error) {
