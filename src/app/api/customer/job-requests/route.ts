@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 
 import { jobRequests, users } from "@/db/schema";
 import { db } from "@/lib/db";
+import { buildCustomerJobDescription } from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
 
@@ -19,17 +20,31 @@ export async function POST(req: Request) {
     description?: string;
     region?: string;
     suburb?: string;
+    category?: string;
+    budget?: string;
+    timing?: string;
+    requestedDate?: string | null;
   } | null;
 
   const title = body?.title?.trim() ?? "";
-  if (!title || title.length > 255) return new NextResponse("Invalid title", { status: 400 });
+  const description = body?.description?.trim() ?? "";
+
+  if (!title || title.length < 5 || title.length > 255) return new NextResponse("Invalid title", { status: 400 });
+  if (!description || description.length < 20) return new NextResponse("Invalid description", { status: 400 });
+
+  const persistedDescription = buildCustomerJobDescription(description, {
+    category: body?.category,
+    budget: body?.budget,
+    timing: body?.timing,
+    requestedDate: body?.requestedDate || null,
+  });
 
   const [created] = await db
     .insert(jobRequests)
     .values({
       customerUserId: userId,
       title,
-      description: body?.description?.trim() || null,
+      description: persistedDescription,
       region: body?.region?.trim() || null,
       suburb: body?.suburb?.trim() || null,
       status: "open",

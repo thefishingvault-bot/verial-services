@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestQuestions, jobRequests, providers } from "@/db/schema";
+import { parseCustomerJobDescription } from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,6 +68,8 @@ export default async function ProviderJobRequestDetailPage({ params }: { params:
     notFound();
   }
 
+  const parsedDescription = parseCustomerJobDescription(job.description);
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
       <Card>
@@ -74,7 +77,7 @@ export default async function ProviderJobRequestDetailPage({ params }: { params:
           <CardTitle>{job.title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>{job.description ?? "No description provided."}</p>
+          <p>{parsedDescription.description || "No description provided."}</p>
           <div className="flex flex-wrap gap-2">
             <Badge>{job.status}</Badge>
             <Badge variant="secondary">{job.paymentStatus}</Badge>
