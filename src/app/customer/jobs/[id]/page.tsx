@@ -11,11 +11,19 @@ import { scoreQuote } from "@/lib/job-requests";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
 export default async function CustomerJobPage({ params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
 
   const { id } = await params;
+
+  if (!isUuid(id)) {
+    notFound();
+  }
 
   const job = await db.query.jobRequests.findFirst({
     where: and(eq(jobRequests.id, id), eq(jobRequests.customerUserId, userId)),

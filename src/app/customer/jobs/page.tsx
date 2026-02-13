@@ -19,6 +19,14 @@ function isMissingColumnError(error: unknown): boolean {
   return typeof pg.message === "string" && /column .* does not exist/i.test(pg.message);
 }
 
+function isMissingTableError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const pg = error as { code?: string; message?: string; cause?: { code?: string; message?: string } };
+  if (pg.code === "42P01" || pg.cause?.code === "42P01") return true;
+  if (typeof pg.message === "string" && /relation .* does not exist/i.test(pg.message)) return true;
+  return typeof pg.cause?.message === "string" && /relation .* does not exist/i.test(pg.cause.message);
+}
+
 export default async function CustomerJobsPage() {
   const { userId } = await auth();
   if (!userId) redirect("/sign-in");
@@ -48,27 +56,31 @@ export default async function CustomerJobsPage() {
       orderBy: [desc(jobRequests.createdAt)],
     });
   } catch (error) {
-    if (!isMissingColumnError(error)) {
-      throw error;
+    if (isMissingTableError(error)) {
+      rows = [];
+    } else {
+      if (!isMissingColumnError(error)) {
+        throw error;
+      }
+
+      const fallbackRows = await db.query.jobRequests.findMany({
+        where: eq(jobRequests.customerUserId, userId),
+        columns: {
+          id: true,
+          title: true,
+          status: true,
+          paymentStatus: true,
+          createdAt: true,
+        },
+        orderBy: [desc(jobRequests.createdAt)],
+      });
+
+      rows = fallbackRows.map((job) => ({
+        ...job,
+        suburb: null,
+        region: null,
+      }));
     }
-
-    const fallbackRows = await db.query.jobRequests.findMany({
-      where: eq(jobRequests.customerUserId, userId),
-      columns: {
-        id: true,
-        title: true,
-        status: true,
-        paymentStatus: true,
-        createdAt: true,
-      },
-      orderBy: [desc(jobRequests.createdAt)],
-    });
-
-    rows = fallbackRows.map((job) => ({
-      ...job,
-      suburb: null,
-      region: null,
-    }));
   }
 
   return (
