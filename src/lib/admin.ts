@@ -17,16 +17,6 @@ export async function requireAdmin(userId?: string): Promise<void> {
     throw new Error("Unauthorized");
   }
 
-  // TEMP founder bypass for development
-  const FOUNDER_IDS = new Set<string>([
-    "user_35jYoGGGOsVNENP3IVmWKTcX6Aj",
-  ]);
-
-  if (FOUNDER_IDS.has(userId)) {
-    // Allow founder straight through without further checks
-    return;
-  }
-
   // Check database role first (primary method)
   try {
     const user = await db.select().from(users).where(eq(users.id, userId)).limit(1);
