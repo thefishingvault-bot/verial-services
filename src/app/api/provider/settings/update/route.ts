@@ -4,6 +4,7 @@ import { auth } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { assertProviderCanTransactFromProvider } from '@/lib/provider-access';
+import { providerCategorySelectionSchema } from '@/lib/provider-categories';
 
 export const runtime = 'nodejs';
 
@@ -15,13 +16,26 @@ export async function PATCH(req: Request) {
     }
 
     const body = await req.json();
-    const { chargesGst, baseSuburb, baseRegion, serviceRadiusKm, coverageSuburbs, gstNumber } = body as {
+    const {
+      chargesGst,
+      baseSuburb,
+      baseRegion,
+      serviceRadiusKm,
+      coverageSuburbs,
+      gstNumber,
+      categories,
+      primaryCategory,
+      customCategory,
+    } = body as {
       chargesGst: boolean;
       baseSuburb?: string | null;
       baseRegion?: string | null;
       serviceRadiusKm?: number | null;
       coverageSuburbs?: string[];
       gstNumber?: string | null;
+      categories?: unknown;
+      primaryCategory?: unknown;
+      customCategory?: unknown;
     };
 
     if (typeof chargesGst !== 'boolean') {
@@ -38,6 +52,44 @@ export async function PATCH(req: Request) {
 
     if (gstNumber != null && typeof gstNumber !== 'string') {
       return new NextResponse('Invalid input: gstNumber must be a string', { status: 400 });
+    }
+
+    const hasAnyCategoryInput = categories !== undefined || primaryCategory !== undefined || customCategory !== undefined;
+    let parsedCategories:
+      | {
+          categories: string[];
+          primaryCategory: string;
+          customCategory: string | null;
+        }
+      | undefined;
+
+    if (hasAnyCategoryInput) {
+      const normalizedCategories = Array.isArray(categories)
+        ? categories.filter((value): value is string => typeof value === 'string')
+        : [];
+      const normalizedPrimaryCategory = typeof primaryCategory === 'string' ? primaryCategory : '';
+      const normalizedCustomCategory =
+        customCategory == null
+          ? null
+          : typeof customCategory === 'string'
+            ? customCategory
+            : '';
+
+      const parsedSelection = providerCategorySelectionSchema.safeParse({
+        categories: normalizedCategories,
+        primaryCategory: normalizedPrimaryCategory,
+        customCategory: normalizedCustomCategory,
+      });
+
+      if (!parsedSelection.success) {
+        return new NextResponse(parsedSelection.error.issues[0]?.message ?? 'Invalid provider categories', { status: 400 });
+      }
+
+      parsedCategories = {
+        categories: parsedSelection.data.categories,
+        primaryCategory: parsedSelection.data.primaryCategory,
+        customCategory: parsedSelection.data.customCategory?.trim() || null,
+      };
     }
 
     let radiusToSave: number | undefined;
@@ -106,6 +158,12 @@ export async function PATCH(req: Request) {
 
     if (radiusToSave !== undefined) {
       updateData.serviceRadiusKm = radiusToSave;
+    }
+
+    if (parsedCategories) {
+      updateData.categories = parsedCategories.categories;
+      updateData.primaryCategory = parsedCategories.primaryCategory;
+      updateData.customCategory = parsedCategories.customCategory;
     }
 
     if (gstNumber !== undefined) {

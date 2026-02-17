@@ -23,6 +23,9 @@ export async function GET() {
         baseRegion: true,
         serviceRadiusKm: true,
         gstNumber: true,
+        categories: true,
+        primaryCategory: true,
+        customCategory: true,
       },
     });
 
@@ -43,6 +46,9 @@ export async function GET() {
       coverageRegion: provider.baseRegion,
       coverageSuburbs: coverage.map((row) => row.suburb),
       gstNumber: provider.gstNumber,
+      categories: provider.categories ?? [],
+      primaryCategory: provider.primaryCategory,
+      customCategory: provider.customCategory,
     });
 
   } catch (error) {

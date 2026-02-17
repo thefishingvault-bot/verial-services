@@ -8,11 +8,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AlertCircle, Loader2 } from "lucide-react";
 import { useToast } from "@/components/ui/use-toast";
 import { AvatarUploader } from "@/components/forms/avatar-uploader";
 import { NZ_REGIONS, NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-regions.generated";
 import { getTrustBadge } from "@/lib/utils";
+import { PROVIDER_CATEGORY_OPTIONS, getProviderCategoryLabel, type ProviderCategory } from "@/lib/provider-categories";
 
 type ProviderProfileResponse = {
   id: string;
@@ -37,6 +40,9 @@ type ProviderSettingsResponse = {
   coverageRegion?: string | null;
   coverageSuburbs?: string[];
   gstNumber?: string | null;
+  categories?: ProviderCategory[];
+  primaryCategory?: ProviderCategory | null;
+  customCategory?: string | null;
 };
 
 export function ProviderProfileForm() {
@@ -90,6 +96,9 @@ export function ProviderProfileForm() {
   const [serviceRadiusKm, setServiceRadiusKm] = useState(10);
   const [suburbSearch, setSuburbSearch] = useState("");
   const [suburbToAdd, setSuburbToAdd] = useState("");
+  const [categories, setCategories] = useState<ProviderCategory[]>([]);
+  const [primaryCategory, setPrimaryCategory] = useState<ProviderCategory | "">("");
+  const [customCategory, setCustomCategory] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -130,6 +139,9 @@ export function ProviderProfileForm() {
         setIsland(inferIslandFromRegion(settingsData.coverageRegion ?? settingsData.baseRegion));
         setCoverageSuburbs(settingsData.coverageSuburbs ?? []);
         setServiceRadiusKm(settingsData.serviceRadiusKm ?? 10);
+        setCategories(settingsData.categories ?? []);
+        setPrimaryCategory(settingsData.primaryCategory ?? "");
+        setCustomCategory(settingsData.customCategory ?? "");
       } catch (err) {
         const message = err instanceof Error ? err.message : "Failed to load profile.";
         if (!cancelled) {
@@ -165,6 +177,36 @@ export function ProviderProfileForm() {
   const filteredAvailableSuburbs = suburbSearch.trim()
     ? availableSuburbs.filter((s) => s.toLowerCase().includes(suburbSearch.trim().toLowerCase()))
     : availableSuburbs;
+
+  const hasOtherCategory = categories.includes("other");
+
+  const toggleCategory = (category: ProviderCategory, checked: boolean) => {
+    if (checked) {
+      if (categories.includes(category)) return;
+      if (categories.length >= 3) {
+        setError("Select up to 3 categories.");
+        return;
+      }
+
+      const next = [...categories, category];
+      setCategories(next);
+      if (!primaryCategory) {
+        setPrimaryCategory(category);
+      }
+      return;
+    }
+
+    const next = categories.filter((value) => value !== category);
+    setCategories(next);
+
+    if (primaryCategory === category) {
+      setPrimaryCategory(next[0] ?? "");
+    }
+
+    if (category === "other") {
+      setCustomCategory("");
+    }
+  };
 
   const addCoverageSuburb = (raw: string) => {
     const cleaned = raw.trim();
@@ -214,6 +256,26 @@ export function ProviderProfileForm() {
         throw new Error("Handle can only include lowercase letters, numbers, and dashes.");
       }
 
+      if (categories.length < 1) {
+        throw new Error("Select at least one service category.");
+      }
+
+      if (categories.length > 3) {
+        throw new Error("Select up to 3 service categories.");
+      }
+
+      if (!primaryCategory || !categories.includes(primaryCategory)) {
+        throw new Error("Primary service category must be one of your selected categories.");
+      }
+
+      if (hasOtherCategory && !customCategory.trim()) {
+        throw new Error("Please specify your service when selecting Other.");
+      }
+
+      if (!hasOtherCategory && customCategory.trim()) {
+        throw new Error("Custom category is only allowed when Other is selected.");
+      }
+
       if (coverageRegion && coverageSuburbs.length === 0) {
         throw new Error("Please select at least one suburb for your service area.");
       }
@@ -234,6 +296,9 @@ export function ProviderProfileForm() {
         coverageSuburbs,
         serviceRadiusKm,
         gstNumber: gstNumber.trim() || null,
+        categories,
+        primaryCategory,
+        customCategory: hasOtherCategory ? customCategory.trim() || null : null,
       };
 
       const [profileRes, settingsRes] = await Promise.all([
@@ -396,6 +461,77 @@ export function ProviderProfileForm() {
                 placeholder="Optional, shown on invoices when GST is enabled"
               />
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-lg border p-4">
+            <div>
+              <p className="text-sm font-medium">Service categories</p>
+              <p className="text-xs text-muted-foreground">Choose up to 3 categories and set your primary category.</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>What services do you offer?</Label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="outline" className="w-full justify-between">
+                    <span className="truncate text-left">
+                      {categories.length > 0
+                        ? categories.map((category) => getProviderCategoryLabel(category)).join(", ")
+                        : "Select up to 3 categories"}
+                    </span>
+                    <span className="ml-2 text-xs text-muted-foreground">{categories.length}/3</span>
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-(--radix-popover-trigger-width) p-3" align="start">
+                  <div className="space-y-2">
+                    {PROVIDER_CATEGORY_OPTIONS.map((option) => {
+                      const checked = categories.includes(option.value);
+                      const disabled = !checked && categories.length >= 3;
+                      return (
+                        <label key={option.value} className="flex items-center gap-2 text-sm">
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => toggleCategory(option.value, Boolean(value))}
+                            disabled={disabled}
+                          />
+                          <span>{option.label}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="primary-category">Primary Service Category</Label>
+              <select
+                id="primary-category"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                value={primaryCategory}
+                onChange={(e) => setPrimaryCategory(e.target.value as ProviderCategory)}
+                disabled={categories.length === 0}
+              >
+                <option value="">Select primary category</option>
+                {categories.map((category) => (
+                  <option key={category} value={category}>
+                    {getProviderCategoryLabel(category)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {hasOtherCategory && (
+              <div className="space-y-2">
+                <Label htmlFor="custom-category">Please specify your service</Label>
+                <Input
+                  id="custom-category"
+                  value={customCategory}
+                  onChange={(e) => setCustomCategory(e.target.value)}
+                  placeholder="e.g. Appliance repair"
+                />
+              </div>
+            )}
           </div>
 
           <div className="space-y-3 p-4 border rounded-lg">

@@ -386,6 +386,13 @@
       "when": 1771264800000,
       "tag": "0049_sumsub_verification_fallback",
       "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1771305075520,
+      "tag": "0055_common_captain_midlands",
+      "breakpoints": true
     }
   ]
 }

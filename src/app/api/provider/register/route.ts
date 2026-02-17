@@ -1,13 +1,23 @@
 import { db } from "@/lib/db";
 import { providers, users } from "@/db/schema";
+import { providerCategorySelectionSchema } from "@/lib/provider-categories";
 import { auth, clerkClient } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 export const runtime = "nodejs";
 
 // Helper function to create a unique ID
 const generateProviderId = () => `prov_${new Date().getTime()}_${Math.random().toString(36).substring(2, 9)}`;
+
+const registerProviderSchema = z.object({
+  businessName: z.string().trim().min(1, "Business name is required"),
+  handle: z.string().trim().min(1, "Handle is required"),
+  categories: providerCategorySelectionSchema.shape.categories,
+  primaryCategory: providerCategorySelectionSchema.shape.primaryCategory,
+  customCategory: providerCategorySelectionSchema.shape.customCategory,
+});
 
 export async function POST(req: Request) {
   try {
@@ -16,17 +26,26 @@ export async function POST(req: Request) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    const { businessName, handle } = (await req.json()) as {
-      businessName?: unknown;
-      handle?: unknown;
-      identityDocumentUrl?: unknown;
-    };
-    if (!businessName || !handle) {
-      return new NextResponse("Missing businessName or handle", { status: 400 });
+    const parsedBody = registerProviderSchema.safeParse(await req.json());
+    if (!parsedBody.success) {
+      return new NextResponse(parsedBody.error.issues[0]?.message ?? "Invalid request payload", { status: 400 });
     }
 
-    if (typeof businessName !== "string" || typeof handle !== "string") {
-      return new NextResponse("Invalid businessName or handle", { status: 400 });
+    const {
+      businessName,
+      handle,
+      categories,
+      primaryCategory,
+      customCategory,
+    } = parsedBody.data;
+
+    const parsedSelection = providerCategorySelectionSchema.safeParse({
+      categories,
+      primaryCategory,
+      customCategory,
+    });
+    if (!parsedSelection.success) {
+      return new NextResponse(parsedSelection.error.issues[0]?.message ?? "Invalid request payload", { status: 400 });
     }
 
     // Check if user already has a provider application
@@ -118,6 +137,9 @@ export async function POST(req: Request) {
           .set({
             businessName,
             handle,
+            categories,
+            primaryCategory,
+            customCategory: customCategory ?? null,
             status: 'pending',
             isVerified: false,
             // Manual upload is deprecated; providers verify in Sumsub.
@@ -155,6 +177,9 @@ export async function POST(req: Request) {
       userId: userId,
       businessName: businessName,
       handle: handle,
+      categories,
+      primaryCategory,
+      customCategory: customCategory ?? null,
       verificationStatus: 'pending',
       // All other fields (status, trust, etc.) will use their defaults
     }).returning();

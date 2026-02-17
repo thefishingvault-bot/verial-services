@@ -167,6 +167,9 @@ export const providers = pgTable("providers", {
   handle: varchar("handle", { length: 100 }).notNull().unique(), // @provider-handle
   businessName: varchar("business_name", { length: 255 }).notNull(),
   bio: text("bio"),
+  categories: text("categories").array(),
+  primaryCategory: text("primary_category"),
+  customCategory: text("custom_category"),
 
   // Verification & Trust
   status: providerStatusEnum("status").default("pending").notNull(),

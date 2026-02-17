@@ -18,6 +18,15 @@ import {
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  PROVIDER_CATEGORY_OPTIONS,
+  getProviderCategoryLabel,
+  providerCategorySelectionSchema,
+  type ProviderCategory,
+} from '@/lib/provider-categories';
 
 // Define the form validation schema with Zod
 const formSchema = z.object({
@@ -29,6 +38,43 @@ const formSchema = z.object({
     .regex(/^[a-z0-9-]+$/, {
       message: 'Handle must only contain lowercase letters, numbers, and hyphens.',
     }),
+  categories: providerCategorySelectionSchema.shape.categories,
+  primaryCategory: providerCategorySelectionSchema.shape.primaryCategory,
+  customCategory: z.string().trim().max(120).optional().nullable(),
+}).superRefine((data, ctx) => {
+  const deduped = Array.from(new Set(data.categories));
+  if (deduped.length !== data.categories.length) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Duplicate categories are not allowed',
+      path: ['categories'],
+    });
+  }
+
+  if (!data.categories.includes(data.primaryCategory)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Primary category must be one of the selected categories',
+      path: ['primaryCategory'],
+    });
+  }
+
+  const hasOther = data.categories.includes('other');
+  if (hasOther && (!data.customCategory || data.customCategory.trim().length === 0)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'Please specify your service',
+      path: ['customCategory'],
+    });
+  }
+
+  if (!hasOther && data.customCategory && data.customCategory.trim().length > 0) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Custom category is only allowed when 'Other' is selected",
+      path: ['customCategory'],
+    });
+  }
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -69,8 +115,46 @@ export default function RegisterProviderPage() {
     defaultValues: {
       businessName: '',
       handle: '',
+      categories: [],
+      primaryCategory: undefined,
+      customCategory: null,
     },
   });
+
+  const selectedCategories = form.watch('categories');
+  const hasOtherCategory = selectedCategories.includes('other');
+
+  const toggleCategory = (category: ProviderCategory, checked: boolean) => {
+    const current = form.getValues('categories');
+    if (checked) {
+      if (current.includes(category)) return;
+      if (current.length >= 3) {
+        form.setError('categories', { message: 'Select up to 3 categories' });
+        return;
+      }
+
+      const next = [...current, category];
+      form.setValue('categories', next, { shouldValidate: true });
+      if (!form.getValues('primaryCategory')) {
+        form.setValue('primaryCategory', category, { shouldValidate: true });
+      }
+      return;
+    }
+
+    const next = current.filter((value) => value !== category);
+    form.setValue('categories', next, { shouldValidate: true });
+
+    const currentPrimary = form.getValues('primaryCategory');
+    if (currentPrimary === category) {
+      if (next.length > 0) {
+        form.setValue('primaryCategory', next[0], { shouldValidate: true });
+      }
+    }
+
+    if (category === 'other') {
+      form.setValue('customCategory', null, { shouldValidate: true });
+    }
+  };
 
   const refreshOnboardingState = useCallback(async () => {
       setStatusLoading(true);
@@ -249,6 +333,98 @@ export default function RegisterProviderPage() {
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name="categories"
+                render={() => (
+                  <FormItem>
+                    <FormLabel>What services do you offer?</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button type="button" variant="outline" className="w-full justify-between" disabled={isFormDisabled}>
+                          <span className="truncate text-left">
+                            {selectedCategories.length > 0
+                              ? selectedCategories.map((category) => getProviderCategoryLabel(category)).join(', ')
+                              : 'Select up to 3 categories'}
+                          </span>
+                          <span className="ml-2 text-xs text-muted-foreground">{selectedCategories.length}/3</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-(--radix-popover-trigger-width) p-3" align="start">
+                        <div className="space-y-2">
+                          {PROVIDER_CATEGORY_OPTIONS.map((option) => {
+                            const checked = selectedCategories.includes(option.value);
+                            const disabled = !checked && selectedCategories.length >= 3;
+                            return (
+                              <label key={option.value} className="flex items-center gap-2 text-sm">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(value) => toggleCategory(option.value, Boolean(value))}
+                                  disabled={isFormDisabled || disabled}
+                                />
+                                <span>{option.label}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                    <FormDescription>Select at least 1 category and up to 3.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="primaryCategory"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Primary Service Category</FormLabel>
+                    <Select
+                      value={field.value}
+                      onValueChange={field.onChange}
+                      disabled={isFormDisabled || selectedCategories.length === 0}
+                    >
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select primary category" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {selectedCategories.map((category) => (
+                          <SelectItem key={category} value={category}>
+                            {getProviderCategoryLabel(category)}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              {hasOtherCategory && (
+                <FormField
+                  control={form.control}
+                  name="customCategory"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Please specify your service</FormLabel>
+                      <FormControl>
+                        <Input
+                          placeholder="e.g., Appliance repair"
+                          value={field.value ?? ''}
+                          onChange={field.onChange}
+                          disabled={isFormDisabled}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              )}
 
               <div className="rounded-lg border bg-muted/20 p-4">
                 <div className="space-y-1">
