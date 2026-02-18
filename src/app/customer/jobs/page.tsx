@@ -235,9 +235,9 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
                 className="block cursor-pointer rounded-md border p-3 transition-colors hover:bg-muted/40 active:bg-muted/60"
               >
                 <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <div className="font-medium">{job.title}</div>
-                    <div className="text-xs text-muted-foreground">{job.region ?? "-"}, {job.suburb ?? "-"}</div>
+                  <div className="min-w-0 space-y-1">
+                    <div className="line-clamp-2 font-medium wrap-anywhere">{job.title}</div>
+                    <div className="text-xs text-muted-foreground wrap-anywhere">{job.region ?? "-"}, {job.suburb ?? "-"}</div>
                     <div className="text-xs text-muted-foreground">
                       {formatPostedDate(job.createdAt)} · Quotes: {job.quoteCount}
                       {job.parsedDescription.category ? ` · ${job.parsedDescription.category}` : ""}

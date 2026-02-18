@@ -1,7 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
+import { Loader2, Trash2, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +29,11 @@ type JobPayload = {
   budget: string;
   timing: string;
   requestedDate: string | null;
+  photoUrls?: string[];
 };
+
+const TITLE_MAX = 255;
+const DESCRIPTION_MAX = 4000;
 
 export default function EditCustomerJobPage() {
   const params = useParams<{ id: string }>();
@@ -44,6 +50,8 @@ export default function EditCustomerJobPage() {
   const [budget, setBudget] = useState<(typeof JOB_BUDGET_OPTIONS)[number]>("Not sure / Get quotes");
   const [timing, setTiming] = useState<(typeof JOB_TIMING_OPTIONS)[number]>("ASAP");
   const [requestedDate, setRequestedDate] = useState("");
+  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
+  const [isUploadingPhotos, setIsUploadingPhotos] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [errors, setErrors] = useState<FormErrors>({});
 
@@ -69,6 +77,7 @@ export default function EditCustomerJobPage() {
       setBudget((job.budget as (typeof JOB_BUDGET_OPTIONS)[number]) ?? "Not sure / Get quotes");
       setTiming((job.timing as (typeof JOB_TIMING_OPTIONS)[number]) ?? "ASAP");
       setRequestedDate(job.requestedDate ?? "");
+      setPhotoUrls(Array.isArray(job.photoUrls) ? job.photoUrls : []);
       setLoading(false);
     };
 
@@ -106,6 +115,7 @@ export default function EditCustomerJobPage() {
           budget,
           timing,
           requestedDate: timing === "Choose date" ? requestedDate || null : null,
+          photoUrls,
         }),
       });
 
@@ -120,6 +130,60 @@ export default function EditCustomerJobPage() {
       });
       router.push(`/customer/jobs/${params.id}`);
     });
+  };
+
+  const uploadPhotos = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const incoming = Array.from(files);
+    if (photoUrls.length + incoming.length > 8) {
+      setError("You can upload up to 8 photos.");
+      return;
+    }
+
+    setError(null);
+    setIsUploadingPhotos(true);
+
+    try {
+      const uploaded: string[] = [];
+      for (const file of incoming) {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+          throw new Error("Only JPG, PNG, and WEBP images are allowed.");
+        }
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error("Each photo must be 5MB or smaller.");
+        }
+
+        const presignRes = await fetch("/api/uploads/presign-job-photo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fileType: file.type, fileSize: file.size }),
+        });
+
+        if (!presignRes.ok) {
+          throw new Error(await presignRes.text());
+        }
+
+        const { uploadUrl, publicUrl } = (await presignRes.json()) as { uploadUrl: string; publicUrl: string };
+        const uploadRes = await fetch(uploadUrl, {
+          method: "PUT",
+          headers: { "Content-Type": file.type },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error("Failed to upload photo.");
+        }
+
+        uploaded.push(publicUrl);
+      }
+
+      setPhotoUrls((prev) => [...prev, ...uploaded].slice(0, 8));
+    } catch (uploadError) {
+      setError(uploadError instanceof Error ? uploadError.message : "Failed to upload photos.");
+    } finally {
+      setIsUploadingPhotos(false);
+    }
   };
 
   return (
@@ -138,9 +202,11 @@ export default function EditCustomerJobPage() {
                 <Input
                   value={title}
                   onChange={(event) => setTitle(event.target.value)}
+                  maxLength={TITLE_MAX}
                   disabled={isPending}
                   placeholder="Need lawn mowed (front + back)"
                 />
+                <p className="mt-1 text-xs text-muted-foreground">{title.length}/{TITLE_MAX}</p>
                 {errors.title && <p className="mt-1 text-xs text-destructive">{errors.title}</p>}
               </div>
 
@@ -149,10 +215,48 @@ export default function EditCustomerJobPage() {
                 <Textarea
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
+                  maxLength={DESCRIPTION_MAX}
                   disabled={isPending}
                   rows={5}
                 />
+                <p className="mt-1 text-xs text-muted-foreground">{description.length}/{DESCRIPTION_MAX}</p>
                 {errors.description && <p className="mt-1 text-xs text-destructive">{errors.description}</p>}
+              </div>
+
+              <div className="space-y-2">
+                <label className="mb-1 block text-sm">Photos (optional)</label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    disabled={isPending || isUploadingPhotos || photoUrls.length >= 8}
+                    onChange={(event) => {
+                      void uploadPhotos(event.target.files);
+                      event.currentTarget.value = "";
+                    }}
+                  />
+                  {isUploadingPhotos && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
+                </div>
+                <p className="text-xs text-muted-foreground">Upload up to 8 photos. JPG, PNG, or WEBP. Max 5MB each.</p>
+
+                {photoUrls.length > 0 ? (
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                    {photoUrls.map((url) => (
+                      <div key={url} className="relative aspect-4/3 overflow-hidden rounded-md border bg-muted/30">
+                        <Image src={url} alt="Job photo" fill className="object-contain p-1" unoptimized />
+                        <button
+                          type="button"
+                          className="absolute right-1 top-1 rounded bg-background/90 p-1"
+                          onClick={() => setPhotoUrls((prev) => prev.filter((item) => item !== url))}
+                          aria-label="Remove photo"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
               </div>
 
               <div className="grid gap-3 md:grid-cols-2">
@@ -242,7 +346,10 @@ export default function EditCustomerJobPage() {
               </div>
 
               <div className="flex gap-2">
-                <Button disabled={isPending} onClick={save}>Save changes</Button>
+                <Button disabled={isPending || isUploadingPhotos} onClick={save}>
+                  {isUploadingPhotos ? <Upload className="mr-2 h-4 w-4" /> : null}
+                  Save changes
+                </Button>
                 <Button variant="outline" disabled={isPending} onClick={() => router.push(`/customer/jobs/${params.id}`)}>Cancel</Button>
               </div>
               {error && <p className="text-sm text-destructive">{error}</p>}

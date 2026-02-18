@@ -19,6 +19,9 @@ type FormErrors = {
   description?: string;
 };
 
+const TITLE_MAX = 255;
+const DESCRIPTION_MAX = 4000;
+
 export default function NewCustomerJobPage() {
   const router = useRouter();
   const { toast } = useToast();
@@ -153,9 +156,11 @@ export default function NewCustomerJobPage() {
             <Input
               value={title}
               onChange={(event) => setTitle(event.target.value)}
+              maxLength={TITLE_MAX}
               disabled={isPending}
               placeholder="Need lawn mowed (front + back)"
             />
+            <p className="mt-1 text-xs text-muted-foreground">{title.length}/{TITLE_MAX}</p>
             {errors.title && <p className="mt-1 text-xs text-destructive">{errors.title}</p>}
           </div>
           <div>
@@ -163,10 +168,12 @@ export default function NewCustomerJobPage() {
             <Textarea
               value={description}
               onChange={(event) => setDescription(event.target.value)}
+              maxLength={DESCRIPTION_MAX}
               disabled={isPending}
               placeholder="Please include property size, access notes, and your preferred timing."
               rows={5}
             />
+            <p className="mt-1 text-xs text-muted-foreground">{description.length}/{DESCRIPTION_MAX}</p>
             {errors.description && <p className="mt-1 text-xs text-destructive">{errors.description}</p>}
             <div className="mt-2 rounded-md border bg-muted/30 p-3 text-xs text-muted-foreground">
               Tip: Include photos, measurements, access notes, and when you need it done.

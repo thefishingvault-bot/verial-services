@@ -1,10 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq, inArray, sql } from "drizzle-orm";
-import Image from "next/image";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { CustomerJobView } from "@/components/job-requests/customer-job-view";
+import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -163,7 +163,7 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="space-y-2">
-              <CardTitle>{job.title}</CardTitle>
+              <CardTitle className="line-clamp-2 wrap-anywhere">{job.title}</CardTitle>
               <div className="text-sm text-muted-foreground">{job.region ?? "-"}, {job.suburb ?? "-"}</div>
             </div>
             <div className="flex gap-2">
@@ -175,7 +175,9 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
           </div>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>{parsedDescription.description || "No description provided."}</p>
+          <p className="whitespace-pre-wrap wrap-anywhere">
+            {parsedDescription.description || "No description provided."}
+          </p>
           <div className="flex flex-wrap gap-3 text-muted-foreground">
             <span>Category: {parsedDescription.category}</span>
             <span>Budget: {parsedDescription.budget}</span>
@@ -190,22 +192,18 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
           <CardTitle>Photos</CardTitle>
         </CardHeader>
         <CardContent>
-          {parsedDescription.photoUrls.length === 0 ? (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">No photos yet.</p>
-              <Button variant="outline" asChild>
-                <Link href={`/customer/jobs/${job.id}/edit`}>Add photos</Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {parsedDescription.photoUrls.map((url) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer" className="relative h-28 overflow-hidden rounded-md border">
-                  <Image src={url} alt="Job photo" fill className="object-cover" unoptimized />
-                </a>
-              ))}
-            </div>
-          )}
+          <JobPhotosGallery
+            photos={parsedDescription.photoUrls}
+            altPrefix="Job photo"
+            onEmpty={
+              <div className="space-y-3">
+                <p className="text-sm text-muted-foreground">No photos yet.</p>
+                <Button variant="outline" asChild>
+                  <Link href={`/customer/jobs/${job.id}/edit`}>Add photos</Link>
+                </Button>
+              </div>
+            }
+          />
         </CardContent>
       </Card>
 

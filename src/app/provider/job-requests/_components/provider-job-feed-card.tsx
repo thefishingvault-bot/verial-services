@@ -1,16 +1,15 @@
 "use client";
 
-import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Bookmark, ChevronLeft, ChevronRight, Eye, MessageCircle, Send } from "lucide-react";
+import { Bookmark, Eye, MessageCircle, Send } from "lucide-react";
 
 import type { ProviderFeedJob, ProviderQuoteState } from "./types";
+import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { formatCanonicalJobStatus } from "@/lib/customer-job-meta";
 
 type ProviderJobFeedCardProps = {
@@ -61,33 +60,8 @@ function quoteBadge(quoteState: ProviderQuoteState) {
   return { label: "No quote yet", variant: "outline" as const };
 }
 
-function PhotoTile({
-  url,
-  alt,
-  onClick,
-  overlay,
-}: {
-  url: string;
-  alt: string;
-  onClick: () => void;
-  overlay?: string;
-}) {
-  return (
-    <button type="button" onClick={onClick} className="group relative h-full w-full overflow-hidden rounded-md border text-left">
-      <Image src={url} alt={alt} fill className="object-cover transition-transform group-hover:scale-[1.02]" unoptimized />
-      {overlay ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/55 text-lg font-semibold text-foreground">
-          {overlay}
-        </div>
-      ) : null}
-    </button>
-  );
-}
-
 export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobFeedCardProps) {
   const router = useRouter();
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [photoIndex, setPhotoIndex] = useState(0);
 
   const previewText = useMemo(() => {
     if (!job.description) return "No additional details provided.";
@@ -99,8 +73,7 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
   const detailHref = `/provider/job-requests/${job.id}`;
   const quoteHref = `/provider/job-requests/${job.id}?tab=quote`;
   const qaHref = `/provider/job-requests/${job.id}?tab=qa`;
-  const photos = job.photos;
-  const moreCount = Math.max(0, photos.length - 4);
+  const photoUrls = job.photos.map((photo) => photo.url);
 
   return (
     <Card
@@ -118,8 +91,8 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
       <CardContent className="space-y-4 p-4">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 space-y-1">
-            <h3 className="line-clamp-2 text-base font-semibold">{job.title}</h3>
-            <p className="text-xs text-muted-foreground">{job.suburb ?? "-"}, {job.region ?? "-"}</p>
+            <h3 className="line-clamp-2 text-base font-semibold wrap-anywhere">{job.title}</h3>
+            <p className="text-xs text-muted-foreground wrap-anywhere">{job.suburb ?? "-"}, {job.region ?? "-"}</p>
             <p className="text-xs text-muted-foreground">
               {formatRelativeTime(job.createdAt)} · {job.category} · {job.budget} · {job.timing}
             </p>
@@ -131,7 +104,7 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
         </div>
 
         <div className="space-y-1 text-sm">
-          <p className="line-clamp-4 text-foreground/90">{previewText}</p>
+          <p className="line-clamp-4 text-foreground/90 wrap-anywhere">{previewText}</p>
           <Link
             href={detailHref}
             className="text-xs font-medium text-muted-foreground hover:text-foreground"
@@ -141,97 +114,27 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
           </Link>
         </div>
 
-        {photos.length > 0 ? (
-          <div
-            className={
-              photos.length === 1
-                ? "relative h-72"
-                : photos.length === 2
-                  ? "grid h-64 grid-cols-2 gap-2"
-                  : photos.length === 3
-                    ? "grid h-72 grid-cols-2 grid-rows-2 gap-2"
-                    : "grid h-72 grid-cols-2 grid-rows-2 gap-2"
-            }
-            onClick={(event) => event.stopPropagation()}
-          >
-            {photos.length === 1 && (
-              <PhotoTile
-                url={photos[0].url}
-                alt="Job photo 1"
-                onClick={() => {
-                  setPhotoIndex(0);
-                  setLightboxOpen(true);
-                }}
-              />
-            )}
-
-            {photos.length === 2 && photos.map((photo, index) => (
-              <PhotoTile
-                key={photo.url}
-                url={photo.url}
-                alt={`Job photo ${index + 1}`}
-                onClick={() => {
-                  setPhotoIndex(index);
-                  setLightboxOpen(true);
-                }}
-              />
-            ))}
-
-            {photos.length === 3 && (
-              <>
-                <div className="row-span-2">
-                  <PhotoTile
-                    url={photos[0].url}
-                    alt="Job photo 1"
-                    onClick={() => {
-                      setPhotoIndex(0);
-                      setLightboxOpen(true);
-                    }}
-                  />
+        <div onClick={(event) => event.stopPropagation()}>
+          <JobPhotosGallery
+            photos={photoUrls}
+            altPrefix="Job photo"
+            maxPreview={1}
+            showMoreBadge
+            gridClassName="grid-cols-1 md:grid-cols-1"
+            tileClassName="aspect-[16/10]"
+            onEmpty={
+              <div className="flex h-44 items-center justify-center rounded-md border bg-linear-to-br from-muted to-muted/40 p-4 text-center">
+                <div className="space-y-2">
+                  <div className="text-4xl" aria-hidden>
+                    {categoryEmoji(job.category)}
+                  </div>
+                  <p className="text-sm font-medium">No photos provided</p>
+                  <p className="text-xs text-muted-foreground">Tip: Ask a question or request photos in Q&A.</p>
                 </div>
-                <PhotoTile
-                  url={photos[1].url}
-                  alt="Job photo 2"
-                  onClick={() => {
-                    setPhotoIndex(1);
-                    setLightboxOpen(true);
-                  }}
-                />
-                <PhotoTile
-                  url={photos[2].url}
-                  alt="Job photo 3"
-                  onClick={() => {
-                    setPhotoIndex(2);
-                    setLightboxOpen(true);
-                  }}
-                />
-              </>
-            )}
-
-            {photos.length >= 4 && photos.slice(0, 4).map((photo, index) => (
-              <PhotoTile
-                key={photo.url}
-                url={photo.url}
-                alt={`Job photo ${index + 1}`}
-                overlay={index === 3 && moreCount > 0 ? `+${moreCount}` : undefined}
-                onClick={() => {
-                  setPhotoIndex(index);
-                  setLightboxOpen(true);
-                }}
-              />
-            ))}
-          </div>
-        ) : (
-          <div className="flex h-52 items-center justify-center rounded-md border bg-gradient-to-br from-muted to-muted/40 p-4 text-center">
-            <div className="space-y-2">
-              <div className="text-4xl" aria-hidden>
-                {categoryEmoji(job.category)}
               </div>
-              <p className="text-sm font-medium">No photos provided</p>
-              <p className="text-xs text-muted-foreground">Tip: Ask a question or request photos in Q&A.</p>
-            </div>
-          </div>
-        )}
+            }
+          />
+        </div>
 
         <div className="flex flex-wrap items-center gap-2 border-t pt-3" onClick={(event) => event.stopPropagation()}>
           {job.quoteState === "none" ? (
@@ -267,44 +170,6 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
           </Button>
         </div>
       </CardContent>
-
-      <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-        <DialogContent className="max-w-4xl p-2">
-          <DialogTitle className="sr-only">Job photos</DialogTitle>
-          {photos.length > 0 ? (
-            <div className="space-y-2">
-              <div className="relative h-[70vh] overflow-hidden rounded-md border">
-                <Image
-                  src={photos[photoIndex]?.url ?? photos[0].url}
-                  alt={`Job photo ${photoIndex + 1}`}
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
-              </div>
-              {photos.length > 1 ? (
-                <div className="flex items-center justify-between">
-                  <Button
-                    variant="outline"
-                    onClick={() => setPhotoIndex((prev) => (prev - 1 + photos.length) % photos.length)}
-                  >
-                    <ChevronLeft className="mr-2 h-4 w-4" />
-                    Previous
-                  </Button>
-                  <span className="text-xs text-muted-foreground">{photoIndex + 1} / {photos.length}</span>
-                  <Button
-                    variant="outline"
-                    onClick={() => setPhotoIndex((prev) => (prev + 1) % photos.length)}
-                  >
-                    Next
-                    <ChevronRight className="ml-2 h-4 w-4" />
-                  </Button>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
     </Card>
   );
 }
