@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { JOB_BUDGET_OPTIONS, JOB_CATEGORIES, JOB_TIMING_OPTIONS } from "@/lib/customer-job-meta";
 import { NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-suburbs";
+import { mapCustomerJobCategoryToProviderCategory } from "@/lib/provider-categories";
 
 type FormErrors = {
   title?: string;
@@ -64,6 +65,7 @@ export default function NewCustomerJobPage() {
           region,
           suburb,
           category,
+          categoryId: mapCustomerJobCategoryToProviderCategory(category),
           budget,
           timing,
           requestedDate: timing === "Choose date" ? requestedDate || null : null,

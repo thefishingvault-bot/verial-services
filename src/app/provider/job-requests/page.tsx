@@ -1,7 +1,10 @@
 import { auth } from "@clerk/nextjs/server";
 import { desc, eq, inArray, or } from "drizzle-orm";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequests, providers } from "@/db/schema";
 import {
@@ -55,10 +58,32 @@ export default async function ProviderJobRequestsPage({
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
-    columns: { id: true },
+    columns: { id: true, categories: true },
   });
 
   if (!provider) redirect("/dashboard");
+
+  const providerCategories = new Set(provider.categories ?? []);
+  if (providerCategories.size === 0) {
+    return (
+      <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 md:px-6">
+        <h1 className="text-xl font-semibold">Job requests</h1>
+        <Card>
+          <CardContent className="space-y-3 p-6 text-center">
+            <p className="text-base font-medium">Set your service categories to see matching jobs</p>
+            <p className="text-sm text-muted-foreground">
+              Add at least one category in your provider profile so we can match relevant requests.
+            </p>
+            <div>
+              <Button asChild>
+                <Link href="/dashboard/provider/profile">Update categories</Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   const myQuotes = await db.query.jobQuotes.findMany({
     where: eq(jobQuotes.providerId, provider.id),
@@ -124,11 +149,13 @@ export default async function ProviderJobRequestsPage({
         category: parsed.category,
         budget: parsed.budget,
         timing: parsed.timing,
+        categoryId: parsed.categoryId,
         jobStatus,
         quoteState: mapQuoteState(myQuote?.status),
         photos: parsed.photoUrls.map((url, index) => ({ url, sortOrder: index })),
       };
     })
+    .filter((job) => !!job.categoryId && providerCategories.has(job.categoryId))
     .filter((job) => {
       const hasMyQuote = job.quoteState !== "none";
       const isAssignedToMe = assignedByJobId.get(job.id) ?? false;

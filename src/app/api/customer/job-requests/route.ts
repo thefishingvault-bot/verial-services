@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { jobRequests, users } from "@/db/schema";
 import { db } from "@/lib/db";
 import { buildCustomerJobDescription, generatePublicJobToken } from "@/lib/customer-job-meta";
+import { toProviderCategoryOrNull } from "@/lib/provider-categories";
 
 export const runtime = "nodejs";
 
@@ -21,6 +22,7 @@ export async function POST(req: Request) {
     region?: string;
     suburb?: string;
     category?: string;
+    categoryId?: string | null;
     budget?: string;
     timing?: string;
     requestedDate?: string | null;
@@ -35,6 +37,7 @@ export async function POST(req: Request) {
 
   const persistedDescription = buildCustomerJobDescription(description, {
     category: body?.category,
+    categoryId: toProviderCategoryOrNull(body?.categoryId ?? null),
     budget: body?.budget,
     timing: body?.timing,
     requestedDate: body?.requestedDate || null,

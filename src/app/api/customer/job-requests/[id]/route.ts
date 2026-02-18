@@ -5,6 +5,7 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestInvites, jobRequestQuestions, jobRequests } from "@/db/schema";
 import { buildCustomerJobDescription, parseCustomerJobDescription } from "@/lib/customer-job-meta";
+import { toProviderCategoryOrNull } from "@/lib/provider-categories";
 
 export const runtime = "nodejs";
 
@@ -60,6 +61,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     region?: string;
     suburb?: string;
     category?: string;
+    categoryId?: string | null;
     budget?: string;
     timing?: string;
     requestedDate?: string | null;
@@ -88,6 +90,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const persistedDescription = buildCustomerJobDescription(description, {
     category: body?.category ?? existingMeta.category,
+    categoryId: toProviderCategoryOrNull(body?.categoryId) ?? existingMeta.categoryId,
     budget: body?.budget ?? existingMeta.budget,
     timing: body?.timing ?? existingMeta.timing,
     requestedDate: body?.requestedDate ?? existingMeta.requestedDate,

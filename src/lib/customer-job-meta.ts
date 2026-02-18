@@ -1,3 +1,9 @@
+import {
+  mapCustomerJobCategoryToProviderCategory,
+  toProviderCategoryOrNull,
+  type ProviderCategory,
+} from "@/lib/provider-categories";
+
 export const JOB_CATEGORIES = [
   "Cleaning",
   "Lawn/Garden",
@@ -21,6 +27,7 @@ export const JOB_TIMING_OPTIONS = ["ASAP", "This week", "Next week", "Choose dat
 
 export type CustomerJobMeta = {
   category: string;
+  categoryId: ProviderCategory | null;
   budget: string;
   timing: string;
   requestedDate: string | null;
@@ -36,6 +43,7 @@ const META_MARKER = "[verial_job_meta]";
 
 const DEFAULT_META: CustomerJobMeta = {
   category: "Other",
+  categoryId: null,
   budget: "Not sure / Get quotes",
   timing: "ASAP",
   requestedDate: null,
@@ -49,8 +57,13 @@ export function generatePublicJobToken() {
 
 export function buildCustomerJobDescription(rawDescription: string, meta: Partial<CustomerJobMeta>) {
   const description = rawDescription.trim();
+  const normalizedCategory = (meta.category || DEFAULT_META.category).trim();
+  const normalizedCategoryId =
+    toProviderCategoryOrNull(meta.categoryId ?? null) ?? mapCustomerJobCategoryToProviderCategory(normalizedCategory);
+
   const normalized: CustomerJobMeta = {
-    category: (meta.category || DEFAULT_META.category).trim(),
+    category: normalizedCategory,
+    categoryId: normalizedCategoryId,
     budget: (meta.budget || DEFAULT_META.budget).trim(),
     timing: (meta.timing || DEFAULT_META.timing).trim(),
     requestedDate: meta.requestedDate || null,
@@ -84,6 +97,7 @@ export function parseCustomerJobDescription(raw: string | null | undefined): Par
     return {
       description,
       category: (parsed.category || DEFAULT_META.category).trim(),
+      categoryId: toProviderCategoryOrNull(parsed.categoryId ?? null),
       budget: (parsed.budget || DEFAULT_META.budget).trim(),
       timing: (parsed.timing || DEFAULT_META.timing).trim(),
       requestedDate: parsed.requestedDate || null,

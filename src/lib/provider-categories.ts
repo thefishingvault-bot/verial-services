@@ -23,6 +23,29 @@ export type ProviderCategory = (typeof PROVIDER_CATEGORY_OPTIONS)[number]["value
 
 export const providerCategorySchema = z.enum(PROVIDER_CATEGORY_VALUES);
 
+const providerCategoryValueSet = new Set<string>(PROVIDER_CATEGORY_VALUES);
+
+export const CUSTOMER_JOB_CATEGORY_TO_PROVIDER_CATEGORY: Record<string, ProviderCategory> = {
+  Cleaning: "cleaning",
+  "Lawn/Garden": "lawn_garden",
+  Handyman: "handyman",
+  Moving: "moving_services",
+  "IT Support": "it_tech_support",
+  Tutoring: "tutoring",
+  "Car Detailing": "other",
+  Other: "other",
+};
+
+export function toProviderCategoryOrNull(value: string | null | undefined): ProviderCategory | null {
+  if (!value) return null;
+  return providerCategoryValueSet.has(value) ? (value as ProviderCategory) : null;
+}
+
+export function mapCustomerJobCategoryToProviderCategory(value: string | null | undefined): ProviderCategory | null {
+  if (!value) return null;
+  return CUSTOMER_JOB_CATEGORY_TO_PROVIDER_CATEGORY[value] ?? null;
+}
+
 export const providerCategorySelectionSchema = z
   .object({
     categories: z.array(providerCategorySchema).min(1, "Select at least one category").max(3, "Select up to 3 categories"),
