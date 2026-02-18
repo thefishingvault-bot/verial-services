@@ -5,12 +5,21 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { jobRequests, providers } from "@/db/schema";
 import { assertJobTransition, isFullPaymentModeEnabled } from "@/lib/job-requests";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: Promise<{ jobId: string }> }) {
   const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  const rate = await enforceRateLimit(req, {
+    userId,
+    resource: "job-lifecycle",
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!rate.success) return rateLimitResponse(rate.retryAfter);
 
   const provider = await db.query.providers.findFirst({
     where: eq(providers.userId, userId),
