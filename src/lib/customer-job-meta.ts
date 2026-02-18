@@ -24,10 +24,12 @@ export const JOB_BUDGET_OPTIONS = [
 ] as const;
 
 export const JOB_TIMING_OPTIONS = ["ASAP", "This week", "Next week", "Choose date"] as const;
+export const JOB_OTHER_SERVICE_MAX = 80;
 
 export type CustomerJobMeta = {
   category: string;
   categoryId: ProviderCategory | null;
+  otherServiceText: string | null;
   budget: string;
   timing: string;
   requestedDate: string | null;
@@ -44,12 +46,35 @@ const META_MARKER = "[verial_job_meta]";
 const DEFAULT_META: CustomerJobMeta = {
   category: "Other",
   categoryId: null,
+  otherServiceText: null,
   budget: "Not sure / Get quotes",
   timing: "ASAP",
   requestedDate: null,
   photoUrls: [],
   publicToken: null,
 };
+
+function normalizeOtherServiceText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, JOB_OTHER_SERVICE_MAX);
+}
+
+export function formatCustomerJobCategory(
+  category: string,
+  categoryId: ProviderCategory | null,
+  otherServiceText: string | null | undefined,
+) {
+  if (categoryId === "other") {
+    const normalizedOther = normalizeOtherServiceText(otherServiceText);
+    if (normalizedOther) return `Other: ${normalizedOther}`;
+    return "Other";
+  }
+
+  const normalizedCategory = category.trim();
+  return normalizedCategory.length > 0 ? normalizedCategory : "Other";
+}
 
 export function generatePublicJobToken() {
   return `job_${crypto.randomUUID().replaceAll("-", "")}`;
@@ -60,10 +85,13 @@ export function buildCustomerJobDescription(rawDescription: string, meta: Partia
   const normalizedCategory = (meta.category || DEFAULT_META.category).trim();
   const normalizedCategoryId =
     toProviderCategoryOrNull(meta.categoryId ?? null) ?? mapCustomerJobCategoryToProviderCategory(normalizedCategory);
+  const normalizedOtherServiceText =
+    normalizedCategoryId === "other" ? normalizeOtherServiceText(meta.otherServiceText) : null;
 
   const normalized: CustomerJobMeta = {
     category: normalizedCategory,
     categoryId: normalizedCategoryId,
+    otherServiceText: normalizedOtherServiceText,
     budget: (meta.budget || DEFAULT_META.budget).trim(),
     timing: (meta.timing || DEFAULT_META.timing).trim(),
     requestedDate: meta.requestedDate || null,
@@ -94,10 +122,12 @@ export function parseCustomerJobDescription(raw: string | null | undefined): Par
 
   try {
     const parsed = JSON.parse(payload) as Partial<CustomerJobMeta>;
+    const parsedCategoryId = toProviderCategoryOrNull(parsed.categoryId ?? null);
     return {
       description,
       category: (parsed.category || DEFAULT_META.category).trim(),
-      categoryId: toProviderCategoryOrNull(parsed.categoryId ?? null),
+      categoryId: parsedCategoryId,
+      otherServiceText: parsedCategoryId === "other" ? normalizeOtherServiceText(parsed.otherServiceText) : null,
       budget: (parsed.budget || DEFAULT_META.budget).trim(),
       timing: (parsed.timing || DEFAULT_META.timing).trim(),
       requestedDate: parsed.requestedDate || null,

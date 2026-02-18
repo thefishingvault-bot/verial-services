@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestQuestions, jobRequests, providers } from "@/db/schema";
-import { parseCustomerJobDescription } from "@/lib/customer-job-meta";
+import { formatCustomerJobCategory, parseCustomerJobDescription } from "@/lib/customer-job-meta";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -79,6 +79,11 @@ export default async function ProviderJobRequestDetailPage({
   }
 
   const parsedDescription = parseCustomerJobDescription(job.description);
+  const categoryLabel = formatCustomerJobCategory(
+    parsedDescription.category,
+    parsedDescription.categoryId,
+    parsedDescription.otherServiceText,
+  );
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
@@ -91,6 +96,7 @@ export default async function ProviderJobRequestDetailPage({
           <div className="flex flex-wrap gap-2">
             <Badge>{job.status}</Badge>
             <Badge variant="secondary">{job.paymentStatus}</Badge>
+            <span className="text-muted-foreground wrap-anywhere">Category: {categoryLabel}</span>
             <span className="text-muted-foreground wrap-anywhere">{job.suburb ?? "-"}, {job.region ?? "-"}</span>
           </div>
         </CardContent>

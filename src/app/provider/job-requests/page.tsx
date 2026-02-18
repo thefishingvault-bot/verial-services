@@ -8,6 +8,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequests, providers } from "@/db/schema";
 import {
+  formatCustomerJobCategory,
   normalizeJobStatus,
   parseCustomerJobDescription,
   type CanonicalJobStatus,
@@ -150,6 +151,7 @@ export default async function ProviderJobRequestsPage({
         region: job.region,
         createdAt: job.createdAt.toISOString(),
         category: parsed.category,
+        categoryDisplay: formatCustomerJobCategory(parsed.category, parsed.categoryId, parsed.otherServiceText),
         budget: parsed.budget,
         timing: parsed.timing,
         categoryId: parsed.categoryId,

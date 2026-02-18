@@ -94,7 +94,7 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
             <h3 className="line-clamp-2 text-base font-semibold wrap-anywhere">{job.title}</h3>
             <p className="text-xs text-muted-foreground wrap-anywhere">{job.suburb ?? "-"}, {job.region ?? "-"}</p>
             <p className="text-xs text-muted-foreground">
-              {formatRelativeTime(job.createdAt)} · {job.category} · {job.budget} · {job.timing}
+              {formatRelativeTime(job.createdAt)} · {job.categoryDisplay} · {job.budget} · {job.timing}
             </p>
           </div>
           <div className="flex flex-col items-end gap-2">

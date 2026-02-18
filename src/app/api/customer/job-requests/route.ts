@@ -7,11 +7,12 @@ import { db } from "@/lib/db";
 import {
   buildCustomerJobDescription,
   generatePublicJobToken,
+  JOB_OTHER_SERVICE_MAX,
   JOB_BUDGET_OPTIONS,
   JOB_CATEGORIES,
   JOB_TIMING_OPTIONS,
 } from "@/lib/customer-job-meta";
-import { toProviderCategoryOrNull } from "@/lib/provider-categories";
+import { mapCustomerJobCategoryToProviderCategory, toProviderCategoryOrNull } from "@/lib/provider-categories";
 import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ export async function POST(req: Request) {
     suburb?: string;
     category?: string;
     categoryId?: string | null;
+    otherServiceText?: string | null;
     budget?: string;
     timing?: string;
     requestedDate?: string | null;
@@ -52,7 +54,9 @@ export async function POST(req: Request) {
   const region = body?.region?.trim() ?? "";
   const suburb = body?.suburb?.trim() ?? "";
 
-  const normalizedCategoryId = toProviderCategoryOrNull(body?.categoryId ?? null);
+  const normalizedCategoryId =
+    toProviderCategoryOrNull(body?.categoryId ?? null) ?? mapCustomerJobCategoryToProviderCategory(category);
+  const otherServiceText = typeof body?.otherServiceText === "string" ? body.otherServiceText.trim() : null;
 
   if (!title || title.length < 5 || title.length > 255) return new NextResponse("Invalid title", { status: 400 });
   if (!description || description.length < 20) return new NextResponse("Invalid description", { status: 400 });
@@ -66,6 +70,15 @@ export async function POST(req: Request) {
     return new NextResponse("Invalid timing", { status: 400 });
   }
   if (body?.categoryId != null && !normalizedCategoryId) return new NextResponse("Invalid categoryId", { status: 400 });
+  if (body?.otherServiceText != null && typeof body.otherServiceText !== "string") {
+    return new NextResponse("Invalid otherServiceText", { status: 400 });
+  }
+  if (otherServiceText && otherServiceText.length > JOB_OTHER_SERVICE_MAX) {
+    return new NextResponse("Invalid otherServiceText", { status: 400 });
+  }
+  if (normalizedCategoryId === "other" && !otherServiceText) {
+    return new NextResponse("Please specify your service", { status: 400 });
+  }
   if (region.length > 255 || suburb.length > 255) return new NextResponse("Invalid location", { status: 400 });
 
   if (body?.photoUrls !== undefined) {
@@ -89,6 +102,7 @@ export async function POST(req: Request) {
   const persistedDescription = buildCustomerJobDescription(description, {
     category,
     categoryId: normalizedCategoryId,
+    otherServiceText: normalizedCategoryId === "other" ? otherServiceText : null,
     budget,
     timing,
     requestedDate: body?.requestedDate || null,

@@ -15,6 +15,7 @@ export type ProviderFeedJob = {
   region: string | null;
   createdAt: string;
   category: string;
+  categoryDisplay: string;
   categoryId: string | null;
   budget: string;
   timing: string;

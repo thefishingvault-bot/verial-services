@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
-import { JOB_BUDGET_OPTIONS, JOB_CATEGORIES, JOB_TIMING_OPTIONS } from "@/lib/customer-job-meta";
+import { JOB_BUDGET_OPTIONS, JOB_CATEGORIES, JOB_OTHER_SERVICE_MAX, JOB_TIMING_OPTIONS } from "@/lib/customer-job-meta";
 import { NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-suburbs";
 import {
   CUSTOMER_JOB_CATEGORY_TO_PROVIDER_CATEGORY,
@@ -20,6 +20,7 @@ import {
 type FormErrors = {
   title?: string;
   description?: string;
+  otherServiceText?: string;
 };
 
 type JobPayload = {
@@ -30,6 +31,7 @@ type JobPayload = {
   suburb: string | null;
   category: string;
   categoryId?: string | null;
+  otherServiceText?: string | null;
   budget: string;
   timing: string;
   requestedDate: string | null;
@@ -67,6 +69,7 @@ export default function EditCustomerJobPage() {
   const [region, setRegion] = useState<keyof typeof NZ_REGIONS_TO_SUBURBS | "">("");
   const [suburb, setSuburb] = useState("");
   const [category, setCategory] = useState<(typeof JOB_CATEGORIES)[number]>("Other");
+  const [otherServiceText, setOtherServiceText] = useState("");
   const [budget, setBudget] = useState<(typeof JOB_BUDGET_OPTIONS)[number]>("Not sure / Get quotes");
   const [timing, setTiming] = useState<(typeof JOB_TIMING_OPTIONS)[number]>("ASAP");
   const [requestedDate, setRequestedDate] = useState("");
@@ -76,6 +79,8 @@ export default function EditCustomerJobPage() {
   const [errors, setErrors] = useState<FormErrors>({});
 
   const suburbs = useMemo(() => (region ? NZ_REGIONS_TO_SUBURBS[region] ?? [] : []), [region]);
+  const selectedCategoryId = mapCustomerJobCategoryToProviderCategory(category);
+  const isOtherCategory = selectedCategoryId === "other";
 
   useEffect(() => {
     const run = async () => {
@@ -89,11 +94,16 @@ export default function EditCustomerJobPage() {
 
       const payload = (await res.json()) as { job: JobPayload };
       const job = payload.job;
+      const initialCategory = resolveInitialCategory(job);
+
       setTitle(job.title ?? "");
       setDescription(job.description ?? "");
       setRegion((job.region as keyof typeof NZ_REGIONS_TO_SUBURBS) ?? "");
       setSuburb(job.suburb ?? "");
-      setCategory(resolveInitialCategory(job));
+      setCategory(initialCategory);
+      setOtherServiceText(
+        mapCustomerJobCategoryToProviderCategory(initialCategory) === "other" ? (job.otherServiceText ?? "") : "",
+      );
       setBudget((job.budget as (typeof JOB_BUDGET_OPTIONS)[number]) ?? "Not sure / Get quotes");
       setTiming((job.timing as (typeof JOB_TIMING_OPTIONS)[number]) ?? "ASAP");
       setRequestedDate(job.requestedDate ?? "");
@@ -111,6 +121,14 @@ export default function EditCustomerJobPage() {
     }
     if (description.trim().length < 20) {
       next.description = "Description must be at least 20 characters.";
+    }
+    if (isOtherCategory) {
+      const trimmedOtherServiceText = otherServiceText.trim();
+      if (!trimmedOtherServiceText) {
+        next.otherServiceText = "Specify service is required when category is Other.";
+      } else if (trimmedOtherServiceText.length > JOB_OTHER_SERVICE_MAX) {
+        next.otherServiceText = `Specify service must be ${JOB_OTHER_SERVICE_MAX} characters or less.`;
+      }
     }
 
     setErrors(next);
@@ -131,7 +149,8 @@ export default function EditCustomerJobPage() {
           region,
           suburb,
           category,
-          categoryId: mapCustomerJobCategoryToProviderCategory(category),
+          categoryId: selectedCategoryId,
+          otherServiceText: isOtherCategory ? otherServiceText : null,
           budget,
           timing,
           requestedDate: timing === "Choose date" ? requestedDate || null : null,
@@ -285,13 +304,34 @@ export default function EditCustomerJobPage() {
                   <select
                     className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                     value={category}
-                    onChange={(event) => setCategory(event.target.value as (typeof JOB_CATEGORIES)[number])}
+                    onChange={(event) => {
+                      const nextCategory = event.target.value as (typeof JOB_CATEGORIES)[number];
+                      setCategory(nextCategory);
+                      if (mapCustomerJobCategoryToProviderCategory(nextCategory) !== "other") {
+                        setOtherServiceText("");
+                        setErrors((previous) => ({ ...previous, otherServiceText: undefined }));
+                      }
+                    }}
                     disabled={isPending}
                   >
                     {JOB_CATEGORIES.map((item) => (
                       <option key={item} value={item}>{item}</option>
                     ))}
                   </select>
+                  {isOtherCategory ? (
+                    <div className="mt-3">
+                      <label className="mb-1 block text-sm">Specify service</label>
+                      <Input
+                        value={otherServiceText}
+                        onChange={(event) => setOtherServiceText(event.target.value)}
+                        maxLength={JOB_OTHER_SERVICE_MAX}
+                        disabled={isPending}
+                        placeholder="e.g. TV wall mount, fence repair"
+                      />
+                      <p className="mt-1 text-xs text-muted-foreground">{otherServiceText.length}/{JOB_OTHER_SERVICE_MAX}</p>
+                      {errors.otherServiceText && <p className="mt-1 text-xs text-destructive">{errors.otherServiceText}</p>}
+                    </div>
+                  ) : null}
                 </div>
                 <div>
                   <label className="mb-1 block text-sm">Budget (optional)</label>
