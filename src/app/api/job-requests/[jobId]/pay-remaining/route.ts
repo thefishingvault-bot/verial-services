@@ -6,12 +6,21 @@ import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { jobPayments, jobQuotes, jobRequests, providers } from "@/db/schema";
 import { calculateChargeBreakdown, sumCollectedPlatformFees } from "@/lib/job-requests";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(_: Request, { params }: { params: Promise<{ jobId: string }> }) {
   const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  const rate = await enforceRateLimit(_, {
+    userId,
+    resource: "job-pay-remaining",
+    limit: 15,
+    windowSeconds: 60,
+  });
+  if (!rate.success) return rateLimitResponse(rate.retryAfter);
 
   const { jobId } = await params;
 
@@ -44,6 +53,9 @@ export async function POST(_: Request, { params }: { params: Promise<{ jobId: st
     columns: { id: true, userId: true, stripeConnectId: true, plan: true },
   });
 
+  if (provider?.userId === userId) {
+    return new NextResponse("You cannot pay the remaining balance on your own quote", { status: 403 });
+  }
   if (!provider?.stripeConnectId) return new NextResponse("Provider Stripe account missing", { status: 400 });
 
   const existingPending = await db.query.jobPayments.findFirst({
