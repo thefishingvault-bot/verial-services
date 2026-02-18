@@ -12,7 +12,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
 import { JOB_BUDGET_OPTIONS, JOB_CATEGORIES, JOB_TIMING_OPTIONS } from "@/lib/customer-job-meta";
 import { NZ_REGIONS_TO_SUBURBS } from "@/lib/data/nz-suburbs";
-import { mapCustomerJobCategoryToProviderCategory } from "@/lib/provider-categories";
+import {
+  CUSTOMER_JOB_CATEGORY_TO_PROVIDER_CATEGORY,
+  mapCustomerJobCategoryToProviderCategory,
+} from "@/lib/provider-categories";
 
 type FormErrors = {
   title?: string;
@@ -26,6 +29,7 @@ type JobPayload = {
   region: string | null;
   suburb: string | null;
   category: string;
+  categoryId?: string | null;
   budget: string;
   timing: string;
   requestedDate: string | null;
@@ -34,6 +38,22 @@ type JobPayload = {
 
 const TITLE_MAX = 255;
 const DESCRIPTION_MAX = 4000;
+
+const providerToCustomerCategory = new Map<string, (typeof JOB_CATEGORIES)[number]>(
+  Object.entries(CUSTOMER_JOB_CATEGORY_TO_PROVIDER_CATEGORY).map(([customerCategory, providerCategory]) => [
+    providerCategory,
+    customerCategory as (typeof JOB_CATEGORIES)[number],
+  ]),
+);
+
+function resolveInitialCategory(job: JobPayload): (typeof JOB_CATEGORIES)[number] {
+  const fromCategoryId = typeof job.categoryId === "string" ? providerToCustomerCategory.get(job.categoryId) : undefined;
+  if (fromCategoryId) return fromCategoryId;
+  if (JOB_CATEGORIES.includes(job.category as (typeof JOB_CATEGORIES)[number])) {
+    return job.category as (typeof JOB_CATEGORIES)[number];
+  }
+  return "Other";
+}
 
 export default function EditCustomerJobPage() {
   const params = useParams<{ id: string }>();
@@ -73,7 +93,7 @@ export default function EditCustomerJobPage() {
       setDescription(job.description ?? "");
       setRegion((job.region as keyof typeof NZ_REGIONS_TO_SUBURBS) ?? "");
       setSuburb(job.suburb ?? "");
-      setCategory((job.category as (typeof JOB_CATEGORIES)[number]) ?? "Other");
+      setCategory(resolveInitialCategory(job));
       setBudget((job.budget as (typeof JOB_BUDGET_OPTIONS)[number]) ?? "Not sure / Get quotes");
       setTiming((job.timing as (typeof JOB_TIMING_OPTIONS)[number]) ?? "ASAP");
       setRequestedDate(job.requestedDate ?? "");

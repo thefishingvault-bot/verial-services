@@ -46,6 +46,7 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
       ...job,
       description: parsedDescription.description,
       category: parsedDescription.category,
+      categoryId: parsedDescription.categoryId,
       budget: parsedDescription.budget,
       timing: parsedDescription.timing,
       requestedDate: parsedDescription.requestedDate,
