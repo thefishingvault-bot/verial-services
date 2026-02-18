@@ -1,10 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
-import Image from "next/image";
 import { useParams, useRouter } from "next/navigation";
 import { Loader2, Trash2, Upload } from "lucide-react";
 
+import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -241,21 +241,21 @@ export default function EditCustomerJobPage() {
                 <p className="text-xs text-muted-foreground">Upload up to 8 photos. JPG, PNG, or WEBP. Max 5MB each.</p>
 
                 {photoUrls.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {photoUrls.map((url) => (
-                      <div key={url} className="relative aspect-4/3 overflow-hidden rounded-md border bg-muted/30">
-                        <Image src={url} alt="Job photo" fill className="object-contain p-1" unoptimized />
-                        <button
-                          type="button"
-                          className="absolute right-1 top-1 rounded bg-background/90 p-1"
-                          onClick={() => setPhotoUrls((prev) => prev.filter((item) => item !== url))}
-                          aria-label="Remove photo"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
+                  <JobPhotosGallery
+                    photos={photoUrls}
+                    altPrefix="Job photo"
+                    variant="detail"
+                    renderTileOverlay={({ url }) => (
+                      <button
+                        type="button"
+                        className="rounded bg-background/90 p-1"
+                        onClick={() => setPhotoUrls((prev) => prev.filter((item) => item !== url))}
+                        aria-label="Remove photo"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </button>
+                    )}
+                  />
                 ) : null}
               </div>
 

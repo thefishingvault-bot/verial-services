@@ -195,6 +195,7 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
           <JobPhotosGallery
             photos={parsedDescription.photoUrls}
             altPrefix="Job photo"
+            variant="detail"
             onEmpty={
               <div className="space-y-3">
                 <p className="text-sm text-muted-foreground">No photos yet.</p>

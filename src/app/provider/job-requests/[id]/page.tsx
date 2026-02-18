@@ -1,8 +1,8 @@
 import { auth } from "@clerk/nextjs/server";
 import { and, eq } from "drizzle-orm";
-import Image from "next/image";
 import { notFound, redirect } from "next/navigation";
 
+import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
 import { ProviderJobView } from "@/components/job-requests/provider-job-view";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -84,14 +84,14 @@ export default async function ProviderJobRequestDetailPage({
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
       <Card>
         <CardHeader>
-          <CardTitle>{job.title}</CardTitle>
+          <CardTitle className="line-clamp-2 wrap-anywhere">{job.title}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2 text-sm">
-          <p>{parsedDescription.description || "No description provided."}</p>
+          <p className="whitespace-pre-wrap wrap-anywhere">{parsedDescription.description || "No description provided."}</p>
           <div className="flex flex-wrap gap-2">
             <Badge>{job.status}</Badge>
             <Badge variant="secondary">{job.paymentStatus}</Badge>
-            <span className="text-muted-foreground">{job.suburb ?? "-"}, {job.region ?? "-"}</span>
+            <span className="text-muted-foreground wrap-anywhere">{job.suburb ?? "-"}, {job.region ?? "-"}</span>
           </div>
         </CardContent>
       </Card>
@@ -101,22 +101,19 @@ export default async function ProviderJobRequestDetailPage({
           <CardTitle>Photos</CardTitle>
         </CardHeader>
         <CardContent>
-          {parsedDescription.photoUrls.length === 0 ? (
-            <div className="flex h-44 items-center justify-center rounded-md border bg-gradient-to-br from-muted to-muted/40 p-4 text-center">
-              <div className="space-y-2">
-                <p className="text-sm font-medium">No photos provided</p>
-                <p className="text-xs text-muted-foreground">Ask a question if you need more context before quoting.</p>
+          <JobPhotosGallery
+            photos={parsedDescription.photoUrls}
+            altPrefix="Job photo"
+            variant="detail"
+            onEmpty={
+              <div className="flex h-44 items-center justify-center rounded-md border bg-linear-to-br from-muted to-muted/40 p-4 text-center">
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">No photos provided</p>
+                  <p className="text-xs text-muted-foreground">Ask a question if you need more context before quoting.</p>
+                </div>
               </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-              {parsedDescription.photoUrls.map((url) => (
-                <a key={url} href={url} target="_blank" rel="noreferrer" className="relative h-28 overflow-hidden rounded-md border">
-                  <Image src={url} alt="Job photo" fill className="object-cover" unoptimized />
-                </a>
-              ))}
-            </div>
-          )}
+            }
+          />
         </CardContent>
       </Card>
 

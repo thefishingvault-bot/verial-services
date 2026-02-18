@@ -118,10 +118,11 @@ export function ProviderJobFeedCard({ job, isSaved, onToggleSave }: ProviderJobF
           <JobPhotosGallery
             photos={photoUrls}
             altPrefix="Job photo"
+            variant="compact"
             maxPreview={1}
             showMoreBadge
             gridClassName="grid-cols-1 md:grid-cols-1"
-            tileClassName="aspect-[16/10]"
+            tileClassName="aspect-video"
             onEmpty={
               <div className="flex h-44 items-center justify-center rounded-md border bg-linear-to-br from-muted to-muted/40 p-4 text-center">
                 <div className="space-y-2">
