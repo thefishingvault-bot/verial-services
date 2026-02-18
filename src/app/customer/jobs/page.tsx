@@ -4,6 +4,7 @@ import { desc, eq, inArray } from "drizzle-orm";
 import { redirect } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
@@ -182,12 +183,19 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold">Your jobs</h1>
-        <Button asChild>
-          <Link href="/customer/jobs/new">Post job</Link>
-        </Button>
-      </div>
+      <PageHeaderNav
+        title="Your jobs"
+        backHref="/dashboard"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Jobs" },
+        ]}
+        rightAction={
+          <Button asChild size="sm" variant="secondary">
+            <Link href="/customer/jobs/new">Post job</Link>
+          </Button>
+        }
+      />
 
       <Card>
         <CardContent className="space-y-3 pt-6">

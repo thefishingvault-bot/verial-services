@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2, Trash2, Upload } from "lucide-react";
 
 import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -227,7 +228,17 @@ export default function EditCustomerJobPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-6">
-      <Card>
+      <PageHeaderNav
+        title="Edit job"
+        backHref="/dashboard"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Jobs", href: "/customer/jobs" },
+          { label: "Edit" },
+        ]}
+      />
+
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle>Edit job</CardTitle>
         </CardHeader>

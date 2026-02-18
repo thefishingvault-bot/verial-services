@@ -3,6 +3,7 @@ import { desc, eq, inArray, or } from "drizzle-orm";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { db } from "@/lib/db";
@@ -71,7 +72,14 @@ export default async function ProviderJobRequestsPage({
   if (providerCategories.size === 0) {
     return (
       <div className="mx-auto w-full max-w-3xl space-y-4 px-4 py-6 md:px-6">
-        <h1 className="text-xl font-semibold">Job requests</h1>
+        <PageHeaderNav
+          title="Job requests"
+          backHref="/dashboard/provider"
+          crumbs={[
+            { label: "Dashboard", href: "/dashboard/provider" },
+            { label: "Job requests" },
+          ]}
+        />
         <Card>
           <CardContent className="space-y-3 p-6 text-center">
             <p className="text-base font-medium">Set your service categories to see matching jobs</p>
@@ -168,6 +176,16 @@ export default async function ProviderJobRequestsPage({
     });
 
   return (
-    <ProviderJobFeedList jobs={feedJobs} initialFilter={initialFilter} initialSort={initialSort} />
+    <div className="mx-auto w-full max-w-[720px] space-y-4 px-4 py-6 md:px-6">
+      <PageHeaderNav
+        title="Job requests"
+        backHref="/dashboard/provider"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard/provider" },
+          { label: "Job requests" },
+        ]}
+      />
+      <ProviderJobFeedList jobs={feedJobs} initialFilter={initialFilter} initialSort={initialSort} showHeading={false} />
+    </div>
   );
 }

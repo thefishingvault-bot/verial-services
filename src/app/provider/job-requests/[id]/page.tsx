@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
 import { ProviderJobView } from "@/components/job-requests/provider-job-view";
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { db } from "@/lib/db";
@@ -87,6 +88,16 @@ export default async function ProviderJobRequestDetailPage({
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 px-4 py-6 md:px-6">
+      <PageHeaderNav
+        title="Job request"
+        backHref="/dashboard/provider"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard/provider" },
+          { label: "Job requests", href: "/provider/job-requests" },
+          { label: "View job" },
+        ]}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle className="line-clamp-2 wrap-anywhere">{job.title}</CardTitle>

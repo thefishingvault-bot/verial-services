@@ -5,6 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Loader2, Trash2, Upload } from "lucide-react";
 
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -159,7 +160,16 @@ export default function NewCustomerJobPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6 md:px-6">
-      <Card>
+      <PageHeaderNav
+        title="Post a new job"
+        backHref="/dashboard"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Jobs", href: "/customer/jobs" },
+          { label: "New" },
+        ]}
+      />
+      <Card className="mt-4">
         <CardHeader>
           <CardTitle>Post a new job</CardTitle>
         </CardHeader>

@@ -5,6 +5,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { CustomerJobView } from "@/components/job-requests/customer-job-view";
 import { JobPhotosGallery } from "@/components/jobs/job-photos-gallery";
+import { PageHeaderNav } from "@/components/nav/page-header-nav";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -165,6 +166,21 @@ export default async function CustomerJobPage({ params }: { params: Promise<{ id
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 px-4 py-6 md:px-6">
+      <PageHeaderNav
+        title="View job"
+        backHref="/dashboard"
+        crumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "Jobs", href: "/customer/jobs" },
+          { label: "View job" },
+        ]}
+        rightAction={
+          <Button asChild size="sm" variant="secondary">
+            <Link href={`/customer/jobs/${job.id}/edit`}>Edit job</Link>
+          </Button>
+        }
+      />
+
       <Card>
         <CardHeader>
           <div className="flex flex-wrap items-start justify-between gap-3">

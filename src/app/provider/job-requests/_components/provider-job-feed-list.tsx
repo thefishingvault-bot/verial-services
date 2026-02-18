@@ -12,6 +12,7 @@ type ProviderJobFeedListProps = {
   jobs: ProviderFeedJob[];
   initialFilter: ProviderFeedFilter;
   initialSort: ProviderFeedSort;
+  showHeading?: boolean;
 };
 
 const SAVED_KEY = "provider_saved_job_requests_v1";
@@ -28,7 +29,7 @@ function initialSavedIds() {
   }
 }
 
-export function ProviderJobFeedList({ jobs, initialFilter, initialSort }: ProviderJobFeedListProps) {
+export function ProviderJobFeedList({ jobs, initialFilter, initialSort, showHeading = true }: ProviderJobFeedListProps) {
   const router = useRouter();
   const pathname = usePathname();
 
@@ -73,9 +74,9 @@ export function ProviderJobFeedList({ jobs, initialFilter, initialSort }: Provid
   const hasJobs = jobs.length > 0;
 
   return (
-    <div className="mx-auto w-full max-w-[720px] space-y-4 px-4 py-6 md:px-6">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">Job requests</h1>
+        {showHeading ? <h1 className="text-xl font-semibold">Job requests</h1> : <div />}
 
         <label className="flex items-center gap-2 text-sm text-muted-foreground">
           <span>Sort</span>
