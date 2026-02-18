@@ -6,12 +6,21 @@ import { db } from "@/lib/db";
 import { stripe } from "@/lib/stripe";
 import { jobPayments, jobQuotes, jobRequests, providers } from "@/db/schema";
 import { calculateChargeBreakdown, isFullPaymentModeEnabled } from "@/lib/job-requests";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: Promise<{ jobId: string }> }) {
   const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  const rate = await enforceRateLimit(req, {
+    userId,
+    resource: "job-accept-quote",
+    limit: 15,
+    windowSeconds: 60,
+  });
+  if (!rate.success) return rateLimitResponse(rate.retryAfter);
 
   const { jobId } = await params;
   const body = (await req.json().catch(() => null)) as { quoteId?: string } | null;
@@ -48,6 +57,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ jobId: 
   });
 
   if (!provider) return new NextResponse("Provider not found", { status: 404 });
+  if (provider.userId === userId) {
+    return new NextResponse("You cannot accept your own quote", { status: 403 });
+  }
   if (!provider.stripeConnectId || !provider.stripeConnectId.startsWith("acct_")) {
     return new NextResponse("Provider is not connected to Stripe", { status: 400 });
   }

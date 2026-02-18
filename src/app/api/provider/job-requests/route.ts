@@ -40,10 +40,14 @@ export async function GET(req: Request) {
       )
     : or(eq(jobRequests.status, "open"), eq(jobRequests.assignedProviderId, userId));
 
+  const activeStatuses: Array<typeof jobRequests.$inferSelect.status> = ["open", "assigned", "in_progress"];
+  const requestedStatus = statusFilter as typeof jobRequests.$inferSelect.status;
+  const normalizedStatusFilter = activeStatuses.includes(requestedStatus) ? requestedStatus : null;
+
   const rows = await db.query.jobRequests.findMany({
-    where: statusFilter
-      ? and(baseWhere, eq(jobRequests.status, statusFilter as typeof jobRequests.$inferSelect.status))
-      : baseWhere,
+    where: normalizedStatusFilter
+      ? and(baseWhere, eq(jobRequests.status, normalizedStatusFilter))
+      : and(baseWhere, inArray(jobRequests.status, activeStatuses)),
     columns: {
       id: true,
       title: true,

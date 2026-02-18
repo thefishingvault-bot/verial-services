@@ -10,6 +10,7 @@ import { Home, Calendar, Briefcase, BarChart3, Bell, User, MessageSquare, Credit
 
 const providerNav = [
   { href: "/dashboard/provider", label: "Overview", icon: Home },
+  { href: "/provider/job-requests", label: "Job Requests", icon: Briefcase },
   { href: "/dashboard/provider/bookings", label: "Bookings", icon: Calendar },
   { href: "/dashboard/provider/calendar", label: "Calendar", icon: Briefcase },
   { href: "/dashboard/provider/services", label: "Your Services", icon: Briefcase },

@@ -4,8 +4,15 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestInvites, jobRequestQuestions, jobRequests } from "@/db/schema";
-import { buildCustomerJobDescription, parseCustomerJobDescription } from "@/lib/customer-job-meta";
+import {
+  buildCustomerJobDescription,
+  JOB_BUDGET_OPTIONS,
+  JOB_CATEGORIES,
+  JOB_TIMING_OPTIONS,
+  parseCustomerJobDescription,
+} from "@/lib/customer-job-meta";
 import { toProviderCategoryOrNull } from "@/lib/provider-categories";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
@@ -54,6 +61,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
 
+  const rate = await enforceRateLimit(req, {
+    userId,
+    resource: "customer-job-update",
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!rate.success) return rateLimitResponse(rate.retryAfter);
+
   const { id } = await params;
   const body = (await req.json().catch(() => null)) as {
     title?: string;
@@ -82,17 +97,54 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   const title = body?.title?.trim() ?? "";
   const description = body?.description?.trim() ?? "";
+  const category = body?.category?.trim() ?? "";
+  const budget = body?.budget?.trim() ?? "";
+  const timing = body?.timing?.trim() ?? "";
+  const region = body?.region?.trim() ?? "";
+  const suburb = body?.suburb?.trim() ?? "";
 
   if (!title || title.length < 5 || title.length > 255) return new NextResponse("Invalid title", { status: 400 });
   if (!description || description.length < 20) return new NextResponse("Invalid description", { status: 400 });
 
+  if (!category || !JOB_CATEGORIES.includes(category as (typeof JOB_CATEGORIES)[number])) {
+    return new NextResponse("Invalid category", { status: 400 });
+  }
+  if (!budget || !JOB_BUDGET_OPTIONS.includes(budget as (typeof JOB_BUDGET_OPTIONS)[number])) {
+    return new NextResponse("Invalid budget", { status: 400 });
+  }
+  if (!timing || !JOB_TIMING_OPTIONS.includes(timing as (typeof JOB_TIMING_OPTIONS)[number])) {
+    return new NextResponse("Invalid timing", { status: 400 });
+  }
+  if (region.length > 255 || suburb.length > 255) return new NextResponse("Invalid location", { status: 400 });
+
+  if (body?.photoUrls !== undefined) {
+    if (!Array.isArray(body.photoUrls) || body.photoUrls.length > 8) {
+      return new NextResponse("Invalid photoUrls", { status: 400 });
+    }
+
+    for (const url of body.photoUrls) {
+      if (typeof url !== "string" || url.trim().length === 0 || url.length > 2000) {
+        return new NextResponse("Invalid photoUrls", { status: 400 });
+      }
+      try {
+        new URL(url);
+      } catch {
+        return new NextResponse("Invalid photoUrls", { status: 400 });
+      }
+    }
+  }
+
   const existingMeta = parseCustomerJobDescription(existing.description);
+  const normalizedCategoryId = toProviderCategoryOrNull(body?.categoryId) ?? existingMeta.categoryId;
+  if (body?.categoryId != null && !toProviderCategoryOrNull(body?.categoryId)) {
+    return new NextResponse("Invalid categoryId", { status: 400 });
+  }
 
   const persistedDescription = buildCustomerJobDescription(description, {
-    category: body?.category ?? existingMeta.category,
-    categoryId: toProviderCategoryOrNull(body?.categoryId) ?? existingMeta.categoryId,
-    budget: body?.budget ?? existingMeta.budget,
-    timing: body?.timing ?? existingMeta.timing,
+    category,
+    categoryId: normalizedCategoryId,
+    budget,
+    timing,
     requestedDate: body?.requestedDate ?? existingMeta.requestedDate,
     photoUrls: body?.photoUrls ?? existingMeta.photoUrls,
     publicToken: existingMeta.publicToken,
@@ -103,8 +155,8 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     .set({
       title,
       description: persistedDescription,
-      region: body?.region?.trim() || null,
-      suburb: body?.suburb?.trim() || null,
+      region: region || null,
+      suburb: suburb || null,
       updatedAt: new Date(),
     })
     .where(eq(jobRequests.id, id))

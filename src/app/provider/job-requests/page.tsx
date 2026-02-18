@@ -40,8 +40,11 @@ function mapQuoteState(status: string | undefined): ProviderQuoteState {
 }
 
 function canProviderSeeInFeed(jobStatus: CanonicalJobStatus, hasMyQuote: boolean, isAssignedToMe: boolean) {
-  if (isAssignedToMe || hasMyQuote) return true;
-  return jobStatus === "Open" || jobStatus === "Quoting";
+  if (jobStatus === "Open" || jobStatus === "Quoting") return true;
+  if (jobStatus === "Assigned" || jobStatus === "InProgress") {
+    return isAssignedToMe || hasMyQuote;
+  }
+  return false;
 }
 
 export default async function ProviderJobRequestsPage({

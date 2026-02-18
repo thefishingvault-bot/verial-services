@@ -4,12 +4,21 @@ import { NextResponse } from "next/server";
 
 import { db } from "@/lib/db";
 import { jobQuotes, jobRequestInvites, jobRequests, providers } from "@/db/schema";
+import { enforceRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const { userId } = await auth();
   if (!userId) return new NextResponse("Unauthorized", { status: 401 });
+
+  const rate = await enforceRateLimit(req, {
+    userId,
+    resource: "provider-job-quote",
+    limit: 30,
+    windowSeconds: 60,
+  });
+  if (!rate.success) return rateLimitResponse(rate.retryAfter);
 
   const provider = await db.query.providers.findFirst({ where: eq(providers.userId, userId), columns: { id: true } });
   if (!provider) return new NextResponse("Provider account required", { status: 403 });
@@ -18,9 +27,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
   const job = await db.query.jobRequests.findFirst({
     where: eq(jobRequests.id, id),
-    columns: { id: true, status: true, assignedProviderId: true },
+    columns: { id: true, status: true, assignedProviderId: true, customerUserId: true },
   });
   if (!job) return new NextResponse("Job not found", { status: 404 });
+
+  if (job.customerUserId === userId) {
+    return new NextResponse("You cannot quote on your own job", { status: 403 });
+  }
 
   const isOpen = job.status === "open";
   const isAssignedProvider = job.assignedProviderId === userId;

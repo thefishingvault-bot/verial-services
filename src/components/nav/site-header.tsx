@@ -23,6 +23,9 @@ export function SiteHeader() {
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
   const isProviderUser = role === 'provider' || role === 'admin';
+  const jobsLink = isProviderUser
+    ? { href: '/provider/job-requests', label: 'Job Requests' }
+    : { href: '/customer/jobs', label: 'Jobs' };
   // Always send providers to /dashboard from the header.
   // Middleware will redirect approved providers to /dashboard/provider,
   // while pending/unapproved providers can still access the customer dashboard.
@@ -31,6 +34,7 @@ export function SiteHeader() {
   const links = isSignedIn
     ? [
         { href: dashboardHref, label: 'Dashboard' },
+        jobsLink,
         { href: '/dashboard/favorites', label: 'Favorites' },
       ]
     : guestLinks;
@@ -115,6 +119,15 @@ export function SiteHeader() {
                       onClick={() => setIsSheetOpen(false)}
                     >
                       Dashboard
+                    </Link>
+                  )}
+                  {isSignedIn && (
+                    <Link
+                      href={jobsLink.href}
+                      className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsSheetOpen(false)}
+                    >
+                      {jobsLink.label}
                     </Link>
                   )}
                   {isSignedIn && (
