@@ -152,13 +152,6 @@ export default clerkMiddleware(async (auth, req) => {
           return withProxyHeader(NextResponse.redirect(url));
         }
 
-        if (pathname === "/customer/jobs" || pathname.startsWith("/customer/jobs/")) {
-          const url = req.nextUrl.clone();
-          url.pathname = row.role === "admin" ? "/dashboard/admin" : "/dashboard/provider";
-          url.search = "";
-          return withProxyHeader(NextResponse.redirect(url));
-        }
-
         return withProxyHeader(NextResponse.next());
       }
 
