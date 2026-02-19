@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
 import { usePathname } from 'next/navigation';
@@ -110,6 +110,9 @@ export function SiteHeader() {
               side="right" 
               className="w-full sm:w-80 p-0 bg-white/95 backdrop-blur-md"
             >
+              <SheetHeader className="sr-only">
+                <SheetTitle>Main menu</SheetTitle>
+              </SheetHeader>
               <div className="flex flex-col h-full min-h-0">
                 {/* Header with Logo and Close */}
                 <div className="flex items-center justify-between p-6 border-b">
