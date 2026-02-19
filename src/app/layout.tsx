@@ -14,8 +14,13 @@ export const metadata: Metadata = {
   description: "Find trusted local services in New Zealand.",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/api/pwa/icon?size=32" }],
-    apple: [{ url: "/api/pwa/icon?size=180" }],
+    icon: [
+      { url: "/icons/favicon.ico" },
+      { url: "/icons/favicon-96x96.png", sizes: "96x96", type: "image/png" },
+      { url: "/icons/favicon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: [{ url: "/icons/favicon.ico" }],
+    apple: [{ url: "/icons/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
   appleWebApp: {
     capable: true,
