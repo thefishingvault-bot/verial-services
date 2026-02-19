@@ -5,6 +5,7 @@ import { Button, buttonVariants } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Menu } from 'lucide-react';
 import { useState } from 'react';
+import { usePathname } from 'next/navigation';
 import { useAuth, useUser, UserButton, useClerk } from '@clerk/nextjs';
 import { NotificationBell } from '@/components/nav/notification-bell';
 import { BECOME_PROVIDER_NAV_ITEM } from '@/components/nav/header-nav';
@@ -15,10 +16,21 @@ const guestLinks = [
   { href: '/sign-in', label: 'Sign In' },
 ];
 
+function isCustomerMobileNavRoute(pathname: string) {
+  if (pathname.startsWith('/dashboard/provider') || pathname.startsWith('/dashboard/admin')) return false;
+  return (
+    pathname.startsWith('/dashboard') ||
+    pathname === '/services' ||
+    pathname === '/jobs/new' ||
+    pathname.startsWith('/customer/jobs')
+  );
+}
+
 export function SiteHeader() {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const pathname = usePathname();
   const { isSignedIn } = useAuth(); // Check if user is signed in
-   const { user } = useUser();
+  const { user } = useUser();
   const { signOut } = useClerk(); // Get signOut function
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
@@ -40,6 +52,9 @@ export function SiteHeader() {
       ]
     : guestLinks;
 
+  const isCustomerDashboardPage = pathname.startsWith('/dashboard') && !pathname.startsWith('/dashboard/provider') && !pathname.startsWith('/dashboard/admin');
+  const showMobileHeaderMenu = !(isSignedIn && !isProviderUser && isCustomerMobileNavRoute(pathname));
+
   return (
     <header className="sticky top-0 z-50 w-full bg-white border-b">
       <div className="container flex h-16 items-center justify-between">
@@ -51,7 +66,7 @@ export function SiteHeader() {
 
         {/* --- Desktop Navigation (Now conditional) --- */}
         <nav className="hidden md:flex items-center space-x-2">
-          {links.map((link) => (
+          {!isCustomerDashboardPage && links.map((link) => (
             <Link
               key={link.href}
               href={link.href}
@@ -77,24 +92,25 @@ export function SiteHeader() {
         </nav>
 
         {/* --- Mobile Navigation (Now conditional) --- */}
-        <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
-          <SheetTrigger asChild className="md:hidden">
-            <Button variant="outline" size="icon">
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Toggle Menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent 
-            side="right" 
-            className="w-full sm:w-80 p-0 bg-white/95 backdrop-blur-md"
-          >
-            <div className="flex flex-col h-full min-h-0">
-              {/* Header with Logo and Close */}
-              <div className="flex items-center justify-between p-6 border-b">
-                <Link href="/" className="text-2xl font-bold text-primary">
-                  Verial
-                </Link>
-              </div>
+        {showMobileHeaderMenu && (
+          <Sheet open={isSheetOpen} onOpenChange={setIsSheetOpen}>
+            <SheetTrigger asChild className="md:hidden">
+              <Button variant="outline" size="icon">
+                <Menu className="h-5 w-5" />
+                <span className="sr-only">Toggle Menu</span>
+              </Button>
+            </SheetTrigger>
+            <SheetContent 
+              side="right" 
+              className="w-full sm:w-80 p-0 bg-white/95 backdrop-blur-md"
+            >
+              <div className="flex flex-col h-full min-h-0">
+                {/* Header with Logo and Close */}
+                <div className="flex items-center justify-between p-6 border-b">
+                  <Link href="/" className="text-2xl font-bold text-primary">
+                    Verial
+                  </Link>
+                </div>
 
               {/* Navigation Links */}
               <div className="flex-1 min-h-0 overflow-y-auto px-6 py-6">
@@ -235,9 +251,10 @@ export function SiteHeader() {
                   </Link>
                 </div>
               )}
-            </div>
-          </SheetContent>
-        </Sheet>
+              </div>
+            </SheetContent>
+          </Sheet>
+        )}
 
       </div>
     </header>
