@@ -51,7 +51,17 @@ export function JobPhotosGallery({
     setLightboxOpen(true);
   };
 
-  const renderBaseTile = (url: string, index: number, className?: string, moreLabel?: string) => (
+  const renderBaseTile = (
+    url: string,
+    index: number,
+    options?: {
+      className?: string;
+      moreLabel?: string;
+      fit?: "contain" | "cover";
+      imageClassName?: string;
+      badgeStyle?: "full" | "corner";
+    },
+  ) => (
     <button
       key={`${url}-${index}`}
       type="button"
@@ -60,7 +70,7 @@ export function JobPhotosGallery({
         "group relative w-full overflow-hidden rounded-md border bg-muted/30 text-left",
         "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         "ring-offset-background",
-        className,
+        options?.className,
         tileClassName,
       )}
     >
@@ -68,14 +78,29 @@ export function JobPhotosGallery({
         src={url}
         alt={`${altPrefix} ${index + 1}`}
         fill
-        className="object-contain p-1"
+        className={cn(
+          options?.fit === "cover" ? "object-cover" : "object-contain",
+          options?.fit === "cover" ? "p-0" : "p-1",
+          options?.imageClassName,
+        )}
         unoptimized
       />
-      {moreLabel ? (
-        <div className="absolute inset-0 flex items-center justify-center bg-background/60 text-lg font-semibold text-foreground">
-          {moreLabel}
-        </div>
-      ) : null}
+      {options?.moreLabel
+        ? (options.badgeStyle ?? "full") === "corner"
+          ? (
+              <>
+                <div className="pointer-events-none absolute bottom-0 right-0 h-16 w-28 bg-linear-to-tl from-black/70 to-transparent" />
+                <div className="pointer-events-none absolute bottom-2 right-2 rounded-md bg-black/75 px-2 py-1 text-xs font-semibold text-white shadow-sm">
+                  {options.moreLabel}
+                </div>
+              </>
+            )
+          : (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/40 text-lg font-semibold text-white">
+                {options.moreLabel}
+              </div>
+            )
+        : null}
       {renderTileOverlay ? (
         <div className="absolute right-1 top-1 z-10" onClick={(event) => event.stopPropagation()}>
           {renderTileOverlay({ index, url })}
@@ -88,7 +113,12 @@ export function JobPhotosGallery({
     <div className={cn("grid grid-cols-2 gap-3 md:grid-cols-4", gridClassName)}>
       {visiblePhotos.map((url, index) => {
         const showCompactMore = showMoreBadge && index === visiblePhotos.length - 1 && hiddenCount > 0;
-        return renderBaseTile(url, index, "aspect-video", showCompactMore ? `+${hiddenCount}` : undefined);
+        return renderBaseTile(url, index, {
+          className: "aspect-video",
+          fit: "cover",
+          moreLabel: showCompactMore ? `+${hiddenCount}` : undefined,
+          badgeStyle: "corner",
+        });
       })}
     </div>
   );
@@ -99,7 +129,7 @@ export function JobPhotosGallery({
     if (count === 1) {
       return (
         <div className={cn("grid grid-cols-1 gap-2", gridClassName)}>
-          {renderBaseTile(allPhotos[0], 0, "aspect-video")}
+          {renderBaseTile(allPhotos[0], 0, { className: "aspect-video", fit: "contain" })}
         </div>
       );
     }
@@ -107,7 +137,7 @@ export function JobPhotosGallery({
     if (count === 2) {
       return (
         <div className={cn("grid grid-cols-2 gap-2", gridClassName)}>
-          {allPhotos.slice(0, 2).map((url, index) => renderBaseTile(url, index, "aspect-square"))}
+          {allPhotos.slice(0, 2).map((url, index) => renderBaseTile(url, index, { className: "aspect-square", fit: "cover" }))}
         </div>
       );
     }
@@ -115,9 +145,9 @@ export function JobPhotosGallery({
     if (count === 3) {
       return (
         <div className={cn("grid grid-cols-2 grid-rows-2 gap-2", gridClassName)}>
-          {renderBaseTile(allPhotos[0], 0, "row-span-2 aspect-auto h-full min-h-40")}
-          {renderBaseTile(allPhotos[1], 1, "aspect-auto h-full min-h-[7.5rem]")}
-          {renderBaseTile(allPhotos[2], 2, "aspect-auto h-full min-h-[7.5rem]")}
+          {renderBaseTile(allPhotos[0], 0, { className: "row-span-2 aspect-auto h-full min-h-40", fit: "cover" })}
+          {renderBaseTile(allPhotos[1], 1, { className: "aspect-auto h-full min-h-[7.5rem]", fit: "cover" })}
+          {renderBaseTile(allPhotos[2], 2, { className: "aspect-auto h-full min-h-[7.5rem]", fit: "cover" })}
         </div>
       );
     }
@@ -125,18 +155,23 @@ export function JobPhotosGallery({
     if (count === 4) {
       return (
         <div className={cn("grid grid-cols-2 grid-rows-2 gap-2", gridClassName)}>
-          {allPhotos.slice(0, 4).map((url, index) => renderBaseTile(url, index, "aspect-square"))}
+          {allPhotos.slice(0, 4).map((url, index) => renderBaseTile(url, index, { className: "aspect-square", fit: "cover" }))}
         </div>
       );
     }
 
     return (
       <div className={cn("grid grid-cols-6 grid-rows-2 gap-2", gridClassName)}>
-        {renderBaseTile(allPhotos[0], 0, "col-span-3 aspect-auto h-full min-h-[8.5rem]")}
-        {renderBaseTile(allPhotos[1], 1, "col-span-3 aspect-auto h-full min-h-[8.5rem]")}
-        {renderBaseTile(allPhotos[2], 2, "col-span-2 aspect-auto h-full min-h-[8.5rem]")}
-        {renderBaseTile(allPhotos[3], 3, "col-span-2 aspect-auto h-full min-h-[8.5rem]")}
-        {renderBaseTile(allPhotos[4], 4, "col-span-2 aspect-auto h-full min-h-[8.5rem]", `+${count - 5}`)}
+        {renderBaseTile(allPhotos[0], 0, { className: "col-span-3 aspect-auto h-full min-h-[8.5rem]", fit: "cover" })}
+        {renderBaseTile(allPhotos[1], 1, { className: "col-span-3 aspect-auto h-full min-h-[8.5rem]", fit: "cover" })}
+        {renderBaseTile(allPhotos[2], 2, { className: "col-span-2 aspect-auto h-full min-h-[8.5rem]", fit: "cover" })}
+        {renderBaseTile(allPhotos[3], 3, { className: "col-span-2 aspect-auto h-full min-h-[8.5rem]", fit: "cover" })}
+        {renderBaseTile(allPhotos[4], 4, {
+          className: "col-span-2 aspect-auto h-full min-h-[8.5rem]",
+          fit: "cover",
+          moreLabel: `+${count - 5}`,
+          badgeStyle: "corner",
+        })}
       </div>
     );
   };
@@ -146,10 +181,10 @@ export function JobPhotosGallery({
       {variant === "compact" ? renderCompactGrid() : renderDetailGrid()}
 
       <Dialog open={lightboxOpen} onOpenChange={setLightboxOpen}>
-        <DialogContent className="max-w-4xl p-2">
+        <DialogContent className="max-h-[90vh] border-black/40 bg-black/95 p-2 text-white sm:max-w-[90vw]">
           <DialogTitle className="sr-only">Job photos</DialogTitle>
-          <div className="space-y-2">
-            <div className="relative h-[70vh] overflow-hidden rounded-md border bg-muted/30">
+          <div className="space-y-3">
+            <div className="relative flex h-[80vh] items-center justify-center overflow-hidden rounded-md bg-black/90">
               <Image
                 src={allPhotos[photoIndex] ?? allPhotos[0]}
                 alt={`${altPrefix} ${photoIndex + 1}`}
@@ -162,13 +197,18 @@ export function JobPhotosGallery({
               <div className="flex items-center justify-between">
                 <Button
                   variant="outline"
+                  className="border-white/25 bg-black/60 text-white hover:bg-black/80"
                   onClick={() => setPhotoIndex((prev) => (prev - 1 + allPhotos.length) % allPhotos.length)}
                 >
                   <ChevronLeft className="mr-2 h-4 w-4" />
                   Previous
                 </Button>
-                <span className="text-xs text-muted-foreground">{photoIndex + 1} / {allPhotos.length}</span>
-                <Button variant="outline" onClick={() => setPhotoIndex((prev) => (prev + 1) % allPhotos.length)}>
+                <span className="text-xs text-white/80">{photoIndex + 1} / {allPhotos.length}</span>
+                <Button
+                  variant="outline"
+                  className="border-white/25 bg-black/60 text-white hover:bg-black/80"
+                  onClick={() => setPhotoIndex((prev) => (prev + 1) % allPhotos.length)}
+                >
                   Next
                   <ChevronRight className="ml-2 h-4 w-4" />
                 </Button>

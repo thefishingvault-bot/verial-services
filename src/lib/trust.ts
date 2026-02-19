@@ -6,12 +6,14 @@ export const TRUST_WEIGHTS = {
   TENURE: 0.05,      // 5%
 };
 
-export const getTrustTier = (score: number): "bronze" | "silver" | "gold" | "platinum" => {
-  if (score >= 90) return "platinum";
-  if (score >= 75) return "gold";
-  if (score >= 55) return "silver";
+export const getTrustTierFromScore = (score: number): "bronze" | "silver" | "gold" | "platinum" => {
+  if (score >= 85) return "platinum";
+  if (score >= 70) return "gold";
+  if (score >= 50) return "silver";
   return "bronze";
 };
+
+export const getTrustTier = getTrustTierFromScore;
 
 export const calculateTrustScore = async (providerId: string): Promise<number> => {
   console.log(`[TRUST_LIB] Calculating score for ${providerId}...`);

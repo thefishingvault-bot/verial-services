@@ -27,7 +27,7 @@ function FeedSkeletonCard() {
 
 export default function LoadingProviderJobRequestsPage() {
   return (
-    <div className="mx-auto w-full max-w-[720px] space-y-4 px-4 py-6 md:px-6">
+    <div className="mx-auto w-full max-w-180 space-y-4 px-4 py-6 md:px-6">
       <div className="h-7 w-40 animate-pulse rounded bg-muted" />
       <div className="flex gap-2">
         <div className="h-9 w-14 animate-pulse rounded bg-muted" />

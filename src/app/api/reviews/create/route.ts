@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { createNotification } from "@/lib/notifications";
 import { asOne } from "@/lib/relations/normalize";
-import { calculateTrustScore } from "@/lib/trust";
+import { calculateTrustScore, getTrustTierFromScore } from "@/lib/trust";
 import { ReviewCreateSchema, parseBody } from "@/lib/validation/reviews";
 
 export const runtime = "nodejs";
@@ -93,9 +93,10 @@ export async function POST(req: Request) {
     // --- Trigger trust score recompute for the provider ---
     try {
       const nextScore = await calculateTrustScore(booking.providerId);
+      const nextLevel = getTrustTierFromScore(nextScore);
       await db
         .update(providers)
-        .set({ trustScore: nextScore })
+        .set({ trustScore: nextScore, trustLevel: nextLevel })
         .where(eq(providers.id, booking.providerId));
     } catch (trustError) {
       console.error("[API_REVIEW_CREATE] Failed to update trust score", trustError);

@@ -4,11 +4,13 @@ import { usePathname } from "next/navigation";
 import { BottomNavigation } from "@/components/nav/bottom-navigation";
 import { SiteHeader } from "@/components/nav/site-header";
 import Link from "next/link";
-import { Home, Calendar, Heart, MessageSquare, Bell, User, Briefcase } from "lucide-react";
+import { Home, Calendar, Heart, MessageSquare, Bell, User, Briefcase, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navLinks = [
   { href: "/dashboard", label: "Overview", icon: Home },
+  { href: "/customer/jobs", label: "Jobs", icon: Briefcase },
+  { href: "/jobs/new", label: "Post a Job", icon: Plus },
   { href: "/services", label: "Services", icon: Briefcase },
   { href: "/dashboard/bookings", label: "My Bookings", icon: Calendar },
   { href: "/dashboard/favorites", label: "Favorites", icon: Heart },

@@ -4,10 +4,14 @@ import { NextRequest } from "next/server";
 const authMock = vi.fn();
 const createNotificationMock = vi.fn();
 const calculateTrustScoreMock = vi.fn();
+const getTrustTierFromScoreMock = vi.fn();
 
 vi.mock("@clerk/nextjs/server", () => ({ auth: authMock }));
 vi.mock("@/lib/notifications", () => ({ createNotification: createNotificationMock }));
-vi.mock("@/lib/trust", () => ({ calculateTrustScore: calculateTrustScoreMock }));
+vi.mock("@/lib/trust", () => ({
+  calculateTrustScore: calculateTrustScoreMock,
+  getTrustTierFromScore: getTrustTierFromScoreMock,
+}));
 
 vi.mock("@/db/schema", () => ({
   reviews: {},
@@ -133,6 +137,8 @@ describe("/api/reviews/create validation", () => {
     authMock.mockResolvedValue({ userId: "user_1" });
     createNotificationMock.mockReset();
     calculateTrustScoreMock.mockReset();
+    getTrustTierFromScoreMock.mockReset();
+    getTrustTierFromScoreMock.mockReturnValue("silver");
   });
 
   it("rejects invalid bookingId", async () => {

@@ -176,7 +176,7 @@ export default async function ProviderJobRequestsPage({
     });
 
   return (
-    <div className="mx-auto w-full max-w-[720px] space-y-4 px-4 py-6 md:px-6">
+    <div className="mx-auto w-full max-w-180 space-y-4 px-4 py-6 md:px-6">
       <PageHeaderNav
         title="Job requests"
         backHref="/dashboard/provider"

@@ -1,19 +1,11 @@
 import { db } from "@/lib/db";
 import { providers } from "@/db/schema";
 import { eq } from "drizzle-orm";
-import { calculateTrustScore } from "@/lib/trust";
+import { calculateTrustScore, getTrustTierFromScore } from "@/lib/trust";
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
-
-// Helper to determine trust level from score
-const getTrustLevel = (score: number): "bronze" | "silver" | "gold" | "platinum" => {
-  if (score >= 95) return "platinum";
-  if (score >= 85) return "gold";
-  if (score >= 70) return "silver";
-  return "bronze";
-};
 
 export async function POST(req: Request) {
   // 1. --- AUTH --- allow admin role or cron key
@@ -45,7 +37,7 @@ export async function POST(req: Request) {
     // 3. --- ITERATE AND UPDATE ---
     for (const provider of allProviders) {
       const newScore = await calculateTrustScore(provider.id);
-      const newLevel = getTrustLevel(newScore);
+      const newLevel = getTrustTierFromScore(newScore);
 
       await db.update(providers)
         .set({
