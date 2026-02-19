@@ -34,10 +34,15 @@ export function SiteHeader() {
   const { signOut } = useClerk(); // Get signOut function
 
   const role = (user?.publicMetadata as Record<string, unknown>)?.role as string | undefined;
-  const isProviderUser = role === 'provider' || role === 'admin';
-  const jobsLink = isProviderUser
-    ? { href: '/provider/job-requests', label: 'Job Requests' }
-    : { href: '/customer/jobs', label: 'Jobs' };
+  const isProviderRole = role === 'provider';
+  const isAdminRole = role === 'admin';
+  const isProviderUser = isProviderRole || isAdminRole;
+  const jobsLink = isProviderRole
+    ? { href: '/customer/jobs', label: 'My Posted Jobs' }
+    : isAdminRole
+      ? { href: '/provider/job-requests', label: 'Job Requests' }
+      : { href: '/customer/jobs', label: 'Jobs' };
+  const providerRequestsLink = { href: '/provider/job-requests', label: 'Job Requests' };
   // Always send providers to /dashboard from the header.
   // Middleware will redirect approved providers to /dashboard/provider,
   // while pending/unapproved providers can still access the customer dashboard.
@@ -48,6 +53,7 @@ export function SiteHeader() {
         { href: dashboardHref, label: 'Dashboard' },
         { href: '/jobs/new', label: 'Post a Job' },
         jobsLink,
+        ...(isProviderRole ? [providerRequestsLink] : []),
         { href: '/dashboard/favorites', label: 'Favorites' },
       ]
     : guestLinks;
@@ -154,6 +160,15 @@ export function SiteHeader() {
                       onClick={() => setIsSheetOpen(false)}
                     >
                       {jobsLink.label}
+                    </Link>
+                  )}
+                  {isSignedIn && isProviderRole && (
+                    <Link
+                      href={providerRequestsLink.href}
+                      className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsSheetOpen(false)}
+                    >
+                      {providerRequestsLink.label}
                     </Link>
                   )}
                   {isSignedIn && (
