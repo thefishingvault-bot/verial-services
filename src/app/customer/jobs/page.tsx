@@ -192,7 +192,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
         ]}
         rightAction={
           <Button asChild size="sm" variant="secondary">
-            <Link href="/customer/jobs/new">Post job</Link>
+            <Link href="/jobs/new">Post job</Link>
           </Button>
         }
       />
@@ -232,7 +232,7 @@ export default async function CustomerJobsPage({ searchParams }: { searchParams:
               <p className="text-base font-medium">No jobs yet</p>
               <p className="text-sm text-muted-foreground">Post a job to start getting quotes from local service providers.</p>
               <Button asChild className="h-11 px-6">
-                <Link href="/customer/jobs/new">Post a job</Link>
+                <Link href="/jobs/new">Post a job</Link>
               </Button>
             </div>
           ) : (

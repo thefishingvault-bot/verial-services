@@ -34,6 +34,7 @@ export function SiteHeader() {
   const links = isSignedIn
     ? [
         { href: dashboardHref, label: 'Dashboard' },
+        { href: '/jobs/new', label: 'Post a Job' },
         jobsLink,
         { href: '/dashboard/favorites', label: 'Favorites' },
       ]
@@ -119,6 +120,15 @@ export function SiteHeader() {
                       onClick={() => setIsSheetOpen(false)}
                     >
                       Dashboard
+                    </Link>
+                  )}
+                  {isSignedIn && (
+                    <Link
+                      href="/jobs/new"
+                      className="flex items-center px-4 py-3 text-base font-medium text-gray-900 rounded-lg hover:bg-gray-50 transition-colors"
+                      onClick={() => setIsSheetOpen(false)}
+                    >
+                      Post a Job
                     </Link>
                   )}
                   {isSignedIn && (

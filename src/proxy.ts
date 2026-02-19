@@ -145,6 +145,20 @@ export default clerkMiddleware(async (auth, req) => {
 
       // Don't block admins/providers on customer onboarding.
       if (row?.role === "admin" || row?.role === "provider") {
+        if (pathname === "/customer/jobs/new") {
+          const url = req.nextUrl.clone();
+          url.pathname = "/jobs/new";
+          url.search = "";
+          return withProxyHeader(NextResponse.redirect(url));
+        }
+
+        if (pathname === "/customer/jobs" || pathname.startsWith("/customer/jobs/")) {
+          const url = req.nextUrl.clone();
+          url.pathname = row.role === "admin" ? "/dashboard/admin" : "/dashboard/provider";
+          url.search = "";
+          return withProxyHeader(NextResponse.redirect(url));
+        }
+
         return withProxyHeader(NextResponse.next());
       }
 
